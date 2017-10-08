@@ -313,6 +313,39 @@ struct parse_dep {
   uint32_t ports[0];
 };
 
+struct parse_rule {
+  struct parse_rule *next;
+  int idx;
+  ARR_PTR(uint32_t, uint32_t) in, out, in_link, out_link;
+  // #define ARR_PTR(T, ID) \
+  // struct arr_ptr_ ## ID { int n; union { T a[sizeof (T *) / sizeof (T)]; T *p; } e; }
+  /*##连接字符串的作用
+  结构体就是arr_ptr_uint32_t{int n，}
+  union联合体类似结构体struct，struct所有变量是“共存”的，union中是各变量是“互斥”的
+  共用一个内存首地址，并且各种变量名都可以同时使用，操作也是共同生效，也就是只体现一个值，可以兼容不同类型
+  不过这些“手段”之间却没法互相屏蔽——就好像数组+下标和指针+偏移一样
+  在此中放数组或者指针e，n为数量*/
+  // array_t *match;
+  // array_t *mask, *rewrite;
+  struct mf_uint16_t *match;
+  struct mf_uint16_t *mask;
+  struct mf_uint16_t *rewrite;
+};
+
+struct parse_sw {
+  int len, nrules;
+  char *prefix;
+  LIST (parse_rule) rules;
+  // struct map in_map;
+};
+
+struct parse_nsw {
+  int sws_num;
+  int stages;
+  struct parse_sw *sws[0];
+};
+
+
 //res.h
 struct tf;
 
@@ -355,6 +388,10 @@ struct PACKED mf_uint16_t {
   uint16_t mf_v[MF_LEN];
 };
 
+struct PACKED mask_uint16_t {
+  uint16_t mf_w[MF_LEN];
+};
+
 struct PACKED nf_space {//匹配域和位置
   struct mf_uint16_t mf;
   // uint32_t nw_src, dl_src, dl_dst, dl_dst, dl_vlan, dl_vlan_pcp, tp_src , dl_type, nw_tos
@@ -365,6 +402,7 @@ struct PACKED nf_space {//匹配域和位置
 struct PACKED nf_space_pair {
   struct nf_space *in;
   struct nf_space *out;
+  uint16_t mask[MF_LEN];
   uint32_t nrs;
   uint32_t ridx[0];
 };
@@ -378,6 +416,14 @@ struct PACKED of_rule {
   uint32_t idx;
   // struct nf_space modify;
   // struct nf_space_pair *nf_ses[0];
+  struct wc_uint32_t match;
+  uint32_t mask;
+  struct wc_uint32_t rewrite;
+  uint32_t in_link;
+  uint32_t out_link;
+};
+
+struct PACKED arule_uint {
   struct wc_uint32_t match;
   uint32_t mask;
   struct wc_uint32_t rewrite;
@@ -433,42 +479,14 @@ struct PACKED links_of_rule{
 };
 
 //parse.h
-struct parse_rule {
-  struct parse_rule *next;
-  int idx;
-  ARR_PTR(uint32_t, uint32_t) in, out;
-  #define ARR_PTR(T, ID) \
-  struct arr_ptr_ ## ID { int n; union { T a[sizeof (T *) / sizeof (T)]; T *p; } e; }
-  /*##连接字符串的作用
-  结构体就是arr_ptr_uint32_t{int n，}
-  union联合体类似结构体struct，struct所有变量是“共存”的，union中是各变量是“互斥”的
-  共用一个内存首地址，并且各种变量名都可以同时使用，操作也是共同生效，也就是只体现一个值，可以兼容不同类型
-  不过这些“手段”之间却没法互相屏蔽——就好像数组+下标和指针+偏移一样
-  在此中放数组或者指针e，n为数量*/
-  // array_t *match;
-  // array_t *mask, *rewrite;
-  struct mf_uint16_t *match;
-  struct mf_uint16_t *mask;
-  struct mf_uint16_t *rewrite;
-};
-
-struct parse_sw {
-  int len, nrules;
-  char *prefix;
-  LIST (parse_rule) rules;
-  // struct map in_map;
-};
-
-struct parse_nsw {
-  int sws_num;
-  int stages;
-  struct parse_sw *sws[0];
-};
 
 struct matrix_element {
   int elem_n;
   struct nf_space_pair *elems[0];
 };
+
+
+
 
 //函数声明
 //array.h
@@ -492,7 +510,7 @@ void        res_free     (struct res *res);
 //array.c
 //tf.c
 struct sw *
-sw_get (const int idx) {//得到tf,从data_file第idx个得到data_raw后面的位数
+sw_get (const uint32_t idx) {//得到tf,从data_file第idx个得到data_raw后面的位数
 
   assert (idx >= 0 && idx < data_file->sws_num);
   uint32_t ofs = data_file->sw_ofs[idx];
@@ -505,8 +523,15 @@ rule_get(struct sw *sw, const int idx) {
   return (rule);
 }
 
+struct of_rule *
+rule_get_2idx(const uint32_t sw_idx, const uint32_t r_idx) {
+  struct sw *sw = sw_get (sw_idx);
+  struct of_rule *rule = &(sw->rules[r_idx]);
+  return (rule);
+}
+
 struct links_of_rule *
-rule_links_get_swidx(struct sw *sw, const int idx, const int sign) { 
+rule_links_get_swidx(struct sw *sw, const uint32_t idx, const uint32_t sign) { 
   struct links_of_rule *ls;
   struct of_rule *rule = &(sw->rules[idx]);
   if (sign) {
@@ -520,7 +545,7 @@ rule_links_get_swidx(struct sw *sw, const int idx, const int sign) {
 }
 
 struct link *
-link_get(const int idx) { 
+link_get(const uint32_t idx) { 
   struct link *lk = &(link_data_file->links[idx]);
   return (lk);
 }
@@ -638,7 +663,7 @@ print_link_to_rule (const uint32_t link_idx, const struct link_to_rule_file *lr_
 }
 
 //data.c
-void
+void 
 data_load (const char *name) {
   // int i;	
   int fd = open (name, O_RDONLY);
@@ -708,23 +733,27 @@ link_data_load(const char *dir) {
 }
 
 void
-data_unload (void)
-{ munmap (data_raw, data_size); }
+data_unload (void) { 
+  munmap (data_raw, data_size); 
+  munmap (link_data_raw, link_data_size);
+  munmap (link_in_rule_raw, link_in_rule_size);
+  munmap (link_out_rule_raw, link_out_rule_size); 
+}
 
 uint32_t *
-matrix_idx_init (void) {
+matrix_idx_init (void) { //返回buf，全为0,长度为规则数
   uint32_t swn = data_file->sws_num;
   uint32_t init_0 = 0;
   char *buf;
   size_t bufsz;
   uint32_t sum_r = 0;
   FILE *f = open_memstream (&buf, &bufsz);
-  for (int i = 0; i < swn; i++) {
+  for (int i = 0; i < swn; i++) {//总的r数量
     struct sw *sw_t = sw_get(i);
     sum_r += sw_t->nrules;
   }
   for (int i = 0; i < sum_r; i++, init_0++) {
-    fwrite (&init_0, sizeof init_0, 1, f);
+    fwrite (&init_0, sizeof init_0, 1, f);//初始化为0
   }
   fclose (f);
   // printf("total rules :%d\n", sum_r);
@@ -734,7 +763,7 @@ matrix_idx_init (void) {
 }
 
 uint32_t *
-matrix_init (void) {
+matrix_init (void) { //生成空矩阵
   uint32_t swn = data_file->sws_num;
   uint32_t init_0 = 0;
   char *buf;
@@ -763,12 +792,104 @@ matrix_init (void) {
   return buf;
 }
 
-uint32_t *
-gen_matrix(uint32_t * matrix_buf){
+struct mf_uint16_t_array {
+  uint32_t n_mfs;
+  struct mf_uint16_t  mfs[0];
+};
 
-  for (int i = 0; i < link_out_rule_file->swl_num; i++)
-  {
+struct mf_uint16_t *
+calc_insc(struct mf_uint16_t *a, struct mf_uint16_t *b) {
+  uint32_t noinsc_sign = 0;
+  for (int i = 0; i < MF_LEN; i++){
+    if ((~(a->mf_w[i] | b->mf_w[i]))&(a->mf_v[i] ^ b->mf_v[i])) {
+      noinsc_sign = 1;
+    }
+  }
+  if (noinsc_sign){
+    return 0;
+  }
+  struct mf_uint16_t *mf_insc = xcalloc (1, sizeof *mf_insc);
+  for (int i = 0; i < MF_LEN; i++){
+    mf_insc->mf_w[i] = a->mf_w[i] & b->mf_w[i];
+    mf_insc->mf_v[i] = (~b->mf_w[i])&b->mf_v[i] + (~a->mf_w[i])&b->mf_w[i]&a->mf_v[i];
+  }
+  return mf_insc;
+}
+
+struct mf_uint16_t_array *
+calc_minus_insc(struct mf_uint16_t *a, struct mf_uint16_t *insc) {
+  struct mf_uint16_t *pre = a;
+  for (int i = 0; i < MF_LEN; i++) {
+    uint16_t diff_field = a->mf_w[i] ^ insc->mf_w[i];
+    uint16_t sign = 0x8000;
+    for (int j = 0; j < 16; j++) {
+      uint16_t diff_sign = diff_ field & sign;
+      if (diff_sign)
+
+      sign >>= 1;
+    }
+
+  }
+
+}
+
+
+
+static int
+link_idx_cmp (const void *a, const void *b) 
+{ return *(uint32_t *)a - *(uint32_t *)b;}
+
+struct link_to_rule * //通过idx查找link
+get_link_rules(struct link_to_rule_file *lr_file, uint32_t rule_nums, const uint32_t idx) { 
+
+  uint32_t *links = (uint32_t *)lr_file->links;
+  uint32_t *b = (uint32_t *)bsearch(&idx, links, lr_file->swl_num, 2*sizeof(uint32_t), link_idx_cmp);
+  if (b){
+    // printf("%d - %d, ", *b, *(b+1));
+    if (*b)
+      rule_nums = *(b+1) - *(b-1);
+    else
+      rule_nums = *(b+1);
+    // printf("%d $$$ ", rule_nums);
+    return  (struct link_to_rule *)b;
+  }
+  else 
+    return NULL;
+}
+
+void //uint32_t *
+gen_matrix(uint32_t *matrix_buf) {
+  // for (int i = 0; i < link_in_rule_file->swl_num; i++) {
+  //   struct link *l = link_get(link_in_rule_file->links[i].link_idx);
+  //   print_link(l);
+  // }
+  printf("%d - %d - %d\n", link_out_rule_file->swl_num, link_in_rule_file->swl_num, link_data_file->swl_num);
+  // uint32_t rule_nums = 0;
+  // get_link_rules(link_out_rule_file, rule_nums, 0);
+
+  uint32_t rule_nums_in_pre = 0;
+  for (int i = 0; i < link_in_rule_file->swl_num; i++) {
+    uint32_t rule_nums_out = 0;
+    uint32_t rule_nums_in  = link_in_rule_file->links[i].rule_nums - rule_nums_in_pre;
+    uint32_t *lin_arrs = (uint32_t *)(link_in_rule_data_arrs + 2*rule_nums_in_pre);
+    struct link_to_rule *lout_r = get_link_rules(link_in_rule_file, rule_nums_out, link_out_rule_file->links[i].link_idx);
+    uint32_t rule_nums_out_pre = lout_r->rule_nums - rule_nums_out;
+    uint32_t *lout_arrs = (uint32_t *)(link_out_rule_data_arrs + 2*rule_nums_out_pre);
+    if (lout_r) {
+      for (int i_in = 0; i < rule_nums_in; i++) {  
+        struct of_rule *r_in = rule_get_2idx(*(uint32_t *)lin_arrs, *(uint32_t *)(lin_arrs+1));
+        for (int i_out = 0; i < rule_nums_out; i++) {
+          struct of_rule *r_out = rule_get_2idx(*(uint32_t *)lout_arrs, *(uint32_t *)(lout_arrs+1));
+
+
+        }
+      }
+    }
     
+      
+    // arrs += 2;
+
+    rule_nums_in_pre = link_in_rule_file->links[i].rule_nums;
   }
 }
 

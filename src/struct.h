@@ -38,6 +38,7 @@ struct PACKED link_file {
   uint32_t swl_num, inl_num, outl_num;
   struct link links[0];
 };
+
 struct PACKED sw {
   uint32_t prefix;
   uint32_t nrules;
@@ -54,7 +55,7 @@ struct PACKED links_of_rule{
 
 struct PACKED nf_space {//匹配域和位置
   struct mf_uint16_t mf;
-  // uint32_t nw_src, dl_src, dl_dst, dl_dst, dl_vlan, dl_vlan_pcp, tp_src , dl_type, nw_tos
+  // uint32_t nw_src, dl_src, dl_dst, dl_vlan, dl_vlan_pcp, tp_src, tp_dst, dl_type, nw_tos
   uint32_t nwcs;
   struct wc_uint16_t link_wcs[0];
 };
@@ -106,3 +107,34 @@ uint32_t *link_out_rule_data_arrs;
 uint16_t *data_arrs;
 uint32_t data_arrs_len, data_arrs_n;
 char    *data_strs;
+
+
+struct PACKED of_rule {
+  uint32_t idx;
+  // struct nf_space modify;
+  // struct nf_space_pair *nf_ses[0];
+  struct wc_uint32_t match;
+  uint32_t mask;
+  struct wc_uint32_t rewrite;
+  uint32_t in_link;
+  uint32_t out_link;
+};
+
+struct parse_rule {
+  struct parse_rule *next;
+  int idx;
+  ARR_PTR(uint32_t, uint32_t) in, out;
+  #define ARR_PTR(T, ID) \
+  struct arr_ptr_ ## ID { int n; union { T a[sizeof (T *) / sizeof (T)]; T *p; } e; }
+  /*##连接字符串的作用
+  结构体就是arr_ptr_uint32_t{int n，}
+  union联合体类似结构体struct，struct所有变量是“共存”的，union中是各变量是“互斥”的
+  共用一个内存首地址，并且各种变量名都可以同时使用，操作也是共同生效，也就是只体现一个值，可以兼容不同类型
+  不过这些“手段”之间却没法互相屏蔽——就好像数组+下标和指针+偏移一样
+  在此中放数组或者指针e，n为数量*/
+  // array_t *match;
+  // array_t *mask, *rewrite;
+  struct mf_uint16_t *match;
+  struct mf_uint16_t *mask;
+  struct mf_uint16_t *rewrite;
+};

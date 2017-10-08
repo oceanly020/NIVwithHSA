@@ -225,7 +225,7 @@ uint16_t_cmp (const void *a, const void *b)
 
 static uint32_t
 linkwc_gen (const uint32_t *arr, uint32_t n, FILE *f_links)//调用parr = ARR (r->in)，n = r->in.n;
-{	
+{	//返回的ret为位置，文件内的位置，需要加上首位置
 	if (!n) return 0;
 	// int32_t ret = -(VALID_OFS + ftell (f_links));
 	int32_t ret =  ftell (f_links);
@@ -333,22 +333,20 @@ linkwc_gen (const uint32_t *arr, uint32_t n, FILE *f_links)//调用parr = ARR (r
 			tmp = begin;
 		}
 	}
-	for (int i = 0; i < wc_nums; i++)
-	{	
-		printf("%d - %d", links_wc[i].w, links_wc[i].v);
-		printf(", ");
-	}
-	printf("\n");
+	// for (int i = 0; i < wc_nums; i++)
+	// {	
+	// 	printf("%d - %d", links_wc[i].w, links_wc[i].v);
+	// 	printf(", ");
+	// }
+	// printf("\n");
 
-	for (int i = 0; i < wc_nums; i++)
-	{	
-		print_wc(&links_wc[i].w, &links_wc[i].v);
-		printf(", ");
-	}
-	printf("ret is %d", ret);
-	printf("\n");
-	
-
+	// for (int i = 0; i < wc_nums; i++)
+	// {	
+	// 	print_wc(&links_wc[i].w, &links_wc[i].v);
+	// 	printf(", ");
+	// }
+	// printf("ret is %d", ret);
+	// printf("\n");
 	fwrite (&wc_nums, sizeof wc_nums, 1, f_links);
 	fwrite (links_wc, sizeof *links_wc, wc_nums, f_links);
 	return ret;
@@ -394,12 +392,12 @@ gen_sw (const struct parse_sw *sw, FILE *out, FILE *f_strs, const uint16_t *arrs
 		// // if (r->deps.head) tmp->deps = gen_deps (&r->deps, f_deps, f_ports, arrs, narrs);//如果有依赖，建立
 		// //tmp->desc = barfoo;
 		// gen_link
-		if (i<3)
-		{
-			tmp->in_link = linkwc_gen (ARR (r->in), r->in.n, f_ports);
-		}
-		// tmp->in_link = linkwc_gen (ARR (r->in), r->in.n, f_ports);
-		// tmp->out_link = linkwc_gen (ARR (r->out), r->out.n, f_ports);
+		// if (i<3)
+		// {
+		// 	tmp->in_link = linkwc_gen (ARR (r->in), r->in.n, f_ports);
+		// }
+		tmp->in_link = linkwc_gen (ARR (r->in_link), r->in_link.n, f_ports);
+		tmp->out_link = linkwc_gen (ARR (r->out_link), r->out_link.n, f_ports);
 
 		// struct rule_links *rl_out = linkwc_gen (r);
 		// tmp->out_link = 0;
@@ -689,7 +687,7 @@ link_port_out_cmp (const void *a, const void *b){
 
 char *
 links_idx_gen (const char *name, const struct parse_nsw *nsw, uint32_t *nlinks, uint32_t *swls)
-{
+{	//idx 从0开始，数量为*swls，idx max = *swls - 1
 	FILE *in = fopen (name, "r");
 	char *line = NULL;
 	int len;
@@ -893,8 +891,9 @@ link_to_rule_cmp (const void *a, const void *b)
 	// return memcmp ((void *)((uint16_t *)a+3), (void *)((uint16_t *)b+3), 4);
 }
 
+/*
 void
-rule_ports_to_links(uint16_t *links, const uint32_t *nlinks, const uint32_t *swls, 
+rule_ports_to_links_backup(uint16_t *links, const uint32_t *nlinks, const uint32_t *swls, 
 					const struct parse_nsw *nsw)
 {
 	char *outdirout = "../data/link_out_rule.dat";
@@ -921,8 +920,7 @@ rule_ports_to_links(uint16_t *links, const uint32_t *nlinks, const uint32_t *swl
 			r_idx = (uint32_t)r->idx;
 			uint32_t n = r->in.n;
 			uint32_t *parr = ARR (r->in);
-			for (uint32_t j = 0; j < n; j++, parr++)
-			{	
+			for (uint32_t j = 0; j < n; j++, parr++) {	
 				lk->port_out = *parr;
 				b = bsearch (lk, links, *nlinks, len_idx+2*len_port, link_port_out_cmp);			
 				assert (b);	
@@ -950,15 +948,12 @@ rule_ports_to_links(uint16_t *links, const uint32_t *nlinks, const uint32_t *swl
 	fwrite (&swl_num, 4, 1, outfile);
 	fwrite (&outnl_num, 4, 1, outfile);
 	fwrite (&idx_num, 4, 1, outfile);
-	
+
 	// printf("buf1%d\n", *(uint32_t *)buf1);
-	for (uint32_t i = 0; i < 12*count; i+=12)
-	{	
-		if (*(uint32_t *)(buf1+i) != idx_tmp)
-		{
+	for (uint32_t i = 0; i < 12*count; i+=12) {	
+		if (*(uint32_t *)(buf1+i) != idx_tmp) {
 			
-			if (idx_tmp <= *swls)
-			{
+			if (idx_tmp <= *swls) {
 				swl_num++;
 			}
 			// printf("% d;", idx_tmp);
@@ -970,6 +965,7 @@ rule_ports_to_links(uint16_t *links, const uint32_t *nlinks, const uint32_t *swl
 		}
 		total_num++;
 	}
+	printf("outdirout%d\n", swl_num);
 	// printf("swl_num%d\n", swl_num);
 	fwrite (&idx_tmp, 4, 1, outfile);
 	// printf("idx_tmp%d\n", idx_tmp);
@@ -978,8 +974,7 @@ rule_ports_to_links(uint16_t *links, const uint32_t *nlinks, const uint32_t *swl
 	outnl_num = idx_num - swl_num;
 
 	uint32_t *buf = (uint32_t *)buf1;
-	for (uint32_t i = 0; i < 3*count; i+=3)
-	{
+	for (uint32_t i = 0; i < 3*count; i+=3) {
 			fwrite ((uint32_t *)(buf+i+1), 8, 1, outfile);
 			// printf("%d - ", *(uint32_t *)(buf+i));
 			// printf("%d - ", *(uint32_t *)(buf+i+1));
@@ -995,10 +990,7 @@ rule_ports_to_links(uint16_t *links, const uint32_t *nlinks, const uint32_t *swl
 	fclose (outfile);
 	free (buf1);
 
-
-
 	f = open_memstream (&buf2, &buf2sz);
-
 	count = 0;
 	r_idx = 0;
 	lk->idx = 0;	
@@ -1011,8 +1003,7 @@ rule_ports_to_links(uint16_t *links, const uint32_t *nlinks, const uint32_t *swl
 			r_idx = (uint32_t)r->idx;
 			uint32_t n = r->out.n;
 			uint32_t *parr = ARR (r->out);
-			for (uint32_t j = 0; j < n; j++, parr++)
-			{	
+			for (uint32_t j = 0; j < n; j++, parr++) {	
 				lk->port_in = *parr;
 				b = bsearch (lk, links, *nlinks, len_idx+2*len_port, link_port_in_cmp);			
 				assert (b);	
@@ -1041,13 +1032,10 @@ rule_ports_to_links(uint16_t *links, const uint32_t *nlinks, const uint32_t *swl
 	fwrite (&outnl_num, 4, 1, outfile);
 	fwrite (&idx_num, 4, 1, outfile);
 	
-	for (uint32_t i = 0; i < 12*count; i+=12)
-	{	
-		if (*(uint32_t *)(buf2+i) != idx_tmp)
-		{
+	for (uint32_t i = 0; i < 12*count; i+=12) {	
+		if (*(uint32_t *)(buf2+i) != idx_tmp) {
 			
-			if (idx_tmp <= *swls)
-			{
+			if (idx_tmp <= *swls) {
 				swl_num++;
 			}
 			// printf("% d;", idx_tmp);
@@ -1056,11 +1044,10 @@ rule_ports_to_links(uint16_t *links, const uint32_t *nlinks, const uint32_t *swl
 			idx_tmp = *(uint32_t *)(buf2+i);
 			// printf("%d", idx_tmp);
 			idx_num++;
-			
 		}
-		total_num++;
-		
+		total_num++;		
 	}
+	printf("indirout%d\n", swl_num);
 	// printf("%d\n", idx_num);
 	// printf("swl_num%d\n", swl_num);
 	fwrite (&idx_tmp, 4, 1, outfile);
@@ -1069,13 +1056,11 @@ rule_ports_to_links(uint16_t *links, const uint32_t *nlinks, const uint32_t *swl
 	outnl_num = idx_num - idx_tmp;
 
 	buf = (uint32_t *)buf2;
-	for (uint32_t i = 0; i < 3*count; i+=3)
-	{
+	for (uint32_t i = 0; i < 3*count; i+=3) {
 			fwrite ((uint32_t *)(buf+i+1), 8, 1, outfile);
 			// printf("%d - ", *(uint32_t *)(buf+i));
 			// printf("%d - ", *(uint32_t *)(buf+i+1));
 			// printf("%d;", *(uint32_t *)(buf+i+2));
-
 	}
 
 	rewind (outfile);//文件指针从新到开头，写hdr
@@ -1085,10 +1070,288 @@ rule_ports_to_links(uint16_t *links, const uint32_t *nlinks, const uint32_t *swl
 
 	fclose (outfile);
 	free (buf2);
+	free (lk);
+	// free (lr);
+}
+*/
 
+void
+arule_PtoL(struct parse_rule *r, uint16_t *links, const uint32_t *nlinks, const uint32_t io_sign) {
+	/*	io_sign: RULE_LINK_IN 0, RULE_LINK_OUT 1
+		RULE_LINK_IN: r->in 中的port转换到r->in_link中的link idx
+		links: 保存了 link_idx, link_inport, link_outport, 所有link编号的查询
+	*/
+	struct link *lk = xcalloc (1, sizeof *lk);
+	lk->idx = 0;
+	uint32_t len_lk_u8 = 2*sizeof(uint32_t) +sizeof(uint16_t);
+	uint32_t len_lk_u16 = len_lk_u8/2;
+	uint32_t buf[MAX_ARR_SIZE];
+	// uint32_t n_l = 0;
+	uint32_t count = 0;
+	uint16_t *begin;
+	uint16_t *b;
 
+	if (io_sign) {//RULE_LINK_IN 0, RULE_LINK_OUT 1,
+		lk->port_out = 0;
+		uint32_t n = r->out.n;
+		uint32_t *parr = ARR (r->out);
+		for (uint32_t i = 0; i < n; i++, parr++) {
+			lk->port_in = *parr;
+			b = (uint16_t *)bsearch (lk, links, *nlinks, len_lk_u8, link_port_in_cmp);	
+			//void指针赋值给其他类型的指针时都要进行转换,bsearch返回的是空指针void指针，那么后面就都是uint16_t		
+			assert (b);	
+			if (*b == *links) { 
+				begin = (uint16_t *)links;
+			}
+			else {
+				for (uint32_t j = 1; j < *nlinks; j++) {
+					if (link_port_in_cmp(b, (uint16_t *)(b - j*len_lk_u16))) {
+						begin = (uint16_t *)(b - (j-1)*len_lk_u16);
+						break;
+					}
+				}
+			}
+			buf[count] = (uint32_t)*begin;
+			count++;
+			if (*b != *(uint16_t *)(links+ ((*nlinks)-1)*len_lk_u16)) {
+				for (uint32_t j = 1; j < *nlinks; j++) {
+					if (!link_port_in_cmp(begin, (uint16_t *)(begin + j*len_lk_u16))) {
+						buf[count] = (uint32_t)*(uint16_t *)(begin + j*len_lk_u16);
+						count++;
+					}
+					else
+						break;
+				}
+			}
+		}
+	}
+	else{
+		lk->port_in = 0;
+		uint32_t n = r->in.n;
+		uint32_t *parr = ARR (r->in);
+		for (uint32_t i = 0; i < n; i++, parr++) {
+			lk->port_out = *parr;
+			b = (uint16_t *)bsearch (lk, links, *nlinks, len_lk_u8, link_port_out_cmp);	
+			assert (b);	
+			if (*b == *links) {
+				begin = (uint16_t *)links;
+			}
+			else {
+				for (uint32_t j = 1; j < *nlinks; j++) {
+					if (link_port_out_cmp(b, (uint16_t *)(b - j*len_lk_u16))) {
+						begin = (uint16_t *)(b - (j-1)*len_lk_u16);
+						break;
+					}
+				}
+			}
+			buf[count] = (uint32_t)*begin;
+			count++;
+			if (*b != *(uint16_t *)(links+ ((*nlinks)-1)*len_lk_u16)) {
+				for (uint32_t j = 1; j < *nlinks; j++) {
+					if (!link_port_out_cmp(begin, (uint16_t *)(begin + j*len_lk_u16))) {
+						buf[count] = (uint32_t)*(uint16_t *)(begin + j*len_lk_u16);
+						count++;
+					}
+					else
+						break;				
+				}
+			}
+		}
+	}
+	struct arr_ptr_uint32_t tmp = {0};
+	tmp.n = count;
+	//这里port不相同link一定不相同，那么就先不用检测重复的问题
+	ARR_ALLOC (tmp, count);
+	memcpy (ARR (tmp), buf, count * sizeof *buf);
+	if (io_sign) 
+		r->out_link = tmp;
+	else
+		r->in_link = tmp;
+	// if (r->idx == 1)
+	// {
+	// 	uint32_t n = r->in_link.n;
+	// 	uint32_t *parr = ARR (r->in_link);
+	// 	for (uint32_t j = 0; j < n; j++, parr++)
+	// 		printf("%d - %d; ", buf[j], *parr);
+	// 	printf("%d", len_lk_u8);
+	// 	printf("\n");
+	// }
+	free (lk);
+}
 
+void
+rules_ports_to_links(uint16_t *links, const uint32_t *nlinks, const uint32_t *swls, 
+					const struct parse_nsw *nsw)
+{
+	char *outdirout = "../data/link_out_rule.dat";
+	char *outdirin = "../data/link_in_rule.dat";
+	// int link_len = 5;
+	struct link *lk = xcalloc (1, sizeof *lk);
+	// struct link_to_rule *lr = xcalloc (1, sizeof *lr);
+	uint32_t len_idx = 2;
+	uint32_t len_port = 4;
+	uint16_t *b;
+	char *buf1, *buf2;
+	size_t buf1sz, buf2sz;
+	FILE *f = open_memstream (&buf1, &buf1sz);
 
+	uint32_t count = 0;
+	uint32_t r_idx = 0;
+	lk->idx = 0;	
+	qsort (links, *nlinks, len_idx+2*len_port, link_port_out_cmp);
+	lk->port_in = 0;
+	for (uint32_t i = 0; i < nsw->sws_num; i++) {
+		struct parse_sw *sw = nsw->sws[i];
+		assert (sw);
+		for (struct parse_rule *r = sw->rules.head; r; r = r->next) {
+			arule_PtoL(r, links, nlinks, RULE_LINK_IN);
+			// if (r->idx == 1)
+			// {
+			// 	uint32_t n = r->in_link.n;
+			// 	uint32_t *parr = ARR (r->in_link);
+			// 	for (uint32_t j = 0; j < n; j++, parr++)
+			// 		printf("%d #", *parr);
+			// 	printf("\n");
+			// }
+			r_idx = (uint32_t)r->idx;
+			uint32_t n = r->in_link.n;
+			uint32_t *parr = ARR (r->in_link);
+			for (uint32_t j = 0; j < n; j++, parr++){				
+				fwrite (parr, 4, 1, f);
+				fwrite (&i, 4, 1, f);
+				fwrite (&(r_idx), 4, 1, f);
+				count++;
+			}
+		} 
+	}
+	fclose (f);
+	fflush (f);
+	assert (3*count*sizeof(uint32_t) == buf1sz);
+	qsort (buf1, count, 3*sizeof(uint32_t), link_to_rule_cmp);
+	FILE *outfile = fopen (outdirout, "w");//建立文件out，并可写
+
+	uint32_t swl_num = 0;
+	uint32_t outnl_num = 0;
+	uint32_t idx_num = 0;
+	uint32_t idx_tmp = 0;
+	uint32_t total_num = 0;
+	fwrite (&swl_num, 4, 1, outfile);
+	fwrite (&outnl_num, 4, 1, outfile);
+	fwrite (&idx_num, 4, 1, outfile);
+
+	// printf("buf1%d\n", *(uint32_t *)buf1);
+	for (uint32_t i = 0; i < 12*count; i+=12) {	
+		if (*(uint32_t *)(buf1+i) != idx_tmp) {	
+			if (idx_tmp < *swls) {
+				swl_num++;
+			}
+			// printf("% d;", idx_tmp);
+			fwrite (&idx_tmp, 4, 1, outfile);
+			fwrite (&total_num, 4, 1, outfile);
+			idx_tmp = *(uint32_t *)(buf1+i);
+			idx_num++;		
+		}
+		total_num++;
+	}
+	printf("outdirout%d  ; %d\n", swl_num, *swls);
+
+	// printf("swl_num%d\n", swl_num);
+	fwrite (&idx_tmp, 4, 1, outfile);
+	// printf("idx_tmp%d\n", idx_tmp);
+	fwrite (&total_num, 4, 1, outfile);
+	idx_num++;
+	outnl_num = idx_num - swl_num;
+
+	uint32_t *buf = (uint32_t *)buf1;
+	for (uint32_t i = 0; i < 3*count; i+=3) {
+			fwrite ((uint32_t *)(buf+i+1), 8, 1, outfile);
+			// printf("%d - ", *(uint32_t *)(buf+i));
+			// printf("%d - ", *(uint32_t *)(buf+i+1));
+			// printf("%d;", *(uint32_t *)(buf+i+2));
+	}
+
+	rewind (outfile);//文件指针从新到开头，写hdr
+	fwrite (&swl_num, 4, 1, outfile);
+	fwrite (&outnl_num, 4, 1, outfile);
+	fwrite (&idx_num, 4, 1, outfile);
+	fclose (outfile);
+	free (buf1);
+
+	f = open_memstream (&buf2, &buf2sz);
+	count = 0;
+	r_idx = 0;
+	lk->idx = 0;	
+	qsort (links, *nlinks, len_idx+2*len_port, link_port_in_cmp);
+	lk->port_out = 0;
+	for (uint32_t i = 0; i < nsw->sws_num; i++) {
+		struct parse_sw *sw = nsw->sws[i];
+		assert (sw);
+		for (struct parse_rule *r = sw->rules.head; r; r = r->next) {
+			arule_PtoL(r, links, nlinks, RULE_LINK_OUT);
+			r_idx = (uint32_t)r->idx;
+			uint32_t n = r->out_link.n;
+			uint32_t *parr = ARR (r->out_link);
+			for (uint32_t j = 0; j < n; j++, parr++){				
+				fwrite (parr, 4, 1, f);
+				fwrite (&i, 4, 1, f);
+				fwrite (&(r_idx), 4, 1, f);
+				count++;
+			}
+		} 
+	}
+	fclose (f);
+	fflush (f);
+	assert (3*count*sizeof(uint32_t) == buf2sz);
+	qsort (buf2, count, 3*sizeof(uint32_t), link_to_rule_cmp);
+
+	outfile = fopen (outdirin, "w");//建立文件out，并可写
+
+	swl_num = 0;
+	outnl_num = 0;
+	idx_num = 0;
+	idx_tmp = 0;
+	total_num = 0;
+
+	fwrite (&swl_num, 4, 1, outfile);
+	fwrite (&outnl_num, 4, 1, outfile);
+	fwrite (&idx_num, 4, 1, outfile);
+	
+	for (uint32_t i = 0; i < 12*count; i+=12) {	
+		if (*(uint32_t *)(buf2+i) != idx_tmp) {		
+			if (idx_tmp < *swls) {
+				swl_num++;
+			}
+			// printf("% d;", idx_tmp);
+			fwrite (&idx_tmp, 4, 1, outfile);
+			fwrite (&total_num, 4, 1, outfile);
+			idx_tmp = *(uint32_t *)(buf2+i);
+			// printf("%d", idx_tmp);
+			idx_num++;		
+		}
+		total_num++;	
+	}
+	printf("indirout%d  ; %d\n", swl_num, *swls);
+	// printf("%d\n", idx_num);
+	// printf("swl_num%d\n", swl_num);
+	fwrite (&idx_tmp, 4, 1, outfile);
+	fwrite (&total_num, 4, 1, outfile);
+	idx_num++;
+	outnl_num = idx_num - idx_tmp;
+
+	buf = (uint32_t *)buf2;
+	for (uint32_t i = 0; i < 3*count; i+=3) {
+			fwrite ((uint32_t *)(buf+i+1), 8, 1, outfile);
+			// printf("%d - ", *(uint32_t *)(buf+i));
+			// printf("%d - ", *(uint32_t *)(buf+i+1));
+			// printf("%d;", *(uint32_t *)(buf+i+2));
+	}
+
+	rewind (outfile);//文件指针从新到开头，写hdr
+	fwrite (&swl_num, 4, 1, outfile);
+	fwrite (&outnl_num, 4, 1, outfile);
+	fwrite (&idx_num, 4, 1, outfile);
+	fclose (outfile);
+	free (buf2);
 	free (lk);
 	// free (lr);
 }
@@ -1142,7 +1405,7 @@ parse_dir (const char *outdir, const char *tfdir, const char *name)
 
 	strcpy (base, "/topology.tf");//base为/topology.tf
 	char *link_arr = links_idx_gen (buf, nsw, &nlinks, &swl_num);
-	rule_ports_to_links ((uint16_t *)link_arr, &nlinks, &swl_num, nsw);
+	rules_ports_to_links ((uint16_t *)link_arr, &nlinks, &swl_num, nsw);
 	// links_data_gen ();
 	// ports_to_links ();
 

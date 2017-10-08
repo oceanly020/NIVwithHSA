@@ -47,12 +47,12 @@ main (int argc, char **argv)
   char *net = "stanford";
   // bool one_step = false;
   load (net);
-  struct sw *sw0 = sw_get(0);
-  struct of_rule *rule1 = rule_get(sw0, 0);
-  print_rule(rule1);
+  // struct sw *sw0 = sw_get(0);
+  // struct of_rule *rule1 = rule_get(sw0, 0);
+  // print_rule(rule1);
 
-  struct links_of_rule *ls = rule_links_get_swidx(sw0, 2, RULE_LINK_IN);
-  print_links_wc (ls);
+  // struct links_of_rule *ls = rule_links_get_swidx(sw0, 2, RULE_LINK_IN);
+  // print_links_wc (ls);
 
   char *linkdir = "../data/";
   link_data_load (linkdir);
@@ -82,7 +82,8 @@ main (int argc, char **argv)
 
   // gettimeofday (&end, NULL);
 
-
+  free(matrix_buf);
+  free(matrix_idx);
   data_unload();
   return 0;
 }
