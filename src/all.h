@@ -14,7 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include <dirent.h> 
 
 //结构体或变量定义
 //自定义
@@ -317,14 +317,16 @@ struct parse_rule {
   struct parse_rule *next;
   int idx;
   ARR_PTR(uint32_t, uint32_t) in, out, in_link, out_link;
-  // #define ARR_PTR(T, ID) \
-  // struct arr_ptr_ ## ID { int n; union { T a[sizeof (T *) / sizeof (T)]; T *p; } e; }
-  /*##连接字符串的作用
+  /**
+  #define ARR_PTR(T, ID) \
+  struct arr_ptr_ ## ID { int n; union { T a[sizeof (T *) / sizeof (T)]; T *p; } e; }
+  ##连接字符串的作用
   结构体就是arr_ptr_uint32_t{int n，}
   union联合体类似结构体struct，struct所有变量是“共存”的，union中是各变量是“互斥”的
   共用一个内存首地址，并且各种变量名都可以同时使用，操作也是共同生效，也就是只体现一个值，可以兼容不同类型
   不过这些“手段”之间却没法互相屏蔽——就好像数组+下标和指针+偏移一样
-  在此中放数组或者指针e，n为数量*/
+  在此中放数组或者指针e，n为数量
+  **/
   // array_t *match;
   // array_t *mask, *rewrite;
   struct mf_uint16_t *match;
@@ -593,24 +595,18 @@ print_rule(const struct of_rule *rule) {
   printf("num:%d; ", rule->idx);
 
   printf("matchfield:");
-  for (int i = 0; i < MF_LEN*add_len; i += add_len)
-  {
+  for (int i = 0; i < MF_LEN*add_len; i += add_len) {
     print_wc((uint16_t *)((uint8_t *)data_arrs+i+rule->match.w), (uint16_t *)((uint8_t *)data_arrs+i+rule->match.v));
   }
   printf("; ");
-  if (rule->mask)
-  {
+  if (rule->mask) {
     printf("mask:");
     for (int i = 0; i < MF_LEN*add_len; i += add_len)
-    {
       print_mask((uint16_t *)((uint8_t *)(data_arrs+i+rule->mask)));
-    }
     printf("; ");
     printf("modify:");
     for (int i = 0; i < MF_LEN*add_len; i += add_len)
-    {
       print_wc((uint16_t *)((uint8_t *)data_arrs+i+rule->rewrite.w), (uint16_t *)((uint8_t *)data_arrs+i+rule->rewrite.v));
-    }
     printf("; ");
 
   }
@@ -759,7 +755,7 @@ matrix_idx_init (void) { //返回buf，全为0,长度为规则数
   // printf("total rules :%d\n", sum_r);
   // printf("total rules bufsz:%d\n", bufsz/4);
 
-  return buf;
+  return (uint32_t *)buf;
 }
 
 uint32_t *
@@ -789,15 +785,29 @@ matrix_init (void) { //生成空矩阵
   // printf("total rules :%d\n", sum_r);
   // printf("total rules bufsz:%d\n", bufsz);
 
-  return buf;
+  return (uint32_t *)buf;
 }
 
 struct mf_uint16_t_array {
   uint32_t n_mfs;
-  struct mf_uint16_t  mfs[0];
+  struct mf_uint16_t mfs[0];
 };
 
-struct mf_uint16_t *
+void
+print_mf_uint16_t (const struct mf_uint16_t *a) {
+  for (int i = 0; i < MF_LEN; i++) 
+    print_wc(&(a->mf_w[i]), &(a->mf_v[i]));
+  printf("\n");
+}
+
+void
+print_mf_uint16_t_array (const struct mf_uint16_t_array *arr) {
+  for (int i = 0; i < arr->n_mfs; i++) 
+    print_mf_uint16_t(&(arr->mfs[i])); 
+  printf("\n");
+}
+
+struct mf_uint16_t * //使用这个必须最后free掉 free(*)就可以
 calc_insc(struct mf_uint16_t *a, struct mf_uint16_t *b) {
   uint32_t noinsc_sign = 0;
   for (int i = 0; i < MF_LEN; i++){
@@ -811,26 +821,53 @@ calc_insc(struct mf_uint16_t *a, struct mf_uint16_t *b) {
   struct mf_uint16_t *mf_insc = xcalloc (1, sizeof *mf_insc);
   for (int i = 0; i < MF_LEN; i++){
     mf_insc->mf_w[i] = a->mf_w[i] & b->mf_w[i];
-    mf_insc->mf_v[i] = (~b->mf_w[i])&b->mf_v[i] + (~a->mf_w[i])&b->mf_w[i]&a->mf_v[i];
+    mf_insc->mf_v[i] = ((~(b->mf_w[i]))&b->mf_v[i]) + ((~(a->mf_w[i]))&b->mf_w[i]&a->mf_v[i]);
   }
   return mf_insc;
 }
 
-struct mf_uint16_t_array *
+struct mf_uint16_t_array * //使用这个必须最后free掉 free(*)就可以
 calc_minus_insc(struct mf_uint16_t *a, struct mf_uint16_t *insc) {
-  struct mf_uint16_t *pre = a;
+  uint32_t count = 0;
+  struct mf_uint16_t arr[MAX_ARR_SIZE];
+  struct mf_uint16_t *pre = xcalloc (1, sizeof *pre);
+  for (int i = 0; i < MF_LEN; i++) {
+    pre->mf_w[i] = a->mf_w[i];
+    pre->mf_v[i] = a->mf_v[i];
+  }
   for (int i = 0; i < MF_LEN; i++) {
     uint16_t diff_field = a->mf_w[i] ^ insc->mf_w[i];
     uint16_t sign = 0x8000;
     for (int j = 0; j < 16; j++) {
-      uint16_t diff_sign = diff_ field & sign;
-      if (diff_sign)
-
+      uint16_t diff_sign = diff_field & sign;
+      if (diff_sign) {
+        for (int i_copy = 0; i_copy < MF_LEN; i_copy++) {
+          if (i_copy == i) {
+            arr[count].mf_w[i_copy] = pre->mf_w[i_copy] - diff_sign;
+            pre->mf_w[i_copy] = arr[count].mf_w[i_copy];
+            if (diff_sign & insc->mf_v[i]){
+              arr[count].mf_v[i_copy] = pre->mf_v[i_copy];
+              pre->mf_v[i_copy] = pre->mf_v[i_copy] + diff_sign;
+            }
+            else{
+              arr[count].mf_v[i_copy] = pre->mf_v[i_copy] + diff_sign;
+            }
+          }
+          else {
+            arr[count].mf_w[i_copy] = pre->mf_w[i_copy];
+            arr[count].mf_v[i_copy] = pre->mf_v[i_copy];
+          }
+        }
+        count++;
+      }
       sign >>= 1;
     }
-
   }
-
+  struct mf_uint16_t_array *buf = xmalloc(sizeof(uint32_t)+count*sizeof(*pre));
+  buf->n_mfs = count;
+  memcpy (buf->mfs, arr, count * sizeof *pre);
+  free(pre);
+  return buf;
 }
 
 
@@ -857,6 +894,17 @@ get_link_rules(struct link_to_rule_file *lr_file, uint32_t rule_nums, const uint
     return NULL;
 }
 
+struct mf_uint16_t *
+get_rule_mf(const struct of_rule *rule) {
+  int add_len = sizeof(uint16_t);
+  struct mf_uint16_t *tmp = xcalloc(1, sizeof *tmp);
+  for (int i = 0; i < MF_LEN; i++) {
+    tmp->mf_w[i] = *(uint16_t *)((uint8_t *)data_arrs+i*add_len+rule->match.w);
+    tmp->mf_v[i] = *(uint16_t *)((uint8_t *)data_arrs+i*add_len+rule->match.v);
+  }
+  return tmp;
+}
+
 void //uint32_t *
 gen_matrix(uint32_t *matrix_buf) {
   // for (int i = 0; i < link_in_rule_file->swl_num; i++) {
@@ -876,13 +924,21 @@ gen_matrix(uint32_t *matrix_buf) {
     uint32_t rule_nums_out_pre = lout_r->rule_nums - rule_nums_out;
     uint32_t *lout_arrs = (uint32_t *)(link_out_rule_data_arrs + 2*rule_nums_out_pre);
     if (lout_r) {
-      for (int i_in = 0; i < rule_nums_in; i++) {  
+      for (int i_in = 0; i_in < rule_nums_in; i_in++) {  
         struct of_rule *r_in = rule_get_2idx(*(uint32_t *)lin_arrs, *(uint32_t *)(lin_arrs+1));
-        for (int i_out = 0; i < rule_nums_out; i++) {
-          struct of_rule *r_out = rule_get_2idx(*(uint32_t *)lout_arrs, *(uint32_t *)(lout_arrs+1));
-
-
-        }
+        printf("%d:", r_in->idx);
+        printf("%d - %d\n", lin_arrs,);
+        // print_rule(r_in);
+        // struct mf_uint16_t *r_in_mf = get_rule_mf(r_in);
+        // if (i_in<1){
+        //   print_rule(r_in);
+        //   print_mf_uint16_t(r_in_mf);
+        // }
+        // for (int i_out = 0; i_out < rule_nums_out; i_out++) {
+        //   struct of_rule *r_out = rule_get_2idx(*(uint32_t *)lout_arrs, *(uint32_t *)(lout_arrs+1));
+        //   struct mf_uint16_t *r_out_mf = get_rule_mf(r_out); 
+        // }
+        lin_arrs
       }
     }
     
@@ -916,6 +972,7 @@ hs_free (struct hs *hs) {
 
 //parse.c
 //res.c
+/*
 struct res *
 res_create (int nrules) {
   struct res *res = xcalloc (1, sizeof *res + nrules * sizeof *res->rules.arr);
@@ -938,6 +995,7 @@ res_free (struct res *res) {
   free (res);
   if (parent) { parent->refs--; res_free (parent); }
 }
+*/
 //ntf.c
 //app.c
 

@@ -112,23 +112,17 @@ array_is_eq (const uint16_t *a, const uint16_t *b, int len) //uint16_t
 {	return !memcmp (a, b, len); }
 
 static uint32_t
-arr_find (const struct mf_uint16_t *a, const uint16_t *arrs, int n, int sign)
-{
+arr_find (const struct mf_uint16_t *a, const uint16_t *arrs, int n, int sign) {
 	if (!a) return 0;//match值
 	array_t *b;
 	if (sign)
-	{
 		b = bsearch (a->mf_v, arrs, n, 2*MF_LEN, arr_cmp);
-	}
-	else 
-	{
+	else
 		b = bsearch (a->mf_w, arrs, n, 2*MF_LEN, arr_cmp);
-	}
 	//指向要查找元素的指针a，指向进行查找的数组的第一个对象的指针类型转换为 void* arrs
 	//arrs元素个数n，每个元素大小len，arr_cmp比较
 	//数据必须是经过预先排序的，而排序的规则要和comp所指向比较子函数的规则相同。
 	//如果找到元素则返回指向该元素的指针，否则返回NULL
-
 	assert (b);//如果b没有值，出错
 	// return VALID_OFS + ((uint8_t *)b - (uint8_t *)arrs);//（指向uint8_t）//uint16_t为一个单位
 	return ((uint8_t *)b - (uint8_t *)arrs);
@@ -148,8 +142,7 @@ arr_find (const struct mf_uint16_t *a, const uint16_t *arrs, int n, int sign)
 // }
 
 static uint16_t *
-gen_arrs (const struct parse_nsw *nsw, uint32_t *n)
-{
+gen_arrs (const struct parse_nsw *nsw, uint32_t *n) {
 	char *buf, *buf2;
 	size_t bufsz, buf2sz;
 	FILE *f = open_memstream (&buf, &bufsz);//buf和buf大小
@@ -160,8 +153,7 @@ gen_arrs (const struct parse_nsw *nsw, uint32_t *n)
 	uint32_t len = 2*MF_LEN;//多少字节
 	// uint32_t match_len = 2*mf_len //加上通配符
 	int count = 0;//计数match
-	for (int i = 0; i < nsw->sws_num; i++) {//0到n，所有tf
-		
+	for (int i = 0; i < nsw->sws_num; i++) {//0到n，所有tf		
 		const struct parse_sw *sw = nsw->sws[i];
 		for (struct parse_rule *r = sw->rules.head; r; r = r->next) {//一直往下一个走，直到没有下一个
 			//head为链表的头指针，可以使用head.next指向链表下一个。
@@ -224,8 +216,8 @@ uint16_t_cmp (const void *a, const void *b)
 { return *(uint16_t *)a - *(uint16_t *)b; }//升序
 
 static uint32_t
-linkwc_gen (const uint32_t *arr, uint32_t n, FILE *f_links)//调用parr = ARR (r->in)，n = r->in.n;
-{	//返回的ret为位置，文件内的位置，需要加上首位置
+linkwc_gen (uint32_t *arr, uint32_t n, FILE *f_links) {//调用parr = ARR (r->in)，n = r->in.n;
+	//返回的ret为位置，文件内的位置，需要加上首位置
 	if (!n) return 0;
 	// int32_t ret = -(VALID_OFS + ftell (f_links));
 	int32_t ret =  ftell (f_links);
@@ -354,7 +346,7 @@ linkwc_gen (const uint32_t *arr, uint32_t n, FILE *f_links)//调用parr = ARR (r
 
 static void
 gen_sw (const struct parse_sw *sw, FILE *out, FILE *f_strs, const uint16_t *arrs,
-        int narrs)
+        int narrs) 
 {
 	// char *buf_deps, *buf_ports;//依赖和端口
 	// size_t sz_deps, sz_ports;
@@ -428,8 +420,7 @@ gen_sw (const struct parse_sw *sw, FILE *out, FILE *f_strs, const uint16_t *arrs
 }
 
 void
-rule_data_gen (const char *name, const struct parse_nsw *nsw)//name是路径就是.dat
-{
+rule_data_gen (const char *name, const struct parse_nsw *nsw) {//name是路径就是.dat
 	FILE *out = fopen (name, "w");//建立文件out，并可写
 	if (!out) err (1, "Can't open output file %s", name);
 
@@ -490,11 +481,9 @@ array_free (array_t *a) {
 }
 
 static void
-add_rule (struct parse_sw *sw, struct parse_rule *r)
-{
+add_rule (struct parse_sw *sw, struct parse_rule *r) {
   r->idx = ++sw->nrules;//sw中规则数+1，然后索引序号这个规则数
   list_append (&sw->rules, r); //链表指向这个规则
-
   // for (int i = 0; i < r->in.n; i++) {//对于r在n中的排序
   //   struct map_elem *e = map_find_create (&sw->in_map, ARR (r->in)[i]);
   //   struct map_val *tmp = xmalloc (sizeof *tmp);
@@ -1190,7 +1179,7 @@ rules_ports_to_links(uint16_t *links, const uint32_t *nlinks, const uint32_t *sw
 	// struct link_to_rule *lr = xcalloc (1, sizeof *lr);
 	uint32_t len_idx = 2;
 	uint32_t len_port = 4;
-	uint16_t *b;
+	// uint16_t *b;
 	char *buf1, *buf2;
 	size_t buf1sz, buf2sz;
 	FILE *f = open_memstream (&buf1, &buf1sz);

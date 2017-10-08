@@ -1,3 +1,5 @@
+#define _GNU_SOURCE 1
+
 #include "all.h"
 // #include "app.h"
 // #include "data.h"
@@ -12,7 +14,7 @@
 #ifndef NTF_STAGES
 #define NTF_STAGES 1
 #endif
-
+#define MAX_REFIX #255
 
 
 static inline int64_t
@@ -37,12 +39,68 @@ load (char *net)
   if (atexit (unload)) errx (1, "Failed to set exit handler.");
 }
 
+int
+calc_set_test (void) {
+  struct mf_uint16_t *a = xcalloc (1, sizeof *a);
+  struct mf_uint16_t *b = xcalloc (1, sizeof *b);
+  for (int i = 0; i < MF_LEN; i++) {
+    a->mf_w[i] = 0x58d0;
+    a->mf_v[i] = 0x8623;
+    b->mf_w[i] = 0x6949;
+    b->mf_v[i] = 0x8622;
+  }
 
-#define MAX_REFIX #255
+  printf("the oringinal:\n");
+  print_mf_uint16_t(a);
+  // print_mf_uint16_t(b);
+  struct mf_uint16_t *insc = calc_insc(a, b);
+  if (!insc){
+      printf("not success\n");
+      return -1;
+    }
+  printf("the insection:\n");
+  print_mf_uint16_t(insc);
+  struct mf_uint16_t_array *minus = calc_minus_insc(a, insc);
+  printf("the minus set:\n");
+  print_mf_uint16_t_array(minus);
+  free(insc);
+  free(minus);
+  return 0;
+}
+
+int 
+timeval_subtract(struct timeval* result, struct timeval* x, struct timeval* y) {
+  /** 
+    * 计算两个时间的间隔，得到时间差 
+    * @param struct timeval* resule 返回计算出来的时间 
+    * @param struct timeval* x 需要计算的前一个时间 
+    * @param struct timeval* y 需要计算的后一个时间 
+    * return -1 failure ,0 success 
+  **/ 
+  // int nsec;    
+  if ( x->tv_sec>y->tv_sec ) 
+    return -1;   
+  if ( (x->tv_sec==y->tv_sec) && (x->tv_usec>y->tv_usec) ) 
+    return -1;   
+  result->tv_sec = ( y->tv_sec-x->tv_sec ); 
+  result->tv_usec = ( y->tv_usec-x->tv_usec );     
+  if (result->tv_usec<0) { 
+    result->tv_sec--; 
+    result->tv_usec+=1000000; 
+  } 
+  return 0; 
+  }
+
+
 
 int
 main (int argc, char **argv)
 {
+  // struct timeval start,stop,diff;  //计算时间差 usec
+  // gettimeofday(&start,NULL); 
+  // gettimeofday(&stop,NULL);   
+  // timeval_subtract(&diff,&start,&stop);   
+  // printf("the time:%d usec",diff.tv_usec); 
   uint32_t *matrix_buf, *matrix_idx;
   char *net = "stanford";
   // bool one_step = false;
@@ -58,6 +116,9 @@ main (int argc, char **argv)
   link_data_load (linkdir);
   matrix_buf = matrix_init();
   matrix_idx = matrix_idx_init ();
+ 
+  // calc_set_test();
+  
   gen_matrix(matrix_buf);
 
   // struct link *lk = link_get(3);
@@ -72,15 +133,12 @@ main (int argc, char **argv)
   // // bool find_loop = false;
 
   // // printf ("%d \n %d \n", data_file->arrs_ofs, data_file->strs_ofs);
-  // struct timeval start, end; //计时结构
-  // gettimeofday (&start, NULL);
 
   // struct res *in = res_create (data_file->stages + 1);
 
   // // printf ("%s \n",data_strs);
   // res_free (in);
 
-  // gettimeofday (&end, NULL);
 
   free(matrix_buf);
   free(matrix_idx);
