@@ -17,9 +17,6 @@
 #include <string.h>
 #include <dirent.h>  
 
-
-
-
 //函数声明
 void print_bin(uint16_t mf);
 struct mf_uint16_t *mf_from_str (const char *s);
@@ -34,8 +31,6 @@ static struct parse_sw * parse_tf (const char *name);
 void parse_dir (const char *outdir, const char *tfdir, const char *name);
 // void rule_data_gen (const char *name, const struct parse_nsw *nsw)
 
-
-
 //apps
 void print_bin(uint16_t mf)
 {
@@ -46,10 +41,9 @@ void print_bin(uint16_t mf)
 }
 
 //array.c
-
 struct mf_uint16_t *
 mf_from_str (const char *s)//每个数组的数都为一组uint32_t的匹配域中的一个,一一对应
-{	
+{
 	// bool commas = strchr (s, ',');//查找某字符在字符串中首次出现的位置
 	int div = CHAR_BIT * 2; //+ commas;// CHAR_BIT 8位
 	int len = strlen (s); //+ commas;//返回长度
@@ -139,7 +133,7 @@ arr_find (const struct mf_uint16_t *a, const uint16_t *arrs, int n, int sign) {
 //   fwrite (&n, sizeof n, 1, f_ports);
 //   fwrite (arr, sizeof *arr, n, f_ports);
 //   return ret;
-// }
+// } 
 
 static uint16_t *
 gen_arrs (const struct parse_nsw *nsw, uint32_t *n) {
@@ -163,10 +157,11 @@ gen_arrs (const struct parse_nsw *nsw, uint32_t *n) {
 			fwrite (r->match->mf_v, len, 1, f);
 			count += 2;//位置，每个len，位置+1
 			if (r->mask) {
-				fwrite (r->mask, len, 1, f);
-				fwrite (r->rewrite->mf_w, len, 1, f);
+				fwrite (r->mask->mf_v, len, 1, f);
+				// fwrite (r->rewrite->mf_w, len, 1, f);//是否有x
 				fwrite (r->rewrite->mf_v, len, 1, f);
-				count += 3;
+
+				count += 2;
 			}
 			// for (struct parse_dep *dep = r->deps.head; dep; dep = dep->next) {//依赖的
 			// 	fwrite (dep->match, len, 1, f);
@@ -346,7 +341,7 @@ linkwc_gen (uint32_t *arr, uint32_t n, FILE *f_links) {//调用parr = ARR (r->in
 
 static void
 gen_sw (const struct parse_sw *sw, FILE *out, FILE *f_strs, const uint16_t *arrs,
-        int narrs) 
+        int narrs, const uint32_t sw_idx) 
 {
 	// char *buf_deps, *buf_ports;//依赖和端口
 	// size_t sz_deps, sz_ports;
@@ -357,7 +352,7 @@ gen_sw (const struct parse_sw *sw, FILE *out, FILE *f_strs, const uint16_t *arrs
 	// FILE *f_deps = open_memstream (&buf_deps, &sz_deps);
 
 	int start = ftell (out);//返回当前文件指针位置
-	struct sw hdr = {ftell (f_strs) + VALID_OFS, sw->nrules};//创建tf，文件f_strs位置+1
+	struct sw hdr = {sw_idx, ftell (f_strs) + VALID_OFS, sw->nrules};//创建tf，文件f_strs位置+1
 	//就是prefix开始位置，同时填入tf->nrules
 
 	if (sw->prefix) fwrite (sw->prefix, 1, strlen (sw->prefix) + 1, f_strs);//tf名称加在tf实体前面写到f_strs
@@ -372,6 +367,7 @@ gen_sw (const struct parse_sw *sw, FILE *out, FILE *f_strs, const uint16_t *arrs
 	int i = 0;
 	for (struct parse_rule *r = sw->rules.head; r; r = r->next, i++) {//选取链表中所有r,从链表转到数组
 		struct of_rule *tmp = &rules[i];//指向相应位置，填入到rules中
+		tmp->sw_idx = sw_idx;//从0开始，对应str
 		tmp->idx = r->idx;
 		// tmp->in = gen_ports (ARR (r->in), r->in.n, f_ports, INPORT);//( (X).n > ARR_LEN ((X).e.a) ? (X).e.p : (X).e.a )
 		// tmp->out = gen_ports (ARR (r->out), r->out.n, f_ports, OUTPORT);//生成port号
@@ -379,8 +375,9 @@ gen_sw (const struct parse_sw *sw, FILE *out, FILE *f_strs, const uint16_t *arrs
 		tmp->match.v = arr_find (r->match, arrs, narrs, VALUE);//从arrs中找到match
 		tmp->mask = arr_find (r->mask, arrs, narrs, VALUE);//预处理，在arrs中查询，应该是生成号，作为hash查询	
 		//如果找到元素则返回指向该元素的指针，否则返回NULL，arrs为没有重复的头
-		tmp->rewrite.w = arr_find (r->rewrite, arrs, narrs, WILDCARD);
-		tmp->rewrite.v = arr_find (r->rewrite, arrs, narrs, VALUE);
+		// tmp->rewrite.w = arr_find (r->rewrite, arrs, narrs, WILDCARD);
+		// tmp->rewrite.v = arr_find (r->rewrite, arrs, narrs, VALUE);
+		tmp->rewrite = arr_find (r->rewrite, arrs, narrs, VALUE);//是否有x
 		// // if (r->deps.head) tmp->deps = gen_deps (&r->deps, f_deps, f_ports, arrs, narrs);//如果有依赖，建立
 		// //tmp->desc = barfoo;
 		// gen_link
@@ -394,7 +391,6 @@ gen_sw (const struct parse_sw *sw, FILE *out, FILE *f_strs, const uint16_t *arrs
 		// struct rule_links *rl_out = linkwc_gen (r);
 		// tmp->out_link = 0;
 	}
-
 	fclose (f_ports);
 	// fclose (f_deps);
 
@@ -450,7 +446,7 @@ rule_data_gen (const char *name, const struct parse_nsw *nsw) {//name是路径�
 	  // if (!i) gen_sw (ttf, out, f_strs, arrs, narrs);//i=0 topology.tf，link的数据
 	  // else gen_sw (ntf->tfs[i - 1], out, f_strs, arrs, narrs);//后面其余
 	  // gen_sw (nsw->sws[i - 1], out, f_strs, arrs, narrs);
-	  gen_sw (nsw->sws[i], out, f_strs, arrs, narrs);
+	  gen_sw (nsw->sws[i], out, f_strs, arrs, narrs, i);
 	}
 	fclose (f_strs);
 	mf_len = 2;//*2字节，2字节为一位uint16_t
@@ -540,7 +536,7 @@ read_array (char *s, uint32_t *res) { //保存成struct arr_ptr_uint32_t
 	}
 
 	struct arr_ptr_uint32_t tmp = {0};
-	if (!n) return tmp;
+	if (!n) return tmp;//如果没有
 	qsort (res, n, sizeof *res, int_cmp);//排序有n个
 	tmp.n = n;
 	if (res == buf) {
@@ -599,7 +595,7 @@ parse_tf (const char *name)
 		mask = strtok_r (NULL, "$", &save);//掩码
 		rewrite = strtok_r (NULL, "$", &save);//重写的匹配域
 		/*inv_match =*/ strtok_r (NULL, "$", &save);//匹配域逆
-		/*inv_rewrite =*/ strtok_r (NULL, "$", &save);//掩码逆
+		/*inv_rewrite =*/ strtok_r (NULL, "$", &save);//重写的匹配域逆
 		outstr = strtok_r (NULL, "$", &save);//输出序列（端口）
 		affected = strtok_r (NULL, "$", &save);//受影响的规则号用#分割
 		/*influence = */strtok_r (NULL, "$", &save);//影响的规则号用#分割
@@ -626,6 +622,9 @@ parse_tf (const char *name)
 			if (!strcmp (type, "rw")) {//如果是"rw"
 				r->mask = mf_from_str (mask);
 				r->rewrite = mf_from_str (rewrite);
+				for (int i = 0; i < MF_LEN; i++) { //测试是否mask和rewrite没有x
+					assert(!(r->mask->mf_w[i] && r->rewrite->mf_w[i]));
+				}		
 			}
 		}
 
