@@ -19,7 +19,7 @@
 
 //函数声明
 void print_bin(uint16_t mf);
-struct mf_uint16_t *mf_from_str (const char *s);
+// struct mf_uint16_t *mf_from_str (const char *s);
 void array_free (array_t *a);
 static void add_rule (struct parse_sw *sw, struct parse_rule *r);
 static void free_rule (struct parse_rule *r);
@@ -40,18 +40,20 @@ void print_bin(uint16_t mf)
         printf("%d", (mf & bool_sign) != 0);
 }
 
+
 //array.c
 struct mf_uint16_t *
 mf_from_str (const char *s)//每个数组的数都为一组uint32_t的匹配域中的一个,一一对应
 {
 	// bool commas = strchr (s, ',');//查找某字符在字符串中首次出现的位置
-	int div = CHAR_BIT * 2; //+ commas;// CHAR_BIT 8位
-	int len = strlen (s); //+ commas;//返回长度
-	assert (len % div == 0);
+	// int div = CHAR_BIT * 2; //+ commas;// CHAR_BIT 8位
+	// int len = strlen (s); //+ commas;//返回长度
+	// assert (len % div == 0);
 	// len /= div;//字节数
 	const char *cur = s;
 	// array_t *res = array_create (len, BIT_UNDEF);
 	struct mf_uint16_t *mf = xcalloc (1, sizeof *mf);
+	
 	
 	// uint8_t *rcur = (uint8_t *) res;
 	for (int i = 0; i < MF_LEN; i++) {
@@ -59,7 +61,7 @@ mf_from_str (const char *s)//每个数组的数都为一组uint32_t的匹配域�
 		uint16_t tmp_v = 0;
 		uint16_t bool_sign = 0x8000; 
 		// for (int j = 0; j < CHAR_BIT / 2; j++, cur++) {
-		for (int j = 0; j < CHAR_BIT * 2; j++, cur++) {
+		for (int j = 0; j < CHAR_BIT * 2 + 2; j++, cur++) {
 	// 		enum bit_val val;
 			switch (*cur) {	
 				case '0': 
@@ -70,9 +72,15 @@ mf_from_str (const char *s)//每个数组的数都为一组uint32_t的匹配域�
 					tmp_w += bool_sign; break;
 				case 'z': case 'Z':
 					return NULL; break;
+				case ',':
+					continue;
 				default: errx (1, "Invalid character '%c' in \"%s\".", *cur, s);
 			}
 			bool_sign >>= 1;
+			if (!bool_sign){
+				cur++;
+				break;
+			}
 	// 		tmp |= val;
 		}
 		mf->mf_w[i] = tmp_w;
@@ -89,8 +97,7 @@ mf_from_str (const char *s)//每个数组的数都为一组uint32_t的匹配域�
 static uint32_t mf_len;
 
 static int
-rule_cmp (const void *va, const void *vb)
-{
+rule_cmp (const void *va, const void *vb) {
 	const struct rule *a = va, *b = vb;
 	// if ((a->in < 0 && b->in < 0) || a->in == b->in) 
 	return a->idx - b->idx;
@@ -243,7 +250,7 @@ linkwc_gen (uint32_t *arr, uint32_t n, FILE *f_links) {//调用parr = ARR (r->in
 	for (int i = 1; i < n; i++)
 	{
 		if ((++tmp != arr_idx[i]) || (i == n-1)) {
-			if (tmp - 1 == begin) {
+			if ((tmp - 1 == begin)&&(i != n-1)) {
 				links_wc[wc_nums].w = w_all0;
 				links_wc[wc_nums].v = begin;
 				wc_nums++;
@@ -293,31 +300,51 @@ linkwc_gen (uint32_t *arr, uint32_t n, FILE *f_links) {//调用parr = ARR (r->in
 			}
 			v_h = (tmp & v_sign) && 1;
 			v_l = (begin & v_sign) && 1;
+			if (first_sign){
+				if (v_h != v_l) {
+					links_wc[wc_nums].w = v_sign;
+					links_wc[wc_nums].v = vl_arr;
+					wc_nums++;						
+				}
+				else if (v_h == 1) {
+					links_wc[wc_nums].w = 0;
+					links_wc[wc_nums].v = vl_arr + v_sign;
+					wc_nums++;
+				}
+				else {
+					links_wc[wc_nums].w = 0;
+					links_wc[wc_nums].v = vh_arr;
+					wc_nums++;
+				}
+			}
+				else{
+				if (v_l) {
+					links_wc[wc_nums].w = 0;
+					links_wc[wc_nums].v = vl_arr + v_sign;
+					wc_nums++;
+				}
+				else {
+					// uint16_t w = v_sign - 1;//后面补x
+					links_wc[wc_nums].w = v_sign;
+					links_wc[wc_nums].v = vl_arr;
+					wc_nums++;
+				}
+				if (v_h) {
+					links_wc[wc_nums].w = v_sign;
+					links_wc[wc_nums].v = vh_arr;
+					wc_nums++;
+				}
+				else {
+					links_wc[wc_nums].w = 0;
+					links_wc[wc_nums].v = vh_arr;
+					wc_nums++;
+				}
+				// wc_nums++;
+				begin = arr_idx[i];
+				tmp = begin;
+			}
 
-			if (v_l) {
-				links_wc[wc_nums].w = 0;
-				links_wc[wc_nums].v = vl_arr + v_sign;
-				wc_nums++;
-			}
-			else {
-				// uint16_t w = v_sign - 1;//后面补x
-				links_wc[wc_nums].w = v_sign;
-				links_wc[wc_nums].v = vl_arr;
-				wc_nums++;
-			}
-			if (v_h) {
-				links_wc[wc_nums].w = v_sign;
-				links_wc[wc_nums].v = vh_arr;
-				wc_nums++;
-			}
-			else {
-				links_wc[wc_nums].w = 0;
-				links_wc[wc_nums].v = vh_arr;
-				wc_nums++;
-			}
-			// wc_nums++;
-			begin = arr_idx[i];
-			tmp = begin;
+
 		}
 	}
 	// for (int i = 0; i < wc_nums; i++)
@@ -480,6 +507,8 @@ static void
 add_rule (struct parse_sw *sw, struct parse_rule *r) {
   r->idx = ++sw->nrules;//sw中规则数+1，然后索引序号这个规则数
   list_append (&sw->rules, r); //链表指向这个规则
+ 
+
   // for (int i = 0; i < r->in.n; i++) {//对于r在n中的排序
   //   struct map_elem *e = map_find_create (&sw->in_map, ARR (r->in)[i]);
   //   struct map_val *tmp = xmalloc (sizeof *tmp);
@@ -574,7 +603,7 @@ parse_tf (const char *name)
 	sw->len = tflen;
 	if (res == 2) sw->prefix = xstrdup (prefix);//如果有prefix
 	//prefix为字符串，如果字符串为空，报错，要么直接复制给一个指针再赋值到tf->prefix
-
+	uint32_t sign = 0;
 	/* Skip next line 跳过第二行的#*/
 	getline (&line, &n, in);
 	while ((len = getline (&line, &n, in)) != -1) {//按行读取文件
@@ -609,7 +638,6 @@ parse_tf (const char *name)
 		r->in = read_array (instr, NULL);//保存成struct arr_ptr_uint32_t
 		//ARR (r->in)[0]为一个数组,n为元素个数
 		r->out = read_array (outstr, NULL);
-
 		/*if (file) {
 		  r->file = xstrdup (file);
 		  lines[strlen (lines) - 1] = 0;
@@ -619,6 +647,17 @@ parse_tf (const char *name)
 		//link貌似也作为函数，只有出入端口，把端口连起来
 		if (strcmp (type, "link")) {//比较字符串，相同返回0，如果不是"link"
 			r->match = mf_from_str (match);
+			sign++;
+			if (sign == 201)
+				if (!(r->out.n))
+					printf("there is 0");
+
+				else{
+					for (int i = 0; i < r->out.n; i++)
+						printf("outport %d\n", *(ARR (r->out)));
+				}
+
+				
 			if (!strcmp (type, "rw")) {//如果是"rw"
 				r->mask = mf_from_str (mask);
 				r->rewrite = mf_from_str (rewrite);
@@ -1149,12 +1188,21 @@ arule_PtoL(struct parse_rule *r, uint16_t *links, const uint32_t *nlinks, const 
 	struct arr_ptr_uint32_t tmp = {0};
 	tmp.n = count;
 	//这里port不相同link一定不相同，那么就先不用检测重复的问题
-	ARR_ALLOC (tmp, count);
-	memcpy (ARR (tmp), buf, count * sizeof *buf);
-	if (io_sign) 
-		r->out_link = tmp;
-	else
-		r->in_link = tmp;
+	if (count){
+		ARR_ALLOC (tmp, count);
+		memcpy (ARR (tmp), buf, count * sizeof *buf);
+		if (io_sign) 
+			r->out_link = tmp;
+		else
+			r->in_link = tmp;
+	}
+	else {
+		if (io_sign) 
+			r->out_link = tmp;
+		else
+			r->in_link = tmp;
+	}
+	
 	// if (r->idx == 1)
 	// {
 	// 	uint32_t n = r->in_link.n;
@@ -1163,6 +1211,15 @@ arule_PtoL(struct parse_rule *r, uint16_t *links, const uint32_t *nlinks, const 
 	// 		printf("%d - %d; ", buf[j], *parr);
 	// 	printf("%d", len_lk_u8);
 	// 	printf("\n");
+	// }
+	// uint32_t *parr = ARR (tmp);
+	// if ((r->idx == 201) && io_sign){
+	// 	printf("%d:", count);
+		// for (int i = 0; i < count; i++)
+		// {
+		// 	printf("%d;", *parr);
+		// 	parr++;
+		// }
 	// }
 	free (lk);
 }

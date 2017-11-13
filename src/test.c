@@ -130,7 +130,8 @@ main (int argc, char **argv)
   // gettimeofday(&start,NULL);
   // gettimeofday(&stop,NULL);
   uint32_t *matrix_idx;
-  char *net = "stanford";
+  // char *net = "stanford";
+  char *net = "stanford_whole";
   // bool one_step = false;
   load (net);
   // struct sw *sw0 = sw_get(3);
@@ -154,6 +155,11 @@ main (int argc, char **argv)
   // struct link *lk = link_get(0);
   // print_link(lk);
   // print_linktorule_test();
+  struct of_rule *r =  rule_get_2idx(0, 201);
+  print_rule(r);
+  r = rule_get_2idx(1, 201);
+  print_rule(r);
+
   struct matrix_CSR *matrix_CSR = gen_sparse_matrix();
   data_unload();
   // if (matrix_CSR->rows[2940])
@@ -161,10 +167,15 @@ main (int argc, char **argv)
   //   printf("num:%d\n", matrix_CSR->rows[2940]->idx_vs[868]->idx);
   // }
   // 
-  struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
+  // struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
 
   // print_CSR_elem_from_idx(2940,200,matrix_CSR);
   // print_CSC_elem_from_idx(2940,200,matrix_CSC);
+  // gettimeofday(&start,NULL); 
+  // struct matrix_CSR *muti1_CSR = sparse_matrix_multiply(matrix_CSR, matrix_CSC);
+  // gettimeofday(&stop,NULL);
+  // printf("matrix_buf squre:%lld us", diff(&stop, &start));
+  
   
   // uint32_t row_idx = matrix_idx_get_2idx(9,108);
   // uint32_t col_idx = matrix_idx_get_2idx(0,1);
