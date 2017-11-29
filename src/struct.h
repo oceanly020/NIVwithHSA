@@ -111,3 +111,8 @@ struct matrix_Tri_express {
   uint32_t col_idx;
   struct matrix_element *elem;
 };
+
+struct Tri_arr {
+  uint32_t nTris;
+  struct matrix_Tri_express *arr[];
+};
