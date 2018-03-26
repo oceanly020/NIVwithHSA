@@ -92,15 +92,26 @@ timeval_subtract(struct timeval* result, struct timeval* x, struct timeval* y) {
 }
 
 void
-time_for_test(void) {
-  for (uint32_t j = 0; j < 50000; j++) { //j为列，i为行
-    for (uint32_t i = 0; i < 2; i++) {
-    //   // struct matrix_element **line = (struct matrix_element **)(a->elems+i*j);
-    //   for (uint32_t k = 0; k < 2000; k++){
-
-    //   }
-    }
-  }
+test(void) {
+  char *buf;
+  size_t bufsz;
+  FILE *f = open_memstream (&buf, &bufsz);
+  char *str_arr = "this is the test";
+  uint32_t str_len = strlen(str_arr);
+  
+  fwrite (str_arr, str_len, 1, f);
+  fflush(f);
+  // fclose(f);
+  printf("%s\n", buf);
+  buf[0] = 'o';
+  buf[1] = 'o';
+  printf("%s\n", buf);
+  fwrite (str_arr, str_len, 1, f);
+  fflush(f);
+  printf("%s\n", buf);
+  fclose(f);
+  
+  // fclose(f);
 }
 
 void
@@ -117,8 +128,6 @@ print_linktorule_test(void) {
     print_rule(r_in);
     lin_arrs += 2;
   }
-
-
 }
 
 
@@ -130,6 +139,9 @@ main (int argc, char **argv)
   // gettimeofday(&start,NULL);
   // gettimeofday(&stop,NULL);
   uint32_t *matrix_idx;
+  // test();
+
+  // 加载net数据
   // char *net = "stanford";
   char *net = "stanford_whole";
   // bool one_step = false;
@@ -143,14 +155,16 @@ main (int argc, char **argv)
   // struct links_of_rule *ls = rule_links_get_swidx(sw0, 2, RULE_LINK_IN);
   // print_links_wc (ls);
 
+  // 加载link数据
   char *linkdir = "../data/";
   link_data_load (linkdir);
   // gettimeofday(&start,NULL);
   // struct matrix_buf *matrix_buf = matrix_init();
-  matrix_idx = matrix_idx_init ();
+  // matrix_idx = matrix_idx_init ();
  
   // calc_set_test();
   
+  // 生成普通矩阵
   // gen_matrix(matrix_buf);
   // struct link *lk = link_get(00);
   // print_link(lk);
@@ -160,22 +174,24 @@ main (int argc, char **argv)
   // r = rule_get_2idx(1, 201);
   // print_rule(r);
 
-  struct matrix_CSR *matrix_CSR = gen_sparse_matrix();
+
+  // 生成稀疏矩阵
+  struct matrix_CSR *matrix_CSR = gen_sparse_matrix(); 
   data_unload();
   // if (matrix_CSR->rows[2940])
   // {
   //   printf("num:%d\n", matrix_CSR->rows[2940]->idx_vs[868]->idx);
   // }
   // 
-  struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
+  // struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
   
   
   // print_CSR_elem_from_idx(2940,200,matrix_CSR);
   // print_CSC_elem_from_idx(2940,200,matrix_CSC);
-  gettimeofday(&start,NULL); 
-  struct matrix_CSR *muti1_CSR = sparse_matrix_multiply(matrix_CSR, matrix_CSC);
-  gettimeofday(&stop,NULL);
-  printf("matrix_buf squre:%lld us", diff(&stop, &start));
+  // gettimeofday(&start,NULL); 
+  // struct matrix_CSR *muti1_CSR = sparse_matrix_multiply(matrix_CSR, matrix_CSC);
+  // gettimeofday(&stop,NULL);
+  // printf("matrix_buf squre:%lld us", diff(&stop, &start));
   
   
   // uint32_t row_idx = matrix_idx_get_2idx(9,108);
@@ -212,7 +228,7 @@ main (int argc, char **argv)
   // res_free (in);
 
   // free_matrix_buf(matrix_buf);
-  free(matrix_idx);
+  // free(matrix_idx);
   
   return 0;
 }

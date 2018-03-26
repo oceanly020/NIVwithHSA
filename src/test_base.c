@@ -16,7 +16,7 @@ main (int argc, char **argv)
 	// parse_dir ("data", "tfs", "stanford");
 	parse_dir ("data", "tfs", "stanford_whole");
 
-
+	// generate_connect_link ("data", "tfs", "stanford_whole");
 
 	// struct mf_uint16_t *mf = mf_from_str(s);
 	// for (int i = 0; i < MF_LEN; i++) {

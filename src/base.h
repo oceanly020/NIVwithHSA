@@ -603,7 +603,7 @@ parse_tf (const char *name)
 	sw->len = tflen;
 	if (res == 2) sw->prefix = xstrdup (prefix);//如果有prefix
 	//prefix为字符串，如果字符串为空，报错，要么直接复制给一个指针再赋值到tf->prefix
-	uint32_t sign = 0;
+	// uint32_t sign = 0;
 	/* Skip next line 跳过第二行的#*/
 	getline (&line, &n, in);
 	while ((len = getline (&line, &n, in)) != -1) {//按行读取文件
@@ -646,18 +646,7 @@ parse_tf (const char *name)
 
 		//link貌似也作为函数，只有出入端口，把端口连起来
 		if (strcmp (type, "link")) {//比较字符串，相同返回0，如果不是"link"
-			r->match = mf_from_str (match);
-			sign++;
-			if (sign == 201)
-				if (!(r->out.n))
-					printf("there is 0");
-
-				else{
-					for (int i = 0; i < r->out.n; i++)
-						printf("outport %d\n", *(ARR (r->out)));
-				}
-
-				
+			r->match = mf_from_str (match);	
 			if (!strcmp (type, "rw")) {//如果是"rw"
 				r->mask = mf_from_str (mask);
 				r->rewrite = mf_from_str (rewrite);
@@ -1401,8 +1390,148 @@ rules_ports_to_links(uint16_t *links, const uint32_t *nlinks, const uint32_t *sw
 	// free (lr);
 }
 
+
+
+void
+check_mf(const struct parse_nsw *nsw){
+	int count = 0;//计数match
+	for (int i = 0; i < nsw->sws_num; i++) {//0到n，所有tf		
+		const struct parse_sw *sw = nsw->sws[i];
+		for (struct parse_rule *r = sw->rules.head; r; r = r->next){
+			assert (r->match);
+		}
+	}
+}
+
 void
 parse_dir (const char *outdir, const char *tfdir, const char *name)
+{
+	printf ("Parsing: \n");
+	fflush (stdout);
+	struct parse_nsw *nsw;
+	// struct parse_tf *ttf;
+	int stages;
+
+	char buf[PATH_MAX + 1];
+	snprintf (buf, sizeof buf, "../%s/%s", tfdir, name);
+	char *base = buf + strlen (buf); //base指向buf后面的部分
+	strcpy (base, "/stages");//buf后面接上"/stages"
+	// printf("%s\n", buf);
+
+	FILE *f = fopen (buf, "r");//打开"/stages"
+	if (!f) err (1, "Can't open %s", buf);//stanford为3
+	if (!fscanf (f, "%d", &stages)) errx (1, "Can't read NTF stages from %s", buf);
+	fclose (f);
+
+	*base = 0;
+	strcpy (base , "/");
+	// printf("base%s\n", base);
+	// printf("buf%s\n", buf);
+	struct dirent **tfs;//#include<dirent.h>，为了获取某文件夹目录内容
+	//成功则返回复制到tfs数组中的数据结构数目，每读取一个传给filter_tfs，过滤掉不想要的，这里要.tf
+	int n = scandir (buf, &tfs, filter_tfs, alphasort);//为了获取某文件夹目录内容，按字母排序
+	if (n <= 0) err (1, "Couldn't find .tf files in %s", buf);
+	// n = 1;//控制只取一个来实验
+
+	nsw = xmalloc (sizeof *nsw + n * sizeof *nsw->sws);
+	nsw->sws_num = n;
+	nsw->stages = stages;
+	for (int i = 0; i < n; i++) {//对找到的 .tf 文件处理 0到n-1
+	    strcpy (base + 1, tfs[i]->d_name); //文件名，base+1写文件名，记录文件名,也就是要读取的名字
+	    free (tfs[i]);
+	    struct parse_sw *sw = parse_tf (buf);//解析 .tf
+	    assert (sw);
+	    nsw->sws[i] = sw;//保存在nsw中 
+	}
+	check_mf(nsw);
+	free (tfs);
+	printf("%d\n", nsw->sws[0]->nrules);
+
+	uint32_t nlinks = 0;
+	uint32_t swl_num = 0;
+	// uint32_t nstrus = 0;
+
+	strcpy (base, "/topology.tf");//base为/topology.tf
+	char *link_arr = links_idx_gen (buf, nsw, &nlinks, &swl_num);
+	rules_ports_to_links ((uint16_t *)link_arr, &nlinks, &swl_num, nsw);
+
+	snprintf (buf, sizeof buf, "../%s/%s.dat", outdir, name);//输出文件路径名称在buf中
+	rule_data_gen (buf, nsw);//将ntf, ttf合并生成数据
+	// rule_link_gen (nsw, nstrus);
+
+	free_nsw (nsw);
+	// free_tf (ttf);
+}
+
+void
+connect_link_data_gen (const struct parse_nsw *nsw)
+{
+	uint32_t count = 0;
+	uint32_t len_port = 4;
+	char *outdir = "../data/connect_link.txt";
+	char *buf;
+	size_t bufsz;
+
+	FILE *f = open_memstream (&buf, &bufsz);
+
+	for (int i = 0; i < nsw->sws_num; i++) {
+		struct parse_sw *sw = nsw->sws[i];
+		assert (sw);
+		for (struct parse_rule *r = sw->rules.head; r; r = r->next) {
+			uint32_t n = r->in.n;
+			uint32_t *parr = ARR (r->in);
+			for (int j = 0; j < n; j++, parr++) {	
+				uint32_t port_tmp = *parr;
+				if(i==5)
+					printf("%d;", port_tmp/10000);
+				if ((port_tmp/10000 - 10*(port_tmp/100000)) == 1){
+
+					if (count){
+						if (bsearch(&port_tmp, buf, count, len_port, uint32_t_cmp))
+							continue;
+					}
+					fwrite (&port_tmp, len_port, 1, f);
+					count++;
+				}
+				fflush (f);
+				qsort (buf, count, len_port, uint32_t_cmp);		
+			}
+			n = r->out.n;
+			parr = ARR (r->out);
+			for (int j = 0; j < n; j++, parr++) {
+				uint32_t port_tmp = *parr;
+				if ((port_tmp/10000 - 10*(port_tmp/100000)) == 1){
+					if (count){
+						if (bsearch(&port_tmp, buf, count, len_port, uint32_t_cmp))
+							continue;
+					}
+					fwrite (&port_tmp, len_port, 1, f);
+					count++;
+				}
+				fflush (f);
+				qsort (buf, count, len_port, uint32_t_cmp);		
+			}
+		}
+	}
+	assert (count * len_port == bufsz);
+	fclose (f);
+	
+
+	FILE *outfile = fopen (outdir, "a");//建立文件out，并可写
+	uint32_t *buf_32 = (uint32_t *)buf;
+	printf("count%d\n", count);
+
+	for (uint32_t i = 0; i < count; i++) {
+		fprintf (outfile, "link$[%d]$None$None$None$None$None$[%d]$#$#$$$_%d$\n", *(buf_32 + i), *(buf_32 + i), 91+i);
+	}
+
+
+	fclose (outfile);
+	free(buf);
+}
+
+void
+generate_connect_link (const char *outdir, const char *tfdir, const char *name)
 {
 	printf ("Parsing: \n");
 	fflush (stdout);
@@ -1444,21 +1573,11 @@ parse_dir (const char *outdir, const char *tfdir, const char *name)
 	free (tfs);
 	printf("%d\n", nsw->sws[0]->nrules);
 
-	uint32_t nlinks = 0;
-	uint32_t swl_num = 0;
-	// uint32_t nstrus = 0;
 
-	strcpy (base, "/topology.tf");//base为/topology.tf
-	char *link_arr = links_idx_gen (buf, nsw, &nlinks, &swl_num);
-	rules_ports_to_links ((uint16_t *)link_arr, &nlinks, &swl_num, nsw);
-	// links_data_gen ();
-	// ports_to_links ();
-
-	snprintf (buf, sizeof buf, "../%s/%s.dat", outdir, name);//输出文件路径名称在buf中
-	rule_data_gen (buf, nsw);//将ntf, ttf合并生成数据
-	// rule_link_gen (nsw, nstrus);
+	connect_link_data_gen(nsw);
 
 	free_nsw (nsw);
 	// free_tf (ttf);
 }
+
 
