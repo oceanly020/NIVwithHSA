@@ -15,7 +15,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>  
-#include "usedBDD.h"  
 
 
 //结构体或变量定义

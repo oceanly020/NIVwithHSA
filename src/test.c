@@ -134,7 +134,6 @@ print_linktorule_test(void) {
 int
 main (int argc, char **argv)
 {
-
   struct timeval start,stop;  //计算时间差 usec
   // gettimeofday(&start,NULL);
   // gettimeofday(&stop,NULL);
@@ -173,7 +172,6 @@ main (int argc, char **argv)
   // print_rule(r);
   // r = rule_get_2idx(1, 201);
   // print_rule(r);
-
 
   // 生成稀疏矩阵
   struct matrix_CSR *matrix_CSR = gen_sparse_matrix(); 
