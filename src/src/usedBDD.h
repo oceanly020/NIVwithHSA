@@ -113,7 +113,7 @@ extern BDD      bdd_true(void);
 extern BDD      bdd_false(void);
 #endif
 extern int      bdd_varnum(void);
-extern BDD      bdd_ithvar(int);
+extern BDD      bdd_ithvar(int); //两者区别只是 high 和 low反向，并且保存位置一个为偶数，另一个相应为基数，应该是创建一个必然有另一个？为了计算方便？
 extern BDD      bdd_nithvar(int);
 extern int      bdd_var(BDD);
 extern BDD      bdd_low(BDD);
@@ -485,9 +485,6 @@ extern BDD  fdd_ithset(int);
 extern BDD  fdd_domain(int);
 extern BDD  fdd_equals(int, int);
 extern bddfilehandler fdd_file_hook(bddfilehandler);
-#ifdef CPLUSPLUS
-extern bddstrmhandler fdd_strm_hook(bddstrmhandler);
-#endif
 extern void fdd_printset(BDD);
 extern void fdd_fprintset(FILE*, BDD);
 extern int  fdd_scanset(BDD, int**, int*);
@@ -756,9 +753,9 @@ void bdd_fprintall(FILE *ofile)
       {
 	 fprintf(ofile, "[%5d - %2d] ", n, bddnodes[n].refcou);
 	 if (filehandler)
-	    filehandler(ofile, bddlevel2var[LEVEL(n)]);
+	    filehandler(ofile, bddlevel2var[bddnodes[n].level]);
 	 else
-	    fprintf(ofile, "%3d", bddlevel2var[LEVEL(n)]);
+	    fprintf(ofile, "%3d", bddlevel2var[bddnodes[n].level]);
 
 	 fprintf(ofile, ": %3d", LOW(n));
 	 fprintf(ofile, " %3d", HIGH(n));
@@ -785,17 +782,17 @@ void bdd_fprinttable(FILE *ofile, BDD r)
    
    for (n=0 ; n<bddnodesize ; n++)
    {
-      if (LEVEL(n) & MARKON)
+      if (bddnodes[n].level & MARKON)
       {
 	 node = &bddnodes[n];
 	 
-	 LEVELp(node) &= MARKOFF;
+	 (node)->level &= MARKOFF;
 
 	 fprintf(ofile, "[%5d] ", n);
 	 if (filehandler)
-	    filehandler(ofile, bddlevel2var[LEVELp(node)]);
+	    filehandler(ofile, bddlevel2var[(node)->level]);
 	 else
-	    fprintf(ofile, "%3d", bddlevel2var[LEVELp(node)]);
+	    fprintf(ofile, "%3d", bddlevel2var[(node)->level]);
 
 	 fprintf(ofile, ": %3d", LOWp(node));
 	 fprintf(ofile, " %3d", HIGHp(node));
@@ -967,9 +964,9 @@ static int bdd_save_rec(FILE *ofile, int root)
    if (root < 2)
       return 0;
 
-   if (LEVELp(node) & MARKON)
+   if ((node)->level & MARKON)
       return 0;
-   LEVELp(node) |= MARKON;
+   (node)->level |= MARKON;
    
    if ((err=bdd_save_rec(ofile, LOWp(node))) < 0)
       return err;
@@ -977,7 +974,7 @@ static int bdd_save_rec(FILE *ofile, int root)
       return err;
 
    fprintf(ofile, "%d %d %d %d\n",
-	   root, bddlevel2var[LEVELp(node) & MARKHIDE],
+	   root, bddlevel2var[(node)->level & MARKHIDE],
 	   LOWp(node), HIGHp(node));
 
    return 0;
@@ -2783,15 +2780,15 @@ static void support_rec(int r, int* support)
       return;
 
    node = &bddnodes[r];
-   if (LEVELp(node) & MARKON  ||  LOWp(node) == -1)
+   if ((node)->level & MARKON  ||  LOWp(node) == -1)
       return;
 
-   support[LEVELp(node)] = supportID;
+   support[(node)->level] = supportID;
    
-   if (LEVELp(node) > supportMax)
-     supportMax = LEVELp(node);
+   if ((node)->level > supportMax)
+     supportMax = (node)->level;
    
-   LEVELp(node) |= MARKON;
+   (node)->level |= MARKON;
    
    support_rec(LOWp(node), support);
    support_rec(HIGHp(node), support);
@@ -3067,11 +3064,11 @@ static double satcount_rec(int root)
    size = 0;
    s = 1;
 
-   s *= pow(2.0, (float)(LEVEL(LOWp(node)) - LEVELp(node) - 1));
+   s *= pow(2.0, (float)(bddnodes[LOWp(node)].level - (node)->level - 1));
    size += s * satcount_rec(LOWp(node));
 
    s = 1;
-   s *= pow(2.0, (float)(LEVEL(HIGHp(node)) - LEVELp(node) - 1));
+   s *= pow(2.0, (float)(bddnodes[HIGHp(node)].level - (node)->level - 1));
    size += s * satcount_rec(HIGHp(node));
 
    entry->a = root;
@@ -3131,11 +3128,11 @@ static double satcountln_rec(int root)
 
    s1 = satcountln_rec(LOWp(node));
    if (s1 >= 0.0)
-      s1 += LEVEL(LOWp(node)) - LEVELp(node) - 1;
+      s1 += bddnodes[LOWp(node)].level - (node)->level - 1;
    
    s2 = satcountln_rec(HIGHp(node));
    if (s2 >= 0.0)
-      s2 += LEVEL(HIGHp(node)) - LEVELp(node) - 1;
+      s2 += bddnodes[HIGHp(node)].level - (node)->level - 1;
    
    if (s1 < 0.0)
       size = s2;
@@ -3205,11 +3202,11 @@ static void varprofile_rec(int r)
       return;
 
    node = &bddnodes[r];
-   if (LEVELp(node) & MARKON)
+   if ((node)->level & MARKON)
       return;
 
-   varprofile[bddlevel2var[LEVELp(node)]]++;
-   LEVELp(node) |= MARKON;
+   varprofile[bddlevel2var[(node)->level]]++;
+   (node)->level |= MARKON;
    
    varprofile_rec(LOWp(node));
    varprofile_rec(HIGHp(node));
@@ -3265,8 +3262,8 @@ static int varset2vartable(BDD r)
 
    for (n=r ; n > 1 ; n=HIGH(n))
    {
-      quantvarset[LEVEL(n)] = quantvarsetID;
-      quantlast = LEVEL(n);
+      quantvarset[bddnodes[n].level] = quantvarsetID;
+      quantlast = bddnodes[n].level;
    }
    
    return 0;
@@ -3291,15 +3288,15 @@ static int varset2svartable(BDD r)
    {
       if (ISZERO(LOW(n)))
       {
-	 quantvarset[LEVEL(n)] = quantvarsetID;
+	 quantvarset[bddnodes[n].level] = quantvarsetID;
 	 n = HIGH(n);
       }
       else
       {
-	 quantvarset[LEVEL(n)] = -quantvarsetID;
+	 quantvarset[bddnodes[n].level] = -quantvarsetID;
 	 n = LOW(n);
       }
-      quantlast = LEVEL(n);
+      quantlast = bddnodes[n].level;
    }
    
    return 0;
