@@ -22,7 +22,7 @@
 #define bddop_less      8
 #define bddop_invimp    9
 
-   /* Should *not* be used in bdd_apply calls !!! */
+/* Should *not* be used in bdd_apply calls !!! */
 #define bddop_not      10
 #define bddop_simplify 11
 
@@ -138,7 +138,7 @@ extern BDD      bdd_buildcube(int, int, BDD *);
 extern BDD      bdd_ibuildcube(int, int, int *);
 extern BDD      bdd_not(BDD);
 extern BDD      bdd_apply(BDD, BDD, int);
-extern BDD      bdd_and(BDD, BDD);
+extern BDD      bdd_and(BDD, BDD);//求与，交集
 extern BDD      bdd_or(BDD, BDD);
 extern BDD      bdd_xor(BDD, BDD);
 extern BDD      bdd_imp(BDD, BDD);
