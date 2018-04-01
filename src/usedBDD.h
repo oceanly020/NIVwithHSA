@@ -22,7 +22,7 @@
 #define bddop_less      8
 #define bddop_invimp    9
 
-   /* Should *not* be used in bdd_apply calls !!! */
+/* Should *not* be used in bdd_apply calls !!! */
 #define bddop_not      10
 #define bddop_simplify 11
 
@@ -113,7 +113,7 @@ extern BDD      bdd_true(void);
 extern BDD      bdd_false(void);
 #endif
 extern int      bdd_varnum(void);
-extern BDD      bdd_ithvar(int);
+extern BDD      bdd_ithvar(int); //两者区别只是 high 和 low反向，并且保存位置一个为偶数，另一个相应为基数，应该是创建一个必然有另一个？为了计算方便？
 extern BDD      bdd_nithvar(int);
 extern int      bdd_var(BDD);
 extern BDD      bdd_low(BDD);
@@ -138,7 +138,7 @@ extern BDD      bdd_buildcube(int, int, BDD *);
 extern BDD      bdd_ibuildcube(int, int, int *);
 extern BDD      bdd_not(BDD);
 extern BDD      bdd_apply(BDD, BDD, int);
-extern BDD      bdd_and(BDD, BDD);
+extern BDD      bdd_and(BDD, BDD);//求与，交集
 extern BDD      bdd_or(BDD, BDD);
 extern BDD      bdd_xor(BDD, BDD);
 extern BDD      bdd_imp(BDD, BDD);
@@ -485,9 +485,6 @@ extern BDD  fdd_ithset(int);
 extern BDD  fdd_domain(int);
 extern BDD  fdd_equals(int, int);
 extern bddfilehandler fdd_file_hook(bddfilehandler);
-#ifdef CPLUSPLUS
-extern bddstrmhandler fdd_strm_hook(bddstrmhandler);
-#endif
 extern void fdd_printset(BDD);
 extern void fdd_fprintset(FILE*, BDD);
 extern int  fdd_scanset(BDD, int**, int*);
@@ -495,6 +492,53 @@ extern BDD  fdd_makeset(int*, int);
 extern int  fdd_intaddvarblock(int, int, int);
 extern int  fdd_setpair(bddPair*, int, int);
 extern int  fdd_setpairs(bddPair*, int*, int*, int);
+
+/* In file bvec.h */
+/*=====================================================================================================*/
+typedef struct s_bvec
+{
+      int bitnum;
+      BDD *bitvec;
+} BVEC;
+
+#ifndef CPLUSPLUS
+typedef BVEC bvec;
+#endif
+
+/* Prototypes for bvec.c */
+extern BVEC bvec_copy(BVEC v);
+extern BVEC bvec_true(int bitnum);
+extern BVEC bvec_false(int bitnum);
+extern BVEC bvec_con(int bitnum, int val);
+extern BVEC bvec_var(int bitnum, int offset, int step);
+extern BVEC bvec_varfdd(int var);
+extern BVEC bvec_varvec(int bitnum, int *var);
+extern BVEC bvec_coerce(int bitnum, BVEC v);
+extern int  bvec_isconst(BVEC e);   
+extern int  bvec_val(BVEC e);   
+extern void bvec_free(BVEC v);
+extern BVEC bvec_addref(BVEC v);
+extern BVEC bvec_delref(BVEC v);
+extern BVEC bvec_map1(BVEC a, BDD (*fun)(BDD));
+extern BVEC bvec_map2(BVEC a, BVEC b, BDD (*fun)(BDD,BDD));
+extern BVEC bvec_map3(BVEC a, BVEC b, BVEC c, BDD (*fun)(BDD,BDD,BDD));
+extern BVEC bvec_add(BVEC left, BVEC right);
+extern BVEC bvec_sub(BVEC left, BVEC right);
+extern BVEC bvec_mulfixed(BVEC e, int c);
+extern BVEC bvec_mul(BVEC left, BVEC right);
+extern int  bvec_divfixed(BVEC e, int c, BVEC *res, BVEC *rem);
+extern int  bvec_div(BVEC left, BVEC right, BVEC *res, BVEC *rem);
+extern BVEC bvec_ite(BDD a, BVEC b, BVEC c);
+extern BVEC bvec_shlfixed(BVEC e, int pos, BDD c);
+extern BVEC bvec_shl(BVEC l, BVEC r, BDD c);
+extern BVEC bvec_shrfixed(BVEC e, int pos, BDD c);
+extern BVEC bvec_shr(BVEC l, BVEC r, BDD c);
+extern BDD  bvec_lth(BVEC left, BVEC right);
+extern BDD  bvec_lte(BVEC left, BVEC right);
+extern BDD  bvec_gth(BVEC left, BVEC right);
+extern BDD  bvec_gte(BVEC left, BVEC right);
+extern BDD  bvec_equ(BVEC left, BVEC right);
+extern BDD  bvec_neq(BVEC left, BVEC right);
 
 /* In file pairs.c */
 /*=====================================================================================================*/
@@ -6465,6 +6509,7 @@ typedef struct s_Domain
 } Domain;
 
 static void Domain_allocate(Domain*, int);
+static void Domain_allocate1(Domain*, int);
 static void Domain_done(Domain*);
 
 static int    firstbddvar;
@@ -6528,7 +6573,7 @@ int fdd_extdomain(int *dom, int num)
       /* Create bdd variable tables */
    for (n=0 ; n<num ; n++)
    {
-      Domain_allocate(&domain[n+fdvarnum], dom[n]);
+      Domain_allocate1(&domain[n+fdvarnum], dom[n]);
       extravars += domain[n+fdvarnum].binsize;
    }
 
@@ -7144,6 +7189,33 @@ static void Domain_allocate(Domain* d, int range)
    d->var = bddtrue;
 }
 
+static void Domain_allocate1(Domain* d, int range)
+{
+   // int calcsize = 2;
+   
+   // if (range <= 0  || range > INT_MAX/2)
+   // {
+   //    bdd_error(BDD_RANGE);
+   //    return;
+   // }
+
+   // d->realsize = range;
+   d->binsize = range;
+
+   // while (calcsize < range)
+   // {
+   //    d->binsize++;
+   //    calcsize <<= 1;
+   // }
+
+   d->ivar = (int *)malloc(sizeof(int)*d->binsize);
+   d->var = bddtrue;
+}
+
+
+
+
+
 int *fdddec2bin(int var, int val)
 {
    int *res;
@@ -7161,4 +7233,890 @@ int *fdddec2bin(int var, int val)
    }
 
    return res;
+}
+
+/* In file bvec.c */
+/*=====================================================================================================*/
+#define DEFAULT(v) { v.bitnum=0; v.bitvec=NULL; }
+typedef BVEC bvec;
+typedef BDD bdd;
+
+static bvec bvec_build(int bitnum, int isTrue)
+{
+   bvec vec;
+   int n;
+   
+   vec.bitvec = NEW(BDD,bitnum);
+   vec.bitnum = bitnum;
+   if (!vec.bitvec)
+   {
+      bdd_error(BDD_MEMORY);
+      vec.bitnum = 0;
+      return vec;
+   }
+
+   for (n=0 ; n<bitnum ; n++)
+      if (isTrue)
+    vec.bitvec[n] = BDDONE;
+      else
+    vec.bitvec[n] = BDDZERO;
+
+   return vec;
+}
+
+#if 0
+int bvec_val2bitnum(int val)
+{
+   int bitnum=0;
+
+   while (val > 0)
+   {
+      val >>= 1;
+      bitnum++;
+   }
+
+   return bitnum;
+}
+#endif
+
+bvec bvec_copy(bvec src)
+{
+   bvec dst;
+   int n;
+   
+   if (src.bitnum == 0)
+   {
+      DEFAULT(dst);
+      return dst;
+   }
+
+   dst = bvec_build(src.bitnum,0);
+   
+   for (n=0 ; n<src.bitnum ; n++)
+      dst.bitvec[n] = bdd_addref( src.bitvec[n] );
+   dst.bitnum = src.bitnum;
+
+   return dst;
+}
+
+bvec bvec_true(int bitnum)
+{
+   return bvec_build(bitnum, 1);
+}
+
+bvec bvec_false(int bitnum)
+{
+   return bvec_build(bitnum, 0);
+}
+
+bvec bvec_con(int bitnum, int val)
+{
+   bvec v = bvec_build(bitnum,0);
+   int n;
+
+   for (n=0 ; n<v.bitnum ; n++)
+   {
+      if (val & 0x1)
+    v.bitvec[n] = bddtrue;
+      else
+    v.bitvec[n] = bddfalse;
+
+      val = val >> 1;
+   }
+
+   return v;
+}
+
+bvec bvec_var(int bitnum, int offset, int step)
+{
+   bvec v;
+   int n;
+
+   v = bvec_build(bitnum,0);
+   
+   for (n=0 ; n<bitnum ; n++)
+      v.bitvec[n] = bdd_ithvar(offset+n*step);
+
+   return v;
+}
+
+bvec bvec_varfdd(int var)
+{
+   bvec v;
+   int *bddvar = fdd_vars(var);
+   int varbitnum = fdd_varnum(var);
+   int n;
+
+   if (bddvar == NULL)
+   {
+      DEFAULT(v);
+      return v;
+   }
+   
+   v = bvec_build(varbitnum,0);
+   
+   for (n=0 ; n<v.bitnum ; n++)
+      v.bitvec[n] = bdd_ithvar(bddvar[n]);
+
+   return v;
+}
+
+bvec bvec_varvec(int bitnum, int *var)
+{
+   bvec v;
+   int n;
+
+   v = bvec_build(bitnum,0);
+   
+   for (n=0 ; n<bitnum ; n++)
+      v.bitvec[n] = bdd_ithvar(var[n]);
+
+   return v;
+}
+
+bvec bvec_coerce(int bitnum, bvec v)
+{
+   bvec res = bvec_build(bitnum,0);
+   int minnum = MIN(bitnum, v.bitnum);
+   int n;
+
+   for (n=0 ; n<minnum ; n++)
+      res.bitvec[n] = bdd_addref( v.bitvec[n] );
+
+   return res;
+}
+
+int bvec_isconst(bvec e)
+{
+   int n;
+
+   for (n=0 ; n<e.bitnum ; n++)
+      if (!ISCONST(e.bitvec[n]))
+    return 0;
+
+   return 1;
+}
+
+int bvec_val(bvec e)
+{
+   int n, val=0;
+
+   for (n=e.bitnum-1 ; n>=0 ; n--)
+      if (ISONE(e.bitvec[n]))
+    val = (val << 1) | 1;
+      else if (ISZERO(e.bitvec[n]))
+    val = val << 1;
+      else
+    return 0;
+
+   return val;
+}
+
+void bvec_free(bvec v)
+{
+   bvec_delref(v);
+   free(v.bitvec);
+}
+
+bvec bvec_addref(bvec v)
+{
+   int n;
+
+   for (n=0 ; n<v.bitnum ; n++)
+      bdd_addref(v.bitvec[n]);
+
+   return v;
+}
+
+bvec bvec_delref(bvec v)
+{
+   int n;
+
+   for (n=0 ; n<v.bitnum ; n++)
+      bdd_delref(v.bitvec[n]);
+
+   return v;
+}
+
+bvec bvec_map1(bvec a, BDD (*fun)(BDD))
+{
+   bvec res;
+   int n;
+   
+   res = bvec_build(a.bitnum,0);
+   for (n=0 ; n < a.bitnum ; n++)
+      res.bitvec[n] = bdd_addref( fun(a.bitvec[n]) );
+
+   return res;
+}
+
+bvec bvec_map2(bvec a, bvec b, BDD (*fun)(BDD,BDD))
+{
+   bvec res;
+   int n;
+
+   DEFAULT(res);
+   if (a.bitnum != b.bitnum)
+   {
+      bdd_error(BVEC_SIZE);
+      return res;
+   }
+   
+   res = bvec_build(a.bitnum,0);
+   for (n=0 ; n < a.bitnum ; n++)
+      res.bitvec[n] = bdd_addref( fun(a.bitvec[n], b.bitvec[n]) );
+
+   return res;
+}
+
+bvec bvec_map3(bvec a, bvec b, bvec c, BDD (*fun)(BDD,BDD,BDD))
+{
+   bvec res;
+   int n;
+
+   DEFAULT(res);
+   if (a.bitnum != b.bitnum  ||  b.bitnum != c.bitnum)
+   {
+      bdd_error(BVEC_SIZE);
+      return res;
+   }
+   
+   res = bvec_build(a.bitnum,0);
+   for (n=0 ; n < a.bitnum ; n++)
+      res.bitvec[n] = bdd_addref( fun(a.bitvec[n], b.bitvec[n], c.bitvec[n]) );
+
+   return res;
+}
+
+bvec bvec_add(bvec l, bvec r)
+{
+   bvec res;
+   BDD c = bddfalse;
+   int n;
+
+
+   if (l.bitnum == 0  ||  r.bitnum == 0)
+   {
+      DEFAULT(res);
+      return res;
+   }
+   
+   if (l.bitnum != r.bitnum)
+   {
+      bdd_error(BVEC_SIZE);
+      DEFAULT(res);
+      return res;
+   }
+   
+   res = bvec_build(l.bitnum,0);
+   
+   for (n=0 ; n<res.bitnum ; n++)
+   {
+      BDD tmp1, tmp2, tmp3;
+
+         /* bitvec[n] = l[n] ^ r[n] ^ c; */
+      tmp1 = bdd_addref( bdd_apply(l.bitvec[n], r.bitvec[n], bddop_xor) );
+      tmp2 = bdd_addref( bdd_apply(tmp1, c, bddop_xor) );
+      bdd_delref(tmp1);
+      res.bitvec[n] = tmp2;
+
+         /* c = (l[n] & r[n]) | (c & (l[n] | r[n])); */
+      tmp1 = bdd_addref( bdd_apply(l.bitvec[n], r.bitvec[n], bddop_or) );
+      tmp2 = bdd_addref( bdd_apply(c, tmp1, bddop_and) );
+      bdd_delref(tmp1);
+      
+      tmp1 = bdd_addref( bdd_apply(l.bitvec[n], r.bitvec[n], bddop_and) );
+      tmp3 = bdd_addref( bdd_apply(tmp1, tmp2, bddop_or) );
+      bdd_delref(tmp1);
+      bdd_delref(tmp2);
+      
+      bdd_delref(c);
+      c = tmp3;
+   }
+
+   bdd_delref(c);
+   
+   return res;
+}
+
+bvec bvec_sub(bvec l, bvec r)
+{
+   bvec res;
+   BDD c = bddfalse;
+   int n;
+
+   if (l.bitnum == 0  ||  r.bitnum == 0)
+   {
+      DEFAULT(res);
+      return res;
+   }
+   
+   if (l.bitnum != r.bitnum)
+   {
+      bdd_error(BVEC_SIZE);
+      DEFAULT(res);
+      return res;
+   }
+   
+   res = bvec_build(l.bitnum,0);
+   
+   for (n=0 ; n<res.bitnum ; n++)
+   {
+      BDD tmp1, tmp2, tmp3;
+
+         /* bitvec[n] = l[n] ^ r[n] ^ c; */
+      tmp1 = bdd_addref( bdd_apply(l.bitvec[n], r.bitvec[n], bddop_xor) );
+      tmp2 = bdd_addref( bdd_apply(tmp1, c, bddop_xor) );
+      bdd_delref(tmp1);
+      res.bitvec[n] = tmp2;
+
+         /* c = (l[n] & r[n] & c) | (!l[n] & (r[n] | c)); */
+      tmp1 = bdd_addref( bdd_apply(r.bitvec[n], c, bddop_or) );
+      tmp2 = bdd_addref( bdd_apply(l.bitvec[n], tmp1, bddop_less) );
+      bdd_delref(tmp1);
+      
+      tmp1 = bdd_addref( bdd_apply(l.bitvec[n], r.bitvec[n], bddop_and) );
+      tmp3 = bdd_addref( bdd_apply(tmp1, c, bddop_and) );
+      bdd_delref(tmp1);
+
+      tmp1 = bdd_addref( bdd_apply(tmp3, tmp2, bddop_or) );
+      bdd_delref(tmp2);
+      bdd_delref(tmp3);
+      
+      bdd_delref(c);
+      c = tmp1;
+   }
+
+   bdd_delref(c);
+   
+   return res;
+}
+
+bvec bvec_mulfixed(bvec e, int c)
+{
+   bvec res, next, rest;
+   int n;
+
+   if (e.bitnum == 0)
+   {
+      DEFAULT(res);
+      return res;
+   }
+   
+   if (c == 0)
+      return bvec_build(e.bitnum,0);  /* return false array (base case) */
+
+   next = bvec_build(e.bitnum,0);
+   for (n=1 ; n<e.bitnum ; n++)
+         /* e[] is never deleted, so no ref.cou. */
+      next.bitvec[n] = e.bitvec[n-1];    
+      
+   rest = bvec_mulfixed(next, c>>1);
+   
+   if (c & 0x1)
+   {
+      res = bvec_add(e, rest);
+      bvec_free(rest);
+   }
+   else
+      res = rest;
+
+   bvec_free(next);
+
+   return res;
+}
+
+bvec bvec_mul(bvec left, bvec right)
+{
+   int n;
+   int bitnum = left.bitnum + right.bitnum;
+   bvec res;
+   bvec leftshifttmp;
+   bvec leftshift;
+
+   if (left.bitnum == 0  ||  right.bitnum == 0)
+   {
+      DEFAULT(res);
+      return res;
+   }
+
+   res = bvec_false(bitnum);
+   leftshifttmp = bvec_copy(left);
+   leftshift = bvec_coerce(bitnum, leftshifttmp);
+   
+   /*bvec_delref(leftshifttmp);*/
+   bvec_free(leftshifttmp);
+   
+   for (n=0 ; n<right.bitnum ; n++)
+   {
+      bvec added = bvec_add(res, leftshift);
+      int m;
+
+      for (m=0 ; m<bitnum ; m++)
+      {
+    bdd tmpres = bdd_addref( bdd_ite(right.bitvec[n],
+                 added.bitvec[m], res.bitvec[m]) );
+    bdd_delref(res.bitvec[m]);
+    res.bitvec[m] = tmpres;
+      }
+
+         /* Shift 'leftshift' one bit left */
+      bdd_delref(leftshift.bitvec[leftshift.bitnum-1]);
+      for (m=bitnum-1 ; m>=1 ; m--)
+    leftshift.bitvec[m] = leftshift.bitvec[m-1];
+      leftshift.bitvec[0] = bddfalse;
+      
+      /*bvec_delref(added);*/
+      bvec_free(added);
+   }
+
+   /*bvec_delref(leftshift);*/
+   bvec_free(leftshift);
+   
+   return res;
+}
+
+static void bvec_div_rec(bvec divisor, bvec *remainder, bvec *result, int step)
+{
+   int n;
+   BDD isSmaller = bdd_addref( bvec_lte(divisor, *remainder) );
+   bvec newResult = bvec_shlfixed( *result, 1, isSmaller );
+   bvec zero = bvec_build(divisor.bitnum, bddfalse);
+   bvec newRemainder, tmp, sub = bvec_build(divisor.bitnum, bddfalse);
+
+   for (n=0 ; n<divisor.bitnum ; n++)
+      sub.bitvec[n] = bdd_ite(isSmaller, divisor.bitvec[n], zero.bitvec[n]);
+
+   tmp = bvec_sub( *remainder, sub );
+   newRemainder = bvec_shlfixed(tmp, 1, result->bitvec[divisor.bitnum-1]);
+
+   if (step > 1)
+      bvec_div_rec( divisor, &newRemainder, &newResult, step-1 );
+   
+   bvec_free(tmp);
+   bvec_free(sub);
+   bvec_free(zero);
+   bdd_delref(isSmaller);
+   
+   bvec_free(*remainder);
+   bvec_free(*result);
+   *result = newResult;
+   *remainder = newRemainder;
+}
+
+int bvec_divfixed(bvec e, int c, bvec *res, bvec *rem)
+{
+   if (c > 0)
+   {
+      bvec divisor = bvec_con(e.bitnum, c);
+      bvec tmp = bvec_build(e.bitnum, 0);
+      bvec tmpremainder = bvec_shlfixed(tmp, 1, e.bitvec[e.bitnum-1]);
+      bvec result = bvec_shlfixed(e, 1, bddfalse);
+      bvec remainder;
+      
+      bvec_div_rec(divisor, &tmpremainder, &result, divisor.bitnum);
+      remainder = bvec_shrfixed(tmpremainder, 1, bddfalse);
+
+      bvec_free(tmp);
+      bvec_free(tmpremainder);
+      bvec_free(divisor);
+      
+      *res = result;
+      *rem = remainder;
+      
+      return 0;
+   }
+
+   return bdd_error(BVEC_DIVZERO);
+}
+
+#if 0
+void p(bvec x)
+{
+   int n;
+   for (n=0 ; n<x.bitnum ; n++)
+   {
+      printf("  %d: ", n);
+      fdd_printset(x.bitvec[n]);
+      printf("\n");
+   }
+}
+#endif
+
+int bvec_div(bvec left, bvec right, bvec *result, bvec *remainder)
+{
+   int n, m;
+   int bitnum = left.bitnum + right.bitnum;
+   bvec res;
+   bvec rem;
+   bvec div, divtmp;
+
+   if (left.bitnum == 0  ||  right.bitnum == 0  ||
+       left.bitnum != right.bitnum)
+   {
+      return bdd_error(BVEC_SIZE);
+   }
+
+   rem = bvec_coerce(bitnum, left);
+   divtmp = bvec_coerce(bitnum, right);
+   div = bvec_shlfixed(divtmp, left.bitnum, bddfalse);
+
+   /*bvec_delref(divtmp);*/
+   bvec_free(divtmp);
+
+   res = bvec_false(right.bitnum);
+
+   for (n=0 ; n<right.bitnum+1 ; n++)
+   {
+      bdd divLteRem = bdd_addref( bvec_lte(div, rem) );
+      bvec remSubDiv = bvec_sub(rem, div);
+
+      for (m=0 ; m<bitnum ; m++)
+      {
+    bdd remtmp = bdd_addref( bdd_ite(divLteRem,
+                 remSubDiv.bitvec[m],rem.bitvec[m]) );
+    bdd_delref( rem.bitvec[m] );
+    rem.bitvec[m] = remtmp;
+      }
+
+      if (n > 0)
+    res.bitvec[right.bitnum-n] = divLteRem;
+
+         /* Shift 'div' one bit right */
+      bdd_delref(div.bitvec[0]);
+      for (m=0 ; m<bitnum-1 ; m++)
+    div.bitvec[m] = div.bitvec[m+1];
+      div.bitvec[bitnum-1] = bddfalse;
+
+      /*bvec_delref(remSubDiv);*/
+      bvec_free(remSubDiv);
+   }
+
+   /*bvec_delref(*result);*/
+   bvec_free(*result);
+   /*bvec_delref(*remainder);*/
+   bvec_free(*remainder);
+
+   *result = res;
+   *remainder = bvec_coerce(right.bitnum, rem);
+
+   /*bvec_delref(rem);*/
+   bvec_free(rem);
+   
+   return 0;
+}
+
+bvec bvec_ite(bdd a, bvec b, bvec c)
+{
+  bvec res;
+  int n;
+
+  DEFAULT(res);
+  if (b.bitnum != c.bitnum)
+  {
+    bdd_error(BVEC_SIZE);
+    return res;
+  }
+
+  res = bvec_build(b.bitnum, 0);
+  
+  for (n=0 ; n<b.bitnum ; ++n)
+  {
+    res.bitvec[n] = bdd_addref( bdd_ite(a, b.bitvec[n], c.bitvec[n]) );
+  }
+
+  return res;
+}
+
+bvec bvec_shlfixed(bvec e, int pos, BDD c)
+{
+   bvec res;
+   int n, minnum = MIN(e.bitnum,pos);
+
+   if (pos < 0)
+   {
+      bdd_error(BVEC_SHIFT);
+      DEFAULT(res);
+      return res;
+   }
+   
+   if (e.bitnum == 0)
+   {
+      DEFAULT(res);
+      return res;
+   }
+   
+   res = bvec_build(e.bitnum,0);
+
+   for (n=0 ; n<minnum ; n++)
+      res.bitvec[n] = bdd_addref(c);
+   
+   for (n=minnum ; n<e.bitnum ; n++)
+      res.bitvec[n] = bdd_addref(e.bitvec[n-pos]);
+   
+   return res;
+}
+
+BVEC bvec_shl(BVEC l, BVEC r, BDD c)
+{
+   BVEC res, val;
+   bdd tmp1, tmp2, rEquN;
+   int n, m;
+
+   if (l.bitnum == 0  ||  r.bitnum == 0)
+   {
+      DEFAULT(res);
+      return res;
+   }
+   
+   res = bvec_build(l.bitnum, 0);
+
+   for (n=0 ; n<=l.bitnum ; n++)
+   {
+      val = bvec_con(r.bitnum, n);
+      rEquN = bdd_addref( bvec_equ(r, val) );
+      
+      for (m=0 ; m<l.bitnum ; m++)
+      {
+          /* Set the m'th new location to be the (m+n)'th old location */
+    if (m-n >= 0)
+       tmp1 = bdd_addref( bdd_and(rEquN, l.bitvec[m-n]) );
+    else
+       tmp1 = bdd_addref( bdd_and(rEquN, c) );
+    tmp2 = bdd_addref( bdd_or(res.bitvec[m], tmp1) );
+    bdd_delref(tmp1);
+
+    bdd_delref(res.bitvec[m]);
+    res.bitvec[m] = tmp2;
+      }
+
+      bdd_delref(rEquN);
+      /*bvec_delref(val);*/
+      bvec_free(val);
+   }
+
+      /* At last make sure 'c' is shiftet in for r-values > l-bitnum */
+   val = bvec_con(r.bitnum, l.bitnum);
+   rEquN = bvec_gth(r, val);
+   tmp1 = bdd_addref( bdd_and(rEquN, c) );
+
+   for (m=0 ; m<l.bitnum ; m++)
+   {
+      tmp2 = bdd_addref( bdd_or(res.bitvec[m], tmp1) );
+      
+      bdd_delref(res.bitvec[m]);
+      res.bitvec[m] = tmp2;
+   }
+
+   bdd_delref(tmp1);
+   bdd_delref(rEquN);
+   /*bvec_delref(val);*/
+   bvec_free(val);
+   
+   return res;
+}
+
+bvec bvec_shrfixed(bvec e, int pos, BDD c)
+{
+   bvec res;
+   int n, maxnum = MAX(0,e.bitnum-pos);
+   
+   if (pos < 0)
+   {
+      bdd_error(BVEC_SHIFT);
+      DEFAULT(res);
+      return res;
+   }
+   
+   if (e.bitnum == 0)
+   {
+      DEFAULT(res);
+      return res;
+   }
+   
+   res = bvec_build(e.bitnum,0);
+
+   for (n=maxnum ; n<e.bitnum ; n++)
+      res.bitvec[n] = bdd_addref(c);
+   
+   for (n=0 ; n<maxnum ; n++)
+      res.bitvec[n] = bdd_addref(e.bitvec[n+pos]);
+
+   return res;
+}
+
+BVEC bvec_shr(BVEC l, BVEC r, BDD c)
+{
+   BVEC res, val;
+   bdd tmp1, tmp2, rEquN;
+   int n, m;
+
+   if (l.bitnum == 0  ||  r.bitnum == 0)
+   {
+      DEFAULT(res);
+      return res;
+   }
+   
+   res = bvec_build(l.bitnum, 0);
+
+   for (n=0 ; n<=l.bitnum ; n++)
+   {
+      val = bvec_con(r.bitnum, n);
+      rEquN = bdd_addref( bvec_equ(r, val) );
+      
+      for (m=0 ; m<l.bitnum ; m++)
+      {
+          /* Set the m'th new location to be the (m+n)'th old location */
+    if (m+n <= 2)
+       tmp1 = bdd_addref( bdd_and(rEquN, l.bitvec[m+n]) );
+    else
+       tmp1 = bdd_addref( bdd_and(rEquN, c) );
+    tmp2 = bdd_addref( bdd_or(res.bitvec[m], tmp1) );
+    bdd_delref(tmp1);
+
+    bdd_delref(res.bitvec[m]);
+    res.bitvec[m] = tmp2;
+      }
+
+      bdd_delref(rEquN);
+      /*bvec_delref(val);*/
+      bvec_free(val);
+   }
+
+      /* At last make sure 'c' is shiftet in for r-values > l-bitnum */
+   val = bvec_con(r.bitnum, l.bitnum);
+   rEquN = bvec_gth(r, val);
+   tmp1 = bdd_addref( bdd_and(rEquN, c) );
+
+   for (m=0 ; m<l.bitnum ; m++)
+   {
+      tmp2 = bdd_addref( bdd_or(res.bitvec[m], tmp1) );
+      
+      bdd_delref(res.bitvec[m]);
+      res.bitvec[m] = tmp2;
+   }
+
+   bdd_delref(tmp1);
+   bdd_delref(rEquN);
+   /*bvec_delref(val);*/
+   bvec_free(val);
+   
+   return res;
+}
+
+bdd bvec_lth(bvec l, bvec r)
+{
+   BDD p = bddfalse;
+   int n;
+   
+   if (l.bitnum == 0  ||  r.bitnum == 0)
+      return bddfalse;
+   
+   if (l.bitnum != r.bitnum)
+   {
+      bdd_error(BVEC_SIZE);
+      return p;
+   }
+   
+   for (n=0 ; n<l.bitnum ; n++)
+   {
+      /* p = (!l[n] & r[n]) |
+       *     bdd_apply(l[n], r[n], bddop_biimp) & p; */
+      
+      BDD tmp1 = bdd_addref(bdd_apply(l.bitvec[n],r.bitvec[n],bddop_less));
+      BDD tmp2 = bdd_addref(bdd_apply(l.bitvec[n],r.bitvec[n],bddop_biimp));
+      BDD tmp3 = bdd_addref( bdd_apply(tmp2, p, bddop_and) );
+      BDD tmp4 = bdd_addref( bdd_apply(tmp1, tmp3, bddop_or) );
+      bdd_delref(tmp1);
+      bdd_delref(tmp2);
+      bdd_delref(tmp3);
+      bdd_delref(p);
+      p = tmp4;
+   }
+
+   return bdd_delref(p);
+}
+
+bdd bvec_lte(bvec l, bvec r)
+{
+   BDD p = bddtrue;
+   int n;
+   
+   if (l.bitnum == 0  ||  r.bitnum == 0)
+      return bddfalse;
+   
+   if (l.bitnum != r.bitnum)
+   {
+      bdd_error(BVEC_SIZE);
+      return p;
+   }
+   
+   for (n=0 ; n<l.bitnum ; n++)
+   {
+      /* p = (!l[n] & r[n]) |
+       *     bdd_apply(l[n], r[n], bddop_biimp) & p; */
+      
+      BDD tmp1 = bdd_addref( bdd_apply(l.bitvec[n], r.bitvec[n], bddop_less) );
+      BDD tmp2 = bdd_addref( bdd_apply(l.bitvec[n], r.bitvec[n], bddop_biimp) );
+      BDD tmp3 = bdd_addref( bdd_apply(tmp2, p, bddop_and) );
+      BDD tmp4 = bdd_addref( bdd_apply(tmp1, tmp3, bddop_or) );
+      bdd_delref(tmp1);
+      bdd_delref(tmp2);
+      bdd_delref(tmp3);
+      bdd_delref(p);
+      p = tmp4;
+   }
+
+   return bdd_delref(p);
+}
+
+bdd bvec_gth(bvec l, bvec r)
+{
+   BDD tmp = bdd_addref( bvec_lte(l,r) );
+   BDD p = bdd_not(tmp);
+   bdd_delref(tmp);
+   return p;
+}
+
+bdd bvec_gte(bvec l, bvec r)
+{
+   BDD tmp = bdd_addref( bvec_lth(l,r) );
+   BDD p = bdd_not(tmp);
+   bdd_delref(tmp);
+   return p;
+}
+
+bdd bvec_equ(bvec l, bvec r)
+{
+   BDD p = bddtrue;
+   int n;
+   
+   if (l.bitnum == 0  ||  r.bitnum == 0)
+      return bddfalse;
+   
+   if (l.bitnum != r.bitnum)
+   {
+      bdd_error(BVEC_SIZE);
+      return p;
+   }
+   
+   for (n=0 ; n<l.bitnum ; n++)
+   {
+      BDD tmp1, tmp2;
+      tmp1 = bdd_addref( bdd_apply(l.bitvec[n], r.bitvec[n], bddop_biimp) );
+      tmp2 = bdd_addref( bdd_apply(tmp1, p, bddop_and) );
+      bdd_delref(tmp1);
+      bdd_delref(p);
+      p = tmp2;
+   }
+
+   return bdd_delref(p);
+}
+
+bdd bvec_neq(bvec l, bvec r)
+{
+   BDD tmp = bdd_addref( bvec_equ(l,r) );
+   BDD p = bdd_not(tmp);
+   bdd_delref(tmp);
+   return p;
 }

@@ -1,5 +1,4 @@
 #include <stdio.h>
-
 #include "usedBDD.h"
 #include "all.h"
 
@@ -11,7 +10,6 @@ static uint16_t var2sign[16] = {
 };
 #define VAR2SIGN(a) (var2sign[(a%16)])
 #define FRA2INT(a) ((int) (a))
-
 
 // #define MF_LEN 2
 // struct mf_uint16_t {
@@ -28,18 +26,19 @@ init_mf(struct mf_uint16_t *mf) {
 }
 
 BDD 
-mf2bdd(struct mf_uint16_t *mf) {
+mf2bdd_init(struct mf_uint16_t *mf) {
+
 	BDD root, tmp;
 	root = 1;
-	tmp = 1; 
-
+	tmp = 1;  
+	print_mf_uint16_t(mf);
 	for (int i = 0; i < MF_LEN; i++){
 		int reverse_i = MF_LEN - i - 1;
 		uint16_t sign = 0x0001;
 		for (int j = 0; j < 16; j++){
 			if (!(sign & mf->mf_w[reverse_i])){
 				root = bdd_ithvar(16*MF_LEN - 16*i - j - 1);//生成相应变量的一个节点
-				printf("%d\n", root);
+				// printf("%d\n", root);
 				// printf("bdd_var %d\n", bdd_var(root));
 				// root = bdd_ithvar(16*MF_LEN - i*j - 1);
 				if (sign & mf->mf_v[reverse_i]){
@@ -51,6 +50,43 @@ mf2bdd(struct mf_uint16_t *mf) {
 					// root = bdd_nithvar(16*MF_LEN - 16*i - j - 1);//生成相应变量的一个节点
 					LOW(root) = tmp;
 					HIGH(root) = 0;
+				}
+				tmp = root;
+			}
+			sign <<= 1;
+		}
+	}
+	if (root == 1){
+		root = bdd_ithvar(0);
+		LOW(root) = 1;
+		HIGH(root) = 1;
+	}
+	return root;
+}
+
+BDD 
+mf2bdd(struct mf_uint16_t *mf) {
+
+	BDD root, tmp;
+	root = 1;
+	tmp = 1;  
+	print_mf_uint16_t(mf);
+	for (int i = 0; i < MF_LEN; i++){
+		int reverse_i = MF_LEN - i - 1;
+		uint16_t sign = 0x0001;
+		for (int j = 0; j < 16; j++){
+			if (!(sign & mf->mf_w[reverse_i])){
+				int level = bdd_var2level(16*MF_LEN - 16*i - j - 1);//生成相应变量的一个节点
+				if (sign & mf->mf_v[reverse_i]){
+					root = bdd_makenode(level, 0, tmp);
+					// LOW(root) = 0;
+					// HIGH(root) = tmp;
+				}
+				else{
+
+					root = bdd_makenode(level, tmp, 0);//生成相应变量的一个节点
+					// LOW(root) = tmp;
+					// HIGH(root) = 0;
 				}
 				tmp = root;
 			}
@@ -206,18 +242,9 @@ bdd2mf(BDD root, int varnum) {
 
 				record[curr_pos + 1] = 1;
 				back_node_2_mf(record[curr_pos], mf_tmp);
-				
-				// record[curr_pos + 1] = -1;
-				// curr_pos--;
-				// if(curr_pos)
-				// 	back_node_2_mf(record[curr_pos-1], mf_tmp);
 			}
 			else if ((LOW(node_tmp) == 0)){
 				record[curr_pos + 1] = 0;
-				// record[curr_pos + 1] = -1;
-				// curr_pos--;
-				// if(curr_pos)
-				// 	back_node_2_mf(record[curr_pos-1], mf_tmp);
 			}
 			else {
 				add_node_2_mf(record[curr_pos], record[curr_pos-1], mf_tmp, 0);
@@ -288,26 +315,32 @@ main() {
 	// mf1->mf_v[0] = 0xffff;
 	// mf1->mf_v[1] = 0xffff;
 
-
     BDD v1, v2, v_op;
+    int domain[2] = {16*MF_LEN, 16*MF_LEN};
+    bdd_init(2000,100);
+    // fdd_extdomain(domain, 2);
 
-    
-    bdd_init(1000,100);
     int varnum = 16*MF_LEN;
     bdd_setvarnum(varnum);//变量的数目，也就是二进制位数。
     // v1 = 1;
-    v1 = mf2bdd(mf1);
+    v1 = mf2bdd_init(mf1);
+    // v1 = mf2bdd(mf1);
     v2 = mf2bdd(mf2);
     // v_op = bdd_and(v1, v2);
 	// v_op = bdd_or(v1, v2);
-	// v_op = bdd_apply(v1, v2, bddop_or);
+	v_op = bdd_apply(v1, v2, bddop_or);
 
 	struct mf_uint16_t_array *mfarr = bdd2mf(v1, varnum);
 	print_mf_uint16_t_array(mfarr);
-	mfarr = bdd2mf(v2, varnum);
-	print_mf_uint16_t_array(mfarr);
+	struct mf_uint16_t_array *mfarr2 = bdd2mf(v2, varnum);
+	print_mf_uint16_t_array(mfarr2);
+	struct mf_uint16_t_array *mfarr_op = bdd2mf(v_op, varnum);
+	print_mf_uint16_t_array(mfarr_op);
 
-    // bdd_printtable(v1);
+    bdd_printtable(v1);
+    bdd_printtable(v2);
+    bdd_printtable(v_op);
+
 
 
     // v2 = mf2bdd(mf2);

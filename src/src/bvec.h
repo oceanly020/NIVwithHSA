@@ -52,7 +52,7 @@ PROTO   {* typedef struct s_bvec
 } BVEC;
 
 typedef BVEC bvec; *}
-DESCR   {* This data structure is used to store boolean vectors. The field
+DESCR   {* This data structure is used to storde boolean vectors. The field
            {\tt bitnum} is the number of elements in the vector and the
 	   field {\tt bitvec} contains the actual BDDs in the vector.
 	   The C++ version of {\tt bvec} is documented at the beginning of
@@ -60,8 +60,8 @@ DESCR   {* This data structure is used to store boolean vectors. The field
 */
 typedef struct s_bvec
 {
-   int bitnum;
-   BDD *bitvec;
+    int bitnum;
+    BDD *bitvec;
 } BVEC;
 
 #ifndef CPLUSPLUS
@@ -72,8 +72,8 @@ typedef BVEC bvec;
 #ifdef CPLUSPLUS
 extern "C" {
 #endif
-   
-   /* Prototypes for bvec.c */
+
+/* Prototypes for bvec.c */
 extern BVEC bvec_copy(BVEC v);
 extern BVEC bvec_true(int bitnum);
 extern BVEC bvec_false(int bitnum);
