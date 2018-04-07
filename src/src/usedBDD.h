@@ -6509,7 +6509,6 @@ typedef struct s_Domain
 } Domain;
 
 static void Domain_allocate(Domain*, int);
-static void Domain_allocate1(Domain*, int);
 static void Domain_done(Domain*);
 
 static int    firstbddvar;
@@ -6573,7 +6572,7 @@ int fdd_extdomain(int *dom, int num)
       /* Create bdd variable tables */
    for (n=0 ; n<num ; n++)
    {
-      Domain_allocate1(&domain[n+fdvarnum], dom[n]);
+      Domain_allocate(&domain[n+fdvarnum], dom[n]);
       extravars += domain[n+fdvarnum].binsize;
    }
 
@@ -7188,32 +7187,6 @@ static void Domain_allocate(Domain* d, int range)
    d->ivar = (int *)malloc(sizeof(int)*d->binsize);
    d->var = bddtrue;
 }
-
-static void Domain_allocate1(Domain* d, int range)
-{
-   // int calcsize = 2;
-   
-   // if (range <= 0  || range > INT_MAX/2)
-   // {
-   //    bdd_error(BDD_RANGE);
-   //    return;
-   // }
-
-   // d->realsize = range;
-   d->binsize = range;
-
-   // while (calcsize < range)
-   // {
-   //    d->binsize++;
-   //    calcsize <<= 1;
-   // }
-
-   d->ivar = (int *)malloc(sizeof(int)*d->binsize);
-   d->var = bddtrue;
-}
-
-
-
 
 
 int *fdddec2bin(int var, int val)

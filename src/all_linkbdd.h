@@ -20,8 +20,7 @@
 
 //结构体或变量定义
 //自定义
-// #define MF_LEN 8 //128位bit， 8×16
-#define MF_LEN 2 //32位bit
+#define MF_LEN 8
 #define NW_DST_H 0
 #define NW_DST_L 1
 #define VALID_OFS 1
@@ -417,34 +416,8 @@ struct PACKED r_idxs {
   struct r_idx ridx[0];
 };
 
-
-
-//with bdd
-static uint16_t var2sign[16] = {
-  0x8000, 0x4000, 0x2000, 0x1000,
-  0x0800, 0x0400, 0x0200, 0x0100,
-  0x0080, 0x0040, 0x0020, 0x0010, 
-  0x0008, 0x0004, 0x0002, 0x0001
-};
-#define VAR2SIGN(a) (var2sign[(a%16)])
-#define FRA2INT(a) ((int) (a))
-#define REF(a)    (bddnodes[a].refcou)
-#define BDDSIZE     60000
-#define BDDOPCHCHE  2000 
-
-struct BddNode_saved {
-  int var;
-  int low;
-  int high;
-};
-
-struct bdd_saved_arr {//当arr_num == 0,意味着只有0或者1节点。
-  int arr_num;
-  struct BddNode_saved bdd_s[0];
-};
-
 struct PACKED nf_space {//匹配域和位置
-  struct bdd_saved_arr *mf;
+  struct mf_uint16_t *mf;
   // uint32_t nw_src, dl_src, dl_dst, dl_dst, dl_vlan, dl_vlan_pcp, tp_src , dl_type, nw_tos
   struct links_of_rule *lks;
 };
@@ -461,9 +434,6 @@ struct PACKED nf_space_pair {
 //   struct nf_space nf_s_in;
 //   struct nf_space nf_s_out; 
 // };
-
-
-
 
 struct PACKED of_rule {
   uint32_t sw_idx;
@@ -578,6 +548,28 @@ struct Tri_arr {
 };
 
 
+//with bdd
+static uint16_t var2sign[16] = {
+  0x8000, 0x4000, 0x2000, 0x1000,
+  0x0800, 0x0400, 0x0200, 0x0100,
+  0x0080, 0x0040, 0x0020, 0x0010, 
+  0x0008, 0x0004, 0x0002, 0x0001
+};
+#define VAR2SIGN(a) (var2sign[(a%16)])
+#define FRA2INT(a) ((int) (a))
+#define REF(a)    (bddnodes[a].refcou)
+
+struct BddNode_saved {
+  int var;
+  int low;
+  int high;
+};
+
+struct bdd_saved_arr {//当arr_num == 0,意味着只有0或者1节点。
+  int arr_num;
+  struct BddNode_saved bdd_s[0];
+};
+
 //函数声明
 //array.h
 
@@ -604,6 +596,7 @@ void print_mask(const uint16_t *mask);
 void print_links_of_rule(const struct links_of_rule *ls);
 void print_link_to_rule(const uint32_t link_idx, const struct link_to_rule_file *lr_file, 
                     const uint32_t *lr_data_arrs);
+void print_rule(const struct of_rule *rule);
 void print_rule(const struct of_rule *rule);
 void print_mf_uint16_t(const struct mf_uint16_t *a);
 void print_mf_uint16_t_array(const struct mf_uint16_t_array *arr);
@@ -650,7 +643,8 @@ struct mf_uint16_t_array *calc_minus_insc(struct mf_uint16_t *a, struct mf_uint1
 struct mf_uint16_t *merge_mf(struct mf_uint16_t *a, struct mf_uint16_t *b);
 struct wc_uint16_t *wc_uint16_t_insc(struct wc_uint16_t *a, struct wc_uint16_t *b);
 struct links_of_rule *links_insc(struct links_of_rule *a, struct links_of_rule *b);
-// struct matrix_Tri_express *insc_to_Tri_express_rlimit(struct of_rule *r_in, struct of_rule *r_out, BDD v_and);
+struct matrix_Tri_express *insc_to_Tri_express_2r(struct of_rule *r_in, struct of_rule *r_out, struct mf_uint16_t **insc_arr, uint32_t *insc_count);
+struct matrix_Tri_express *insc_to_Tri_express_rlimit(struct of_rule *r_in, struct of_rule *r_out, struct mf_uint16_t **insc_arr, uint32_t *insc_count);
 
 /*一些需求的比较函数*/
 /*========================================================================*/
@@ -692,10 +686,10 @@ struct Tri_arr *gen_Tri_arr(void);
 struct Tri_arr *gen_Tri_arr_backup(void);
 struct matrix_CSR *gen_sparse_matrix(void);  //通过对链路文件查找两个同链路的头尾端规则，计算是否连通并添加到矩阵 gen_sparse_matrix(void);
 struct matrix_CSC *gen_CSC_from_CSR(struct matrix_CSR *matrix);
-struct matrix_element *elem_connect(struct matrix_element *a, struct matrix_element *b); //a*b,a作用b，不可交换 elem_connect(struct matrix_element *a, struct matrix_element *b, uint32_t check);
-struct matrix_element *row_col_multiply(struct CS_matrix_idx_v_arr *row, struct CS_matrix_idx_v_arr *col);
-struct CS_matrix_idx_v_arr *row_multi_col_multiply(struct CS_matrix_idx_v_arr *row, uint32_t *arr, uint32_t count, struct matrix_CSC *matrix_CSC);
-struct CS_matrix_idx_v_arr *row_all_col_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSC *matrix_CSC);
+struct matrix_element *elem_connect(struct matrix_element *a, struct matrix_element *b, uint32_t check); //a*b,a作用b，不可交换 elem_connect(struct matrix_element *a, struct matrix_element *b, uint32_t check);
+struct matrix_element *row_col_multiply(struct CS_matrix_idx_v_arr *row, struct CS_matrix_idx_v_arr *col, uint32_t check);
+struct CS_matrix_idx_v_arr *row_multi_col_multiply(struct CS_matrix_idx_v_arr *row, uint32_t *arr, uint32_t count, struct matrix_CSC *matrix_CSC, uint32_t check);
+struct CS_matrix_idx_v_arr *row_all_col_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSC *matrix_CSC, uint32_t check);
 struct matrix_CSR *sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix_CSC);
 
 /*BDD相关各项处理*/
@@ -937,7 +931,7 @@ print_r_idxs (const struct r_idxs *rs) {
 void
 print_nf_space(const struct nf_space *a) {
   printf("matchfield:");
-  // print_mf_uint16_t(a->mf);
+  print_mf_uint16_t(a->mf);
   printf("the links:");
   print_links_of_rule(a->lks); 
 }
@@ -1198,10 +1192,8 @@ free_insc_arr(struct mf_uint16_t **insc_arr, uint32_t *insc_count) {
 
 void
 free_nf_space(struct nf_space *a) {
-  if(a){
-      free(a->mf);
-      free(a->lks);
-  }
+  free(a->mf);
+  free(a->lks);
 }
 
 void
@@ -1223,10 +1215,12 @@ free_nf_space_pair(struct nf_space_pair *pair) {
 
 void
 free_matrix_element(struct matrix_element *elem) {
-  if (elem){
+  if (elem)
+  {
     for (uint32_t i = 0; i < elem->npairs; i++){
-      if (elem->nf_pairs[i]) 
-        free_nf_space_pair(elem->nf_pairs[i]); 
+      if (elem->nf_pairs[i]) {
+        free_nf_space_pair(elem->nf_pairs[i]);
+      }  
     }
     free(elem);
   } 
@@ -1241,62 +1235,6 @@ free_matrix_buf(struct matrix_buf *matrix_buf) {
   }
   free(matrix_buf);
 }
-
-void
-free_CS_matrix_idx_v(struct CS_matrix_idx_v *idx_v) {
-  if(idx_v){
-    free_matrix_element(idx_v->elem);
-    free(idx_v);
-  }
-}
-
-void
-free_CS_matrix_idx_v_arr(struct CS_matrix_idx_v_arr *idx_v_arr) {
-  if(idx_v_arr){
-    for (int i = 0; i < idx_v_arr->nidx_vs; i++)
-      free_CS_matrix_idx_v(idx_v_arr->idx_vs[i]);
-    free(idx_v_arr);
-  }
-}
-
-void
-free_matrix_CSR(struct matrix_CSR *matrix_CSR) {
-  if(matrix_CSR){
-    for (uint32_t i = 0; i < matrix_CSR->nrows; i++) {
-      if (matrix_CSR->rows[i])
-        free_CS_matrix_idx_v_arr(matrix_CSR->rows[i]);
-    }
-    free(matrix_CSR);
-  }
-}
-
-void
-free_matrix_CSC(struct matrix_CSC *matrix_CSC) {
-  if(matrix_CSC){
-    for (uint32_t i = 0; i < matrix_CSC->ncols; i++) {
-      if (matrix_CSC->cols[i]){
-        free_CS_matrix_idx_v_arr(matrix_CSC->cols[i]);
-      }
-    }
-    free(matrix_CSC);
-  }
-}
-
-void
-free_matrix_CSC_fr_CSR(struct matrix_CSC *matrix_CSC) {
-  if(matrix_CSC){
-    for (uint32_t i = 0; i < matrix_CSC->ncols; i++) {
-      if (matrix_CSC->cols[i]){
-        for (int j = 0; j < matrix_CSC->cols[i]->nidx_vs; j++)
-          free(matrix_CSC->cols[i]->idx_vs[j]);
-        free(matrix_CSC->cols[i]);
-      }
-    }
-    free(matrix_CSC);
-  }
-}
-
-
 
 struct mf_uint16_t * //使用这个必须最后free掉 free(*)就可以
 calc_insc (const struct mf_uint16_t *a, const struct mf_uint16_t *b) {
@@ -1360,7 +1298,7 @@ calc_minus_insc (struct mf_uint16_t *a, struct mf_uint16_t *insc) {
       }
     }
   }
-  if(!count) 
+  if(!count)
     return NULL;
   struct mf_uint16_t_array *buf = xmalloc(sizeof(uint32_t)+count*sizeof(pre));
   buf->n_mfs = count;
@@ -1493,13 +1431,220 @@ copy_mask_uint16_t(struct mask_uint16_t *mk) {
   return tmp;
 }
 
+void
+matrix_add_nf_pair(struct nf_space_pair **pairs, uint32_t *n, uint32_t idx_in, uint32_t idx_out, struct matrix_buf *matrix_buf) {
+  // uint64_t idx_in64 = (uint64_t)idx_in;
+  // uint64_t idx_out64 = (uint64_t)idx_out;
+  uint32_t position_num = idx_in*idx_out + idx_out;
+  struct matrix_element **position = (struct matrix_element **)(matrix_buf->elems+position_num);
+  // printf("%d\n", *n);
+  // printf("%d - %d - %d\n", *(struct matrix_element **)(matrix_buf->elems+position_num), *position, matrix_buf->elems[0]);
+
+  if (!(*position)) {
+    // printf("!(*position)\n");
+
+    *position = xmalloc(sizeof(uint32_t)+(*n)*sizeof(struct nf_space_pair *));
+    (*position)->npairs = *n;
+    for (int i = 0; i < *n; i++) {
+      (*position)->nf_pairs[i] = pairs[i]; 
+    }
+    // print_matrix_element(*position);  
+  }
+  else {
+    uint32_t npairs = (*position)->npairs;
+    struct matrix_element *tmp = (struct matrix_element *)xmalloc(sizeof(uint32_t)+((*n)+npairs)*sizeof(struct nf_space_pair *));
+    tmp->npairs = (*n)+npairs;
+    for (int i = 0; i < npairs; i++) {
+      tmp->nf_pairs[i] = (*position)->nf_pairs[i]; 
+    }
+    for (int i = 0; i < *n; i++) {
+      tmp->nf_pairs[i+npairs] = pairs[i];
+    }
+    free(*position);
+    *position = tmp;  
+  }
+}
+
+void //将计算的连通的两规则添加到矩阵的元素结构中
+matrix_add_connect(struct of_rule *r_in, struct of_rule *r_out, struct mf_uint16_t **insc_arr, uint32_t *insc_count, struct matrix_buf *matrix_buf) {
+  struct nf_space_pair *pairs[*insc_count];
+  // uint32_t count  = 0;
+  int add_len = sizeof(uint16_t);
+  for (uint32_t i = 0; i < *insc_count; i++) {
+    pairs[i] = xcalloc(1, sizeof *(pairs[i]));
+    if (r_in->mask) {
+      uint16_t mask[MF_LEN];
+      uint16_t rewrite[MF_LEN];
+      for (uint32_t j = 0; j < MF_LEN; j++) {
+        mask[j] = *(uint16_t *)((uint8_t *)data_arrs+j+r_in->mask);
+        rewrite[j] = *(uint16_t *)((uint8_t *)data_arrs+j+r_in->rewrite);
+      }
+      pairs[i]->in = xcalloc(1, sizeof *(pairs[i]->in));// 1,16(两个指针为16)
+      pairs[i]->in->mf = xcalloc(1, sizeof *(pairs[i]->in->mf));
+      for (uint32_t j = 0; j < MF_LEN; j++) {
+        pairs[i]->in->mf->mf_w[j] = ((insc_arr[i]->mf_w[j])&mask[j])+ ((*(uint16_t *)((uint8_t *)data_arrs+j*add_len+r_in->match.w))&(~mask[j]));
+        pairs[i]->in->mf->mf_v[j] = ((insc_arr[i]->mf_v[j])&mask[j])+ ((*(uint16_t *)((uint8_t *)data_arrs+j*add_len+r_in->match.v))&(~mask[j]));
+      }
+      if (r_out->mask) {
+        uint16_t mask_out[MF_LEN];
+        uint16_t rewrite_out[MF_LEN];
+        for (uint32_t j = 0; j < MF_LEN; j++) {
+          mask_out[j] = *(uint16_t *)((uint8_t *)data_arrs+j+r_out->mask);
+          rewrite_out[j] = *(uint16_t *)((uint8_t *)data_arrs+j+r_out->rewrite);
+        }
+        pairs[i]->mask = xcalloc(1, sizeof *(pairs[i]->mask));
+        for (uint32_t j = 0; j < MF_LEN; j++) {
+          pairs[i]->mask->v[j] = mask[j]&mask_out[j];
+          pairs[i]->rewrite->v[j] = (rewrite[j]&mask_out[j]) + (rewrite_out[j]&(~mask_out[j]));
+        }
+      }
+      else{
+        pairs[i]->mask = xcalloc(1, sizeof *(pairs[i]->mask));
+        for (uint32_t j = 0; j < MF_LEN; j++) {
+          pairs[i]->mask->v[j] = mask[j];
+          pairs[i]->rewrite->v[j] = rewrite[j];
+        }
+      }     
+    }
+    else{
+      struct links_of_rule *lks = rule_links_get(r_in, IN_LINK);
+      pairs[i]->in = xcalloc(1, sizeof *(pairs[i]->in));// 1,16(两个指针为16)
+      // printf("%d\n", sizeof *(pairs[i]->in));
+      pairs[i]->in->lks = copy_links_of_rule(lks);
+      pairs[i]->in->mf = copy_mf_uint16_t(insc_arr[i]);
+      if (!(r_out->mask)) {
+        pairs[i]->mask = NULL;
+        pairs[i]->rewrite = NULL;
+      }
+      // free (lks);
+    }
+    if (r_out->mask) {
+      uint16_t mask[MF_LEN];
+      uint16_t rewrite[MF_LEN];
+      for (uint32_t j = 0; j < MF_LEN; j++) {
+        mask[j] = *(uint16_t *)((uint8_t *)data_arrs+j+r_out->mask);
+        rewrite[j] = *(uint16_t *)((uint8_t *)data_arrs+j+r_out->rewrite);
+      }
+      pairs[i]->out = xcalloc(1, sizeof *(pairs[i]->out));// 1,16(两个指针为16)
+      pairs[i]->out->mf = xcalloc(1, sizeof *(pairs[i]->out->mf));
+      for (uint32_t j = 0; j < MF_LEN; j++) {
+        pairs[i]->out->mf->mf_w[j] = (insc_arr[i]->mf_w[j])&mask[j];
+        pairs[i]->out->mf->mf_v[j] = ((insc_arr[i]->mf_v[j])&mask[j])+ (rewrite[j]&(~mask[j]));
+      }
+      if (!(r_in->mask)){
+        pairs[i]->mask = xcalloc(1, sizeof *(pairs[i]->mask));
+        for (uint32_t j = 0; j < MF_LEN; j++) {
+          pairs[i]->mask->v[j] = mask[j];
+          pairs[i]->rewrite->v[j] = rewrite[j];
+        }
+      }
+    }
+    else{
+      struct links_of_rule *lks = rule_links_get(r_out, OUT_LINK);
+      // pairs[i]->out = xmalloc((sizeof *(pairs[i]->in)) + (lks->n -1)*sizeof (struct wc_uint16_t));
+      pairs[i]->out = xcalloc(1, sizeof *(pairs[i]->out));// 1,16(两个指针为16)
+      // printf("%d\n", sizeof *(pairs[i]->in));
+      pairs[i]->out->lks = copy_links_of_rule(lks);
+      pairs[i]->out->mf = copy_mf_uint16_t(insc_arr[i]);
+    }
+    pairs[i]->r_arr = xmalloc(sizeof (uint32_t)+2*sizeof (struct r_idx));
+    pairs[i]->r_arr->nrs = 2;
+    pairs[i]->r_arr->ridx[0].sw_idx = r_in->sw_idx;
+    pairs[i]->r_arr->ridx[0].r_idx = r_in->idx;
+    pairs[i]->r_arr->ridx[1].sw_idx = r_out->sw_idx;
+    pairs[i]->r_arr->ridx[1].r_idx = r_out->idx;
+  }
+
+  uint32_t matrix_in = matrix_idx_get_r(r_in);
+  uint32_t matrix_out = matrix_idx_get_r(r_out);
+  matrix_add_nf_pair(pairs, insc_count, matrix_in, matrix_out, matrix_buf);
+}
+
+void //通过对链路文件查找两个同链路的头尾端规则，计算是否连通并添加到矩阵
+gen_matrix(struct matrix_buf *matrix_buf) {
+  // for (int i = 0; i < link_in_rule_file->swl_num; i++) {
+  //   struct link *l = link_get(link_in_rule_file->links[i].link_idx);
+  //   print_link(l);
+  // }
+  printf("%d - %d - %d\n", link_out_rule_file->swl_num, link_in_rule_file->swl_num, link_data_file->swl_num);
+  // uint32_t rule_nums = 0;
+  // get_link_rules(link_out_rule_file, rule_nums, 0);
+  uint32_t rule_nums_in_pre = 0;
+  uint32_t rule_nums_out = 0;
+  for (uint32_t i = 0; i < link_in_rule_file->swl_num; i++) {
+    struct link_to_rule *lout_r = get_link_rules(link_in_rule_file, &rule_nums_out, link_out_rule_file->links[i].link_idx);
+    // uint32_t *lout_arrs = (uint32_t *)(link_out_rule_data_arrs + 2*rule_nums_out_pre);
+    if (lout_r) {
+      uint32_t rule_nums_in  = link_in_rule_file->links[i].rule_nums - rule_nums_in_pre;
+      uint32_t *lin_arrs = (uint32_t *)(link_in_rule_data_arrs + 2*rule_nums_in_pre);
+      uint32_t rule_nums_out_pre = lout_r->rule_nums - rule_nums_out;
+      for (uint32_t i_in = 0; i_in < rule_nums_in; i_in++) {  
+        struct of_rule *r_in = rule_get_2idx(*(uint32_t *)lin_arrs, *(uint32_t *)(lin_arrs+1));
+        struct mf_uint16_t_array *r_in_mf_arr = get_r_in_mf_to_array(r_in);
+        uint32_t *lout_arrs = (uint32_t *)(link_out_rule_data_arrs + 2*rule_nums_out_pre);
+        for (uint32_t i_out = 0; i_out < rule_nums_out; i_out++) {
+          struct of_rule *r_out = rule_get_2idx(*(uint32_t *)lout_arrs, *(uint32_t *)(lout_arrs+1));
+          struct mf_uint16_t *r_out_mf = get_r_out_mf(r_out); 
+          uint32_t insc_count = 0;
+          uint32_t mfs_count = 0;
+          struct mf_uint16_t *insc_arr[MAX_ARR_SIZE];
+          struct mf_uint16_t *mfs_arr[MAX_ARR_SIZE];
+
+          for (uint32_t i_in_mf = 0; i_in_mf < r_in_mf_arr->n_mfs; i_in_mf++) {
+            struct mf_uint16_t *insc = calc_insc(r_in_mf_arr->mfs[i_in_mf], r_out_mf);
+            if (insc){
+              insc_arr[insc_count] = insc;
+              insc_count++;
+              struct mf_uint16_t_array *arr_tmp = calc_minus_insc(r_in_mf_arr->mfs[i_in_mf], insc);
+              if (arr_tmp){
+                for (uint32_t j = 0; j < arr_tmp->n_mfs; j++) {
+                  mfs_arr[mfs_count] = arr_tmp->mfs[j];
+                  mfs_count++;
+                }                
+              } 
+              free(r_in_mf_arr->mfs[i_in_mf]);  
+              r_in_mf_arr->mfs[i_in_mf] = NULL;           
+            }
+            else{
+              mfs_arr[mfs_count] = r_in_mf_arr->mfs[i_in_mf];
+              mfs_count++;
+            }
+          }
+          if(insc_count){ 
+            matrix_add_connect(r_in, r_out, insc_arr, &insc_count, matrix_buf);
+            // struct links_of_rule *ls = rule_links_get(r_in, IN_LINK); 
+            // print_links_of_rule(ls);
+            free_insc_arr(insc_arr, &insc_count);
+            if (!mfs_count){
+              free(r_out_mf);
+              break;
+            }
+            free(r_in_mf_arr);
+
+            r_in_mf_arr = (struct mf_uint16_t_array *)xmalloc(sizeof(uint32_t)+mfs_count*sizeof(r_out_mf));
+            r_in_mf_arr->n_mfs = mfs_count;
+            memcpy (r_in_mf_arr->mfs, mfs_arr, mfs_count*sizeof(r_out_mf));    
+          }
+          lout_arrs += 2;
+          free(r_out_mf);
+        }
+        lin_arrs += 2;
+        free_mf_uint16_t_array(r_in_mf_arr);
+      }
+    }
+    rule_nums_in_pre = link_in_rule_file->links[i].rule_nums;
+  }
+}
+
 uint32_t // 1:yes, 0:no
 is_insc_wc_uint16_t(struct wc_uint16_t *a, struct wc_uint16_t *b) {
+
   if ((~(a->w | b->w))&(a->v ^ b->v))
     return 0;
-  else
+  else 
     return 1;
 }
+
 
 uint32_t // 1:yes, 0:no
 is_insc_links(struct links_of_rule *a, struct links_of_rule *b) {
@@ -1509,10 +1654,155 @@ is_insc_links(struct links_of_rule *a, struct links_of_rule *b) {
     for (uint32_t j = 0; j < b->n; j++) {
       if (!((~(a->links_wc[i].w | b->links_wc[i].w))&(a->links_wc[i].v ^ b->links_wc[i].v)))
         return 1;
-    }
+    } 
   }
   return 0;
 }
+
+struct nf_space_pair *
+nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
+  if(!is_insc_links(a->out->lks, b->in->lks))
+    return NULL;
+  struct mf_uint16_t *insc = calc_insc(a->out->mf, b->in->mf);
+  if (!insc) 
+    return NULL;
+  struct nf_space_pair *pair_tmp = xcalloc(1, sizeof *pair_tmp);
+  
+
+  if (a->mask) {
+    pair_tmp->in = xcalloc(1, sizeof *(pair_tmp->in));// 1,16(两个指针为16)
+    pair_tmp->in->mf = xcalloc(1, sizeof *(pair_tmp->in->mf));
+    for (uint32_t j = 0; j < MF_LEN; j++) {
+      pair_tmp->in->mf->mf_w[j] = ((insc->mf_w[j])&(a->mask->v[j]))+ ((a->in->mf->mf_w[j])&(a->mask->v[j]));
+      pair_tmp->in->mf->mf_v[j] = ((insc->mf_v[j])&(a->mask->v[j]))+ ((a->in->mf->mf_v[j])&(~(a->mask->v[j])));
+    }
+    if (b->mask) {
+      pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
+      pair_tmp->rewrite = xcalloc(1, sizeof *(pair_tmp->rewrite));
+      for (uint32_t j = 0; j < MF_LEN; j++) {
+        pair_tmp->mask->v[j] = (a->mask->v[j])&(b->mask->v[j]);
+        pair_tmp->rewrite->v[j] = ((a->rewrite->v[j])&(b->mask->v[j])) + ((b->rewrite->v[j])&(~(b->mask->v[j])));
+      }
+    }
+    else{
+      pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
+      pair_tmp->rewrite = xcalloc(1, sizeof *(pair_tmp->rewrite));
+      for (uint32_t j = 0; j < MF_LEN; j++) {
+        pair_tmp->mask->v[j] = a->mask->v[j];
+        pair_tmp->rewrite->v[j] = a->rewrite->v[j];
+      }
+    }     
+  }
+  else{
+    pair_tmp->in = xcalloc(1, sizeof *(pair_tmp->in));// 1,16(两个指针为16)
+    // printf("%d\n", sizeof *(pair_tmp->in));
+    pair_tmp->in->lks = copy_links_of_rule(a->in->lks);
+    pair_tmp->in->mf = copy_mf_uint16_t(insc);
+    if (!(b->mask)) {
+      pair_tmp->mask = NULL;
+      pair_tmp->rewrite = NULL;
+    }
+    // free (lks);
+  }
+  if (b->mask) {
+    pair_tmp->out = xcalloc(1, sizeof *(pair_tmp->out));// 1,16(两个指针为16)
+    pair_tmp->out->mf = xcalloc(1, sizeof *(pair_tmp->out->mf));
+    for (uint32_t j = 0; j < MF_LEN; j++) {
+      pair_tmp->out->mf->mf_w[j] = (insc->mf_w[j])&(b->mask->v[j]);
+      pair_tmp->out->mf->mf_v[j] = ((insc->mf_v[j])&(b->mask->v[j])) + ((b->rewrite->v[j])&(~(b->mask->v[j])));
+    }
+    if (!(a->mask)){
+      pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
+      for (uint32_t j = 0; j < MF_LEN; j++) {
+        pair_tmp->mask->v[j] = b->mask->v[j];
+        pair_tmp->rewrite->v[j] = b->rewrite->v[j];
+      }
+    }
+  }
+  else{
+    // struct links_of_rule *lks = rule_links_get(r_out, OUT_LINK);
+    // pair_tmp->out = xmalloc((sizeof *(pair_tmp->in)) + (lks->n -1)*sizeof (struct wc_uint16_t));
+    pair_tmp->out = xcalloc(1, sizeof *(pair_tmp->out));// 1,16(两个指针为16)
+    // printf("%d\n", sizeof *(pair_tmp->in));
+    pair_tmp->out->lks = copy_links_of_rule(b->out->lks);
+    pair_tmp->out->mf = copy_mf_uint16_t(insc);//建立copy
+  }
+
+  // pair_tmp->in = xcalloc(1, sizeof *(pair_tmp->in));// 1,16(两个指针为16)
+  // pair_tmp->in->lks = copy_links_of_rule(a->in->lks);
+  // pair_tmp->in->mf = copy_mf_uint16_t(insc);
+  // pair_tmp->out = xcalloc(1, sizeof *(pair_tmp->out));// 1,16(两个指针为16)
+  // pair_tmp->out->lks = copy_links_of_rule(b->out->lks);
+  // pair_tmp->out->mf = copy_mf_uint16_t(insc);
+  // pair_tmp->mask = NULL;
+  // pair_tmp->rewrite = NULL;
+
+
+
+  pair_tmp->r_arr = xmalloc(sizeof (uint32_t)+(a->r_arr->nrs+b->r_arr->nrs -1)*sizeof (struct r_idx));
+  pair_tmp->r_arr->nrs = a->r_arr->nrs+b->r_arr->nrs -1;
+  for (uint32_t i = 0; i < a->r_arr->nrs; i++) {
+    pair_tmp->r_arr->ridx[i].sw_idx = a->r_arr->ridx[i].sw_idx;
+    pair_tmp->r_arr->ridx[i].r_idx = a->r_arr->ridx[i].r_idx;
+  }
+  for (uint32_t i = 0; i < b->r_arr->nrs -1; i++) {
+    pair_tmp->r_arr->ridx[i+a->r_arr->nrs].sw_idx = b->r_arr->ridx[i+1].sw_idx;
+    pair_tmp->r_arr->ridx[i+a->r_arr->nrs].r_idx = b->r_arr->ridx[i+1].r_idx;
+  }
+  free(insc);
+  // return pair_tmp;
+  return pair_tmp;
+}
+
+uint32_t
+matrix_elem_connect(struct matrix_element *a, struct matrix_element *b, uint32_t idx_in, uint32_t idx_out, struct matrix_buf *matrix_buf) {
+  struct nf_space_pair *tmp[MAX_ARR_SIZE];
+  uint32_t count = 0;
+  for (uint32_t i = 0; i < a->npairs; i++) {
+    for (uint32_t j = 0; j < b->npairs; j++) {
+      struct nf_space_pair *result = nf_space_connect(a->nf_pairs[i], a->nf_pairs[j]);
+      if (result) {
+        tmp[count] = result;
+        count++;
+      } 
+    }
+  }
+  if (count) {
+    matrix_add_nf_pair(tmp, &count, idx_in, idx_out, matrix_buf);
+  }
+  else
+    return 0;
+  return 1;
+}
+
+struct matrix_buf *
+matrix_multiply(struct matrix_buf *a, struct matrix_buf *b) {
+  struct matrix_buf *tmp = matrix_init();
+  for (uint32_t j = 0; j < tmp->nelems; j++) { //j为列，i为行
+    struct matrix_element *row[tmp->nelems];
+
+    for (uint32_t i = 0; i < tmp->nelems; i++) {
+      row[j] = *(struct matrix_element **)(b->elems+i*j+j);
+    }
+    for (uint32_t i = 0; i < tmp->nelems; i++) {
+      struct matrix_element **line = (struct matrix_element **)(a->elems+i*j);
+      for (uint32_t k = 0; k < 2000; k++)
+      {
+        if ((line[k])&&(row[k]));
+      }
+      // for (uint32_t k = 0; k < tmp->nelems; k++) {//  k为行乘以列位数
+        // if ((line[k])&&(row[k])) {
+          // matrix_elem_connect(line[i], row[i], i, j, tmp);
+        // line = (struct matrix_element **)(line+1);
+        // }
+      // }
+    }
+  }
+  return tmp;
+}
+
+
+
 
 /*BDD相关各项处理*/
 /*========================================================================*/
@@ -1688,9 +1978,10 @@ back_node_2_mf(BDD node, struct mf_uint16_t *mf) {
   return 0;
 }
 
+
 struct mf_uint16_t_array *
-bdd2mf(BDD root, int varnum) {
-  // CHECK(root);
+bdd2mf(BDD root, int varnum, int debug) {
+  CHECK(root);
   if(root == 1){
     struct mf_uint16_t_array *mf_arr_tmp = xmalloc(sizeof *mf_arr_tmp);
     mf_arr_tmp->n_mfs = 1;
@@ -1715,9 +2006,21 @@ bdd2mf(BDD root, int varnum) {
   record[0] = -1;
   record[1] = root;
   int curr_pos = 1;
+  // if (debug == 697)
+  // {
+  //   bdd_printtable(root);
+  // }
 
   while(curr_pos){
+
     node_tmp = record[curr_pos];
+    // if (debug == 697){
+    //   printf("%d; %d", node_tmp, arr_count);
+    //   print_node(node_tmp);
+    // }
+    // if (arr_count > 5800)
+    //   printf("%d;\n",arr_count);
+    
     if (HIGH(node_tmp) == record[curr_pos+1]){
       if (LOW(node_tmp) == 1){      
         add_node_2_mf(node_tmp, record[curr_pos-1], mf_tmp, 0);
@@ -1771,7 +2074,8 @@ bdd2mf(BDD root, int varnum) {
 }
 
 BDD 
-bdd_ref(BDD root) {
+bdd_ref(BDD root)
+{
    CHECK(root);
    if (root < 2)
       return bdd_error(BDD_ILLBDD);
@@ -1836,16 +2140,15 @@ bdd_save_arr(BDD root){
       return NULL;
   }
   int count = 0;
-  // BDD arr_tmp[16*MF_LEN*10];
-  BDD arr_tmp[5000];
-  bdd_save2stru(root, arr_tmp, &count);
+  BDD arr_tmp[16*MF_LEN*10];
 
+  bdd_save2stru(root, arr_tmp, &count);
   bdd_unmark(root);
-  
   qsort(arr_tmp, count,sizeof (BDD), cmp_bdd_by_var);
   int var_arr[16*MF_LEN];
   int var_tmp = 16*MF_LEN - 1;
   var_arr[var_tmp] = 0;
+  
   for (int i = 0; i < count; i++){
     int var = bdd_var(arr_tmp[i]);
     if (var != var_tmp){
@@ -1934,7 +2237,8 @@ load_saved_bddarr(struct bdd_saved_arr *bdd_arr) {
   return arr_tmp[bdd_arr->arr_num-1];
 }
 
-/*稀疏矩阵处理with BDD*/
+
+/*稀疏矩阵处理basic*/
 /*========================================================================*/
 static int
 uint32_t_cmp (const void *a, const void *b)
@@ -1976,144 +2280,184 @@ links_insc(struct links_of_rule *a, struct links_of_rule *b) {
 }
 
 void
-print_Tri_express(struct matrix_Tri_express *Tri) {
+print_Tri_express(struct matrix_Tri_express *Tri){
   printf("Tri row-col:%d - %d\n", Tri->row_idx, Tri->col_idx);
   print_matrix_element(Tri->elem);
 }
 
-BDD
-bdd_mask2x(struct bdd_saved_arr *bdd_arr, struct mask_uint16_t *mask) {
-  BDD arr_tmp[bdd_arr->arr_num];
-  arr_tmp[0] = 0;
-  arr_tmp[1] = 1;
-
-  for (int i = 2; i < bdd_arr->arr_num; i++){
-    int var = bdd_arr->bdd_s[i].var;
-    int level = bdd_var2level(var);
-    BDD low = arr_tmp[bdd_arr->bdd_s[i].low];
-    BDD high = arr_tmp[bdd_arr->bdd_s[i].high];
-
-    if (VAR2SIGN(var)&(mask->v[FRA2INT(var)])){
-      if (low == high)
-        arr_tmp[i] = low;
-      else
-        arr_tmp[i] = bdd_makenode(level, low, high);
-    }
-    else 
-      arr_tmp[i] = bdd_apply(low, high, bddop_or);
-  }
-
-  return arr_tmp[bdd_arr->arr_num-1];
-}
-
-BDD
-rw2bdd(struct mask_uint16_t *mask, struct mask_uint16_t *rw){
-  BDD root, tmp;
-  root = 1;
-  tmp = 1;  
-  // print_mf_uint16_t(mf);
-  for (int i = 0; i < MF_LEN; i++){
-    int reverse_i = MF_LEN - i - 1;
-    uint16_t sign = 0x0001;
-    for (int j = 0; j < 16; j++){
-      if (!(sign & mask->v[reverse_i])){
-        int level = bdd_var2level(16*MF_LEN - 16*i - j - 1);//生成相应变量的一个节点
-        if (sign & rw->v[reverse_i]){
-          root = bdd_makenode(level, 0, tmp);
-        }
-        else{
-          root = bdd_makenode(level, tmp, 0);//生成相应变量的一个节点
-        }
-        tmp = root;
+struct matrix_Tri_express * 
+insc_to_Tri_express_2r(struct of_rule *r_in, struct of_rule *r_out, struct mf_uint16_t **insc_arr, uint32_t *insc_count) {
+  struct nf_space_pair *pairs[*insc_count];
+  int add_len = sizeof(uint16_t);
+  for (uint32_t i = 0; i < *insc_count; i++) {
+    pairs[i] = xcalloc(1, sizeof *(pairs[i]));
+    if (r_in->mask) {
+      uint16_t mask[MF_LEN];
+      uint16_t rewrite[MF_LEN];
+      for (uint32_t j = 0; j < MF_LEN; j++) {
+        mask[j] = *(uint16_t *)((uint8_t *)data_arrs+j+r_in->mask);
+        rewrite[j] = *(uint16_t *)((uint8_t *)data_arrs+j+r_in->rewrite);
       }
-      sign <<= 1;
+      pairs[i]->in = xcalloc(1, sizeof *(pairs[i]->in));// 1,16(两个指针为16)
+      pairs[i]->in->mf = xcalloc(1, sizeof *(pairs[i]->in->mf));
+      for (uint32_t j = 0; j < MF_LEN; j++) {
+        pairs[i]->in->mf->mf_w[j] = ((insc_arr[i]->mf_w[j])&mask[j])+ ((*(uint16_t *)((uint8_t *)data_arrs+j*add_len+r_in->match.w))&(~mask[j]));
+        pairs[i]->in->mf->mf_v[j] = ((insc_arr[i]->mf_v[j])&mask[j])+ ((*(uint16_t *)((uint8_t *)data_arrs+j*add_len+r_in->match.v))&(~mask[j]));
+      }
+      if (r_out->mask) {
+        uint16_t mask_out[MF_LEN];
+        uint16_t rewrite_out[MF_LEN];
+        for (uint32_t j = 0; j < MF_LEN; j++) {
+          mask_out[j] = *(uint16_t *)((uint8_t *)data_arrs+j+r_out->mask);
+          rewrite_out[j] = *(uint16_t *)((uint8_t *)data_arrs+j+r_out->rewrite);
+        }
+        pairs[i]->mask = xcalloc(1, sizeof *(pairs[i]->mask));
+        pairs[i]->rewrite = xcalloc(1, sizeof *(pairs[i]->rewrite));
+        for (uint32_t j = 0; j < MF_LEN; j++) {
+          pairs[i]->mask->v[j] = mask[j]&mask_out[j];
+          pairs[i]->rewrite->v[j] = (rewrite[j]&mask_out[j]) + (rewrite_out[j]&(~mask_out[j]));
+        }
+      }
+      else{
+        pairs[i]->mask = xcalloc(1, sizeof *(pairs[i]->mask));
+        pairs[i]->rewrite = xcalloc(1, sizeof *(pairs[i]->rewrite));
+        for (uint32_t j = 0; j < MF_LEN; j++) {
+          pairs[i]->mask->v[j] = mask[j];
+          pairs[i]->rewrite->v[j] = rewrite[j];
+        }
+      }     
     }
+    else{
+      struct links_of_rule *lks = rule_links_get(r_in, IN_LINK);
+      pairs[i]->in = xcalloc(1, sizeof *(pairs[i]->in));// 1,16(两个指针为16)
+      // printf("%d\n", sizeof *(pairs[i]->in));
+      pairs[i]->in->lks = copy_links_of_rule(lks);
+      pairs[i]->in->mf = copy_mf_uint16_t(insc_arr[i]);
+      if (!(r_out->mask)) {
+        pairs[i]->mask = NULL;
+        pairs[i]->rewrite = NULL;
+      }
+      // free (lks);
+    }
+    if (r_out->mask) {
+      uint16_t mask[MF_LEN];
+      uint16_t rewrite[MF_LEN];
+      for (uint32_t j = 0; j < MF_LEN; j++) {
+        mask[j] = *(uint16_t *)((uint8_t *)data_arrs+j+r_out->mask);
+        rewrite[j] = *(uint16_t *)((uint8_t *)data_arrs+j+r_out->rewrite);
+      }
+      pairs[i]->out = xcalloc(1, sizeof *(pairs[i]->out));// 1,16(两个指针为16)
+      pairs[i]->out->mf = xcalloc(1, sizeof *(pairs[i]->out->mf));
+      for (uint32_t j = 0; j < MF_LEN; j++) {
+        pairs[i]->out->mf->mf_w[j] = (insc_arr[i]->mf_w[j])&mask[j];
+        pairs[i]->out->mf->mf_v[j] = ((insc_arr[i]->mf_v[j])&mask[j])+ (rewrite[j]&(~mask[j]));
+      }
+      if (!(r_in->mask)){
+        pairs[i]->mask = xcalloc(1, sizeof *(pairs[i]->mask));
+        pairs[i]->rewrite = xcalloc(1, sizeof *(pairs[i]->rewrite));
+        for (uint32_t j = 0; j < MF_LEN; j++) {
+          pairs[i]->mask->v[j] = mask[j];
+          pairs[i]->rewrite->v[j] = rewrite[j];
+        }
+      }
+    }
+    else{
+      struct links_of_rule *lks = rule_links_get(r_out, OUT_LINK);
+      // pairs[i]->out = xmalloc((sizeof *(pairs[i]->in)) + (lks->n -1)*sizeof (struct wc_uint16_t));
+      pairs[i]->out = xcalloc(1, sizeof *(pairs[i]->out));// 1,16(两个指针为16)
+      // printf("%d\n", sizeof *(pairs[i]->in));
+      pairs[i]->out->lks = copy_links_of_rule(lks);
+      pairs[i]->out->mf = copy_mf_uint16_t(insc_arr[i]);
+    }
+    pairs[i]->r_arr = xmalloc(sizeof (uint32_t)+2*sizeof (struct r_idx));
+    pairs[i]->r_arr->nrs = 2;
+    pairs[i]->r_arr->ridx[0].sw_idx = r_in->sw_idx;
+    pairs[i]->r_arr->ridx[0].r_idx = r_in->idx;
+    pairs[i]->r_arr->ridx[1].sw_idx = r_out->sw_idx;
+    pairs[i]->r_arr->ridx[1].r_idx = r_out->idx;
   }
-  return root;
-}
 
-struct bdd_saved_arr *
-bdd_rw(struct bdd_saved_arr *bdd_arr, struct mask_uint16_t *mask, struct mask_uint16_t *rw) {
-  BDD root_maskx = bdd_mask2x(bdd_arr, mask);
-  BDD root_rw = rw2bdd(mask, rw);
-  root_rw = bdd_apply(root_maskx, root_rw, bddop_and);
-  return bdd_save_arr(root_rw);
-}
-
-struct bdd_saved_arr *
-bdd_rw_back(struct bdd_saved_arr *bdd_arr, struct bdd_saved_arr *bdd_arr_IN, struct mask_uint16_t *mask) {
-  BDD root_maskx = bdd_mask2x(bdd_arr, mask);
-  BDD root_IN = load_saved_bddarr(bdd_arr_IN);
-  root_IN = bdd_apply(root_maskx, root_IN, bddop_and);
-  return bdd_save_arr(root_IN);
-}
-
-struct bdd_saved_arr *
-copy_bdd_saved_arr(struct bdd_saved_arr *bdd_arr) {
-  struct bdd_saved_arr *tmp = xmalloc(sizeof(int)+(bdd_arr->arr_num)*sizeof(struct BddNode_saved));
-  tmp->arr_num = bdd_arr->arr_num;
-  memcpy (tmp->bdd_s, bdd_arr->bdd_s, (bdd_arr->arr_num)*sizeof(struct BddNode_saved)); 
+  struct matrix_Tri_express *tmp = xcalloc(1, sizeof *tmp);
+  tmp->elem = xmalloc(sizeof(uint32_t)+(*insc_count)*sizeof(struct nf_space_pair *));
+  tmp->elem->npairs = *insc_count;
+  tmp->row_idx = matrix_idx_get_r(r_in);
+  tmp->col_idx = matrix_idx_get_r(r_out);
+  for (int i = 0; i < *insc_count; i++) {
+    tmp->elem->nf_pairs[i] = pairs[i]; 
+  }
   return tmp;
 }
 
-void
-print_bdd_saved_arr(struct bdd_saved_arr *bdd_arr){
-  printf("There are %d nodes\n", bdd_arr->arr_num);
-  for (int i = 0; i < bdd_arr->arr_num; i++){
-    printf("node:%d, var:%d, low:%d, high:%d\n", i, bdd_arr->bdd_s[i].var, bdd_arr->bdd_s[i].low, bdd_arr->bdd_s[i].high);
-  }
-}
-
 struct matrix_Tri_express * 
-insc_to_Tri_express_rlimit(struct of_rule *r_in, struct of_rule *r_out, BDD v_and) {
-  struct nf_space_pair *pair = xcalloc(1, sizeof *pair);
+insc_to_Tri_express_rlimit(struct of_rule *r_in, struct of_rule *r_out, struct mf_uint16_t **insc_arr, uint32_t *insc_count) {
+
+  struct nf_space_pair **pairs = xmalloc((*insc_count)*sizeof (struct nf_space_pair *));
   struct links_of_rule *lks = rule_links_get(r_in, IN_LINK);
   struct links_of_rule *lks_out = rule_links_get(r_in, OUT_LINK);
   struct links_of_rule *lks_in = rule_links_get(r_out, IN_LINK);
   lks_out = links_insc(lks_in, lks_out);
+  // uint32_t count  = 0;
+  int add_len = sizeof(uint16_t);
+  if (r_in->mask) {
+    uint16_t mask[MF_LEN];
+    uint16_t rewrite[MF_LEN];
+    for (uint32_t j = 0; j < MF_LEN; j++) {
+      mask[j] = *(uint16_t *)((uint8_t *)data_arrs+j+r_in->mask);
+      rewrite[j] = *(uint16_t *)((uint8_t *)data_arrs+j+r_in->rewrite);
+    }
+    for (uint32_t i = 0; i < *insc_count; i++) {
+      pairs[i] = xcalloc(1, sizeof *(pairs[i]));
+      pairs[i]->in = xcalloc(1, sizeof *(pairs[i]->in));// 1,16(两个指针为16)
+      pairs[i]->in->mf = xcalloc(1, sizeof *(pairs[i]->in->mf));
+      for (uint32_t j = 0; j < MF_LEN; j++) {
+        pairs[i]->in->mf->mf_w[j] = ((insc_arr[i]->mf_w[j])&mask[j])+ ((*(uint16_t *)((uint8_t *)data_arrs+j*add_len+r_in->match.w))&(~mask[j]));
+        pairs[i]->in->mf->mf_v[j] = ((insc_arr[i]->mf_v[j])&mask[j])+ ((*(uint16_t *)((uint8_t *)data_arrs+j*add_len+r_in->match.v))&(~mask[j]));
+      }     
+      pairs[i]->mask = xcalloc(1, sizeof *(pairs[i]->mask));
+      pairs[i]->rewrite = xcalloc(1, sizeof *(pairs[i]->rewrite));
+      for (uint32_t j = 0; j < MF_LEN; j++) {
+        pairs[i]->mask->v[j] = mask[j];
+        pairs[i]->rewrite->v[j] = rewrite[j];
+      } 
+      pairs[i]->in->lks = copy_links_of_rule(lks);
+      pairs[i]->out = xcalloc(1, sizeof *(pairs[i]->out));
+      pairs[i]->out->mf = copy_mf_uint16_t(insc_arr[i]);
+      pairs[i]->out->lks = copy_links_of_rule(lks_out);
+      pairs[i]->r_arr = xmalloc(sizeof (uint32_t)+sizeof (struct r_idx));
+      pairs[i]->r_arr->nrs = 2;
+      pairs[i]->r_arr->ridx[0].sw_idx = r_in->sw_idx;
+      pairs[i]->r_arr->ridx[0].r_idx = r_in->idx;
+      pairs[i]->r_arr->ridx[1].sw_idx = r_out->sw_idx;
+      pairs[i]->r_arr->ridx[1].r_idx = r_out->idx;
+    }
+  }
+  else{
+    for (uint32_t i = 0; i < *insc_count; i++) {
+      pairs[i] = xcalloc(1, sizeof *(pairs[i]));
+      pairs[i]->in = xcalloc(1, sizeof *(pairs[i]->in));// 1,16(两个指针为16)
+      pairs[i]->in->mf = copy_mf_uint16_t(insc_arr[i]);    
+      pairs[i]->mask = NULL;
+      pairs[i]->rewrite = NULL;
+      pairs[i]->in->lks = copy_links_of_rule(lks);
+      pairs[i]->out = xcalloc(1, sizeof *(pairs[i]->out));
+      pairs[i]->out->mf = copy_mf_uint16_t(insc_arr[i]);
+      pairs[i]->out->lks = copy_links_of_rule(lks_out);
+      pairs[i]->r_arr = xmalloc(sizeof (uint32_t)+sizeof (struct r_idx));
+      pairs[i]->r_arr->nrs = 2;
+      pairs[i]->r_arr->ridx[1].sw_idx = r_out->sw_idx;
+      pairs[i]->r_arr->ridx[1].r_idx = r_out->idx;
+    }
+  }
 
   struct matrix_Tri_express *tmp = xcalloc(1, sizeof *tmp);
-  tmp->elem = xmalloc(sizeof(uint32_t)+sizeof(struct nf_space_pair *));
-  tmp->elem->npairs = 1;
+  tmp->elem = xmalloc(sizeof(uint32_t)+(*insc_count)*sizeof(struct nf_space_pair *));
+  tmp->elem->npairs = *insc_count;
   tmp->row_idx = matrix_idx_get_r(r_in);
   tmp->col_idx = matrix_idx_get_r(r_out);
-
-  struct bdd_saved_arr *bdd_arr_out = bdd_save_arr(v_and);
-
-  pair->in = xcalloc(1, sizeof *(pair->in));// 1,16(两个指针为16)
-  pair->in->lks = copy_links_of_rule(lks);
-  pair->out = xcalloc(1, sizeof *(pair->out));
-  pair->out->lks = copy_links_of_rule(lks_out);
-  pair->r_arr = xmalloc(sizeof (uint32_t)+2*sizeof (struct r_idx));
-  pair->r_arr->nrs = 2;
-  pair->r_arr->ridx[0].sw_idx = r_in->sw_idx;
-  pair->r_arr->ridx[0].r_idx = r_in->idx;
-  pair->r_arr->ridx[1].sw_idx = r_out->sw_idx;
-  pair->r_arr->ridx[1].r_idx = r_out->idx;
-  pair->out->mf = bdd_arr_out;
-
-  if (r_in->mask) {
-    struct mask_uint16_t *mask = xcalloc(1, sizeof *mask);
-    struct mask_uint16_t *rewrite = xcalloc(1, sizeof *rewrite);
-    for (uint32_t j = 0; j < MF_LEN; j++) {
-      mask->v[j] = *(uint16_t *)((uint8_t *)data_arrs+j+r_in->mask);
-      rewrite->v[j] = *(uint16_t *)((uint8_t *)data_arrs+j+r_in->rewrite);
-    }
-    struct mf_uint16_t *r_in_mf = get_r_out_mf(r_in);
-    BDD bdd_in = mf2bdd(r_in_mf);
-    struct bdd_saved_arr *bdd_arr_in = bdd_save_arr(bdd_in);
-    struct bdd_saved_arr *bdd_arr_tmp = bdd_rw_back(bdd_arr_out, bdd_arr_in, mask);
-    free(bdd_arr_in);
-    pair->in->mf = bdd_arr_tmp;
-    pair->mask = mask;
-    pair->rewrite = rewrite;
+  for (int i = 0; i < *insc_count; i++) {
+    tmp->elem->nf_pairs[i] = pairs[i]; 
   }
-  else {
-    pair->in->mf = copy_bdd_saved_arr(bdd_arr_out);
-    pair->mask = NULL;
-    pair->rewrite = NULL;
-  }
-  tmp->elem->nf_pairs[0] = pair;
+  free(pairs);
   return tmp;
 }
 
@@ -2243,7 +2587,7 @@ gen_matrix_CSR_from_Tris(struct Tri_arr *Tri_arr) {
   uint32_t count = 1, last = 0;
   uint32_t begin = 0, count_row = 1;
   // uint32_t check = 0;
-  printf("matrix_CSR %d - %d\n", Tri_arr->arr[21280]->row_idx, Tri_arr->arr[21280]->col_idx);
+  printf("%d - %d\n", Tri_arr->arr[21280]->row_idx, Tri_arr->arr[21280]->col_idx);
 
   for (uint32_t i = 1; i < Tri_arr->nTris; i++) {   
     // for (int i = 0; i < count * MF_LEN; i += MF_LEN) {
@@ -2309,6 +2653,204 @@ is_mf_allx(struct mf_uint16_t *a) {
   return sign;
 }
 
+bool
+mf_can_merge(struct mf_uint16_t *a, struct mf_uint16_t *b) {
+  bool has_one_sign = false;
+
+  // print_mf_uint16_t(a);
+  // print_mf_uint16_t(b);
+  // printf("time count1\n");
+  for (uint32_t i = 0; i < MF_LEN; i++) {
+    if ((a->mf_w[i]) != (b->mf_w[i])){
+      return false;
+    }
+  }
+  for (uint32_t i = 0; i < MF_LEN; i++) {
+    uint16_t xor_tmp = (a->mf_v[i])^(b->mf_v[i]);
+    if (xor_tmp){
+      uint16_t field = 0x8000;
+      for (uint32_t j = 0; j < 16; j++) {
+        if(xor_tmp & field){
+          if (has_one_sign){
+            return false;
+          }
+          has_one_sign = true;
+        }
+        field >>= 1;
+      }
+    }
+  }
+  return true;
+}
+
+struct mf_uint16_t *
+merge_mf(struct mf_uint16_t *a, struct mf_uint16_t *b) {
+
+  // printf("time count merge_mf\n");
+
+  struct mf_uint16_t *tmp = (struct mf_uint16_t *)xcalloc (1, sizeof *tmp);
+  for (uint32_t i = 0; i < MF_LEN; i++) {
+    
+    uint16_t xor_tmp = (a->mf_v[i])^(b->mf_v[i]);
+    if (xor_tmp){
+      tmp->mf_w[i] = a->mf_w[i] + xor_tmp;
+      tmp->mf_v[i] = (a->mf_v[i]) & (~xor_tmp);
+    }
+    else{
+      tmp->mf_w[i] = a->mf_w[i];
+      tmp->mf_v[i] = a->mf_v[i];
+    }
+  }
+
+  free(a);
+  a = NULL;
+  free(b);
+  b = NULL;
+  return tmp;
+}
+
+
+struct Tri_arr *
+gen_Tri_arr(void) {
+  printf("there is wrong\n");
+  uint32_t max_CSR = MAX_VAL_RATE*data_allr_nums*data_allr_nums;
+  // struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+sizeof(struct CS_matrix_idx_v *))
+  struct matrix_Tri_express *Tri_arr[max_CSR];
+  uint32_t nTris = 0;
+  uint32_t rule_nums_in_pre = 0;
+  uint32_t rule_nums_out = 0;
+  for (uint32_t i = 0; i < link_in_rule_file->swl_num; i++) {
+    struct link_to_rule *lout_r = get_link_rules(link_out_rule_file, &rule_nums_out, link_in_rule_file->links[i].link_idx);
+    if (lout_r) {
+      struct link *lk = link_get(lout_r->link_idx);
+      print_link(lk);
+      uint32_t rule_nums_in  = link_in_rule_file->links[i].rule_nums - rule_nums_in_pre;
+      printf("%d: %d-%d\n", lout_r->link_idx, rule_nums_in, rule_nums_out);
+      uint32_t *lin_arrs = (uint32_t *)(link_in_rule_data_arrs + 2*rule_nums_in_pre);
+      uint32_t rule_nums_out_pre = lout_r->rule_nums - rule_nums_out;
+      for (uint32_t i_in = 0; i_in < rule_nums_in; i_in++) {  
+        struct of_rule *r_in = rule_get_2idx(*(uint32_t *)lin_arrs, *(uint32_t *)(lin_arrs+1));
+        struct mf_uint16_t_array *r_in_mf_arr = get_r_in_mf_to_array(r_in);
+        uint32_t *lout_arrs = (uint32_t *)(link_out_rule_data_arrs + 2*rule_nums_out_pre);
+        
+        for (uint32_t i_out = 0; i_out < rule_nums_out; i_out++) {
+          struct of_rule *r_out = rule_get_2idx(*(uint32_t *)lout_arrs, *(uint32_t *)(lout_arrs+1));
+          // // printf("%d-%d,%d-%d;", r_in->sw_idx, r_in->idx, r_out->sw_idx, r_out->idx);
+          struct mf_uint16_t *r_out_mf = get_r_out_mf(r_out); 
+          uint32_t insc_count = 0;
+          uint32_t mfs_count = 0;
+          // struct mf_uint16_t *insc_arr[150000];//这里的大小是有问题的
+          // struct mf_uint16_t *mfs_arr1[200000];
+          struct mf_uint16_t **insc_arr = xmalloc((r_in_mf_arr->n_mfs)*sizeof(struct mf_uint16_t *));
+          // char *buf_mfs;
+          // size_t sz_mfs;
+          // FILE *mfs_arr = open_memstream (&buf_mfs, &sz_mfs);-
+          struct mf_uint16_t *mfs_arr[100000];
+          if(is_mf_allx(r_out_mf)){
+            memcpy(insc_arr, r_in_mf_arr->mfs,(r_in_mf_arr->n_mfs)*sizeof(struct mf_uint16_t *));
+            insc_count = r_in_mf_arr->n_mfs;
+          }
+          else {
+            for (uint32_t i_in_mf = 0; i_in_mf < r_in_mf_arr->n_mfs; i_in_mf++) {
+              if (mfs_count >10000)
+                printf("mfs_count >10000\n");
+
+              struct mf_uint16_t *insc = calc_insc(r_in_mf_arr->mfs[i_in_mf], r_out_mf);
+              if (insc){ //如果有交集，且只有一个
+                insc_arr[insc_count] = insc;
+                insc_count++;
+                struct mf_uint16_t_array *arr_tmp = calc_minus_insc(r_in_mf_arr->mfs[i_in_mf], insc); //剩余部分
+                if (arr_tmp){ //如果有剩余
+                  for (uint32_t j = 0; j < arr_tmp->n_mfs; j++) {                
+                    // mfs_arr[mfs_count] = arr_tmp->mfs[j];
+                    // fwrite (&(arr_tmp->mfs[j]),sizeof (r_out_mf), 1, mfs_arr);
+                    // mfs_count++;
+                    //判断与合并部分
+                    uint32_t mfs_i = 0;
+                    // printf("mfs_count:%d\n", mfs_count);
+                    
+                    for (mfs_i = 0; mfs_i < mfs_count; mfs_i++) {
+                      // printf("mfs_i:%d\n", mfs_i);
+                      // printf("mfs_count:%d\n", mfs_count);
+                      if (mf_can_merge(mfs_arr[mfs_i], arr_tmp->mfs[j])){
+                        mfs_arr[mfs_i] = merge_mf(mfs_arr[mfs_i], arr_tmp->mfs[j]);
+                        break;
+                      }
+                    }
+                    if (mfs_i == mfs_count){
+                      mfs_arr[mfs_count] = arr_tmp->mfs[j];
+                      mfs_count++;
+                    }                    
+                  }
+                  free(arr_tmp);
+                } 
+                free(r_in_mf_arr->mfs[i_in_mf]);  
+                r_in_mf_arr->mfs[i_in_mf] = NULL;           
+              }
+              else{
+                mfs_arr[mfs_count] = r_in_mf_arr->mfs[i_in_mf];
+
+                // fwrite (&(r_in_mf_arr->mfs[i_in_mf]),sizeof (r_out_mf), 1, mfs_arr);
+                mfs_count++;
+              }
+            }
+          }
+
+          // fclose(mfs_arr);
+          if(insc_count){ 
+            // Tri_arr[nTris] = insc_to_Tri_express_rlimit(r_in, r_out, insc_arr, &insc_count);
+            // nTris++;
+            // struct links_of_rule *ls = rule_links_get(r_in, IN_LINK); 
+            // print_links_of_rule(ls);
+            free_insc_arr(insc_arr, &insc_count);
+            if (!mfs_count){
+              free(r_out_mf);
+              //free(buf_mfs);
+              break;
+            }
+            free(r_in_mf_arr);
+            // if(lout_r->link_idx == 43)
+            //   printf("mfs_count%d;", mfs_count);
+
+            r_in_mf_arr = (struct mf_uint16_t_array *)xmalloc(sizeof(uint32_t)+mfs_count*sizeof(r_out_mf));
+            uint32_t n_mfs_count = 0;
+            for (uint32_t j = 0; j < mfs_count; j++) {                
+              uint32_t mfs_i = 0;
+              for (mfs_i = 0; mfs_i < n_mfs_count; mfs_i++) {
+                if (mf_can_merge(r_in_mf_arr->mfs[mfs_i], mfs_arr[j])){
+                  r_in_mf_arr->mfs[mfs_i] = merge_mf(r_in_mf_arr->mfs[mfs_i], mfs_arr[j]);
+                  break;
+                }
+              }
+              if (mfs_i == n_mfs_count){
+                r_in_mf_arr->mfs[n_mfs_count] = mfs_arr[j];
+                n_mfs_count++;
+              }                    
+            }
+
+            r_in_mf_arr->n_mfs = n_mfs_count;
+            // memcpy (r_in_mf_arr->mfs, mfs_arr, mfs_count*sizeof(r_out_mf));
+            // memcpy (r_in_mf_arr->mfs, buf_mfs, mfs_count*sizeof(r_out_mf)); 
+          }
+          lout_arrs += 2;
+          free(r_out_mf);
+          // free(buf_mfs);
+          free(insc_arr);
+        }
+        lin_arrs += 2;
+      }
+    }
+    rule_nums_in_pre = link_in_rule_file->links[i].rule_nums;
+  }
+
+  struct Tri_arr *tmp = xmalloc(sizeof(uint32_t)+nTris*sizeof(struct matrix_Tri_express *));
+  tmp->nTris = nTris;
+  for (uint32_t i = 0; i < nTris; i++){
+    tmp->arr[i] = Tri_arr[i];
+  }
+  return tmp;
+}
+
 struct Tri_arr *
 gen_Tri_arr_bdd(void) {
   uint32_t max_CSR = MAX_VAL_RATE*data_allr_nums*data_allr_nums;
@@ -2318,7 +2860,7 @@ gen_Tri_arr_bdd(void) {
   uint32_t rule_nums_in_pre = 0;
   uint32_t rule_nums_out = 0;
 
-  bdd_init(100000, 3000);
+  bdd_init(60000,3000);
   // bdd_init(1000,300);
   bdd_setvarnum(16*MF_LEN);
 
@@ -2338,58 +2880,170 @@ gen_Tri_arr_bdd(void) {
         struct mf_uint16_t *r_in_mf = get_r_in_mf(r_in);
         uint32_t *lout_arrs = (uint32_t *)(link_out_rule_data_arrs + 2*rule_nums_out_pre);
         v_in = mf2bdd(r_in_mf);
-        // if(i_in == 42){
-        //     print_node(v_in);
-
-        // }
         // bdd_addref(v_in);
         for (uint32_t i_out = 0; i_out < rule_nums_out; i_out++) {
           struct of_rule *r_out = rule_get_2idx(*(uint32_t *)lout_arrs, *(uint32_t *)(lout_arrs+1));
           // // printf("%d-%d,%d-%d;", r_in->sw_idx, r_in->idx, r_out->sw_idx, r_out->idx);
           struct mf_uint16_t *r_out_mf = get_r_out_mf(r_out); 
-          
-
           v_out = mf2bdd(r_out_mf);
           BDD v_and, v_diff;
           v_and = bdd_apply(v_in, v_out, bddop_and);
-                  
+
           if (v_and){
-            // struct mf_uint16_t_array *mfarr = bdd2mf(v_and, 16*MF_LEN);
+            if (lout_r->link_idx == 697)
+            {
+              printf("the and node\n");;
+              print_node(v_and);
+            }
+            struct mf_uint16_t_array *mfarr = bdd2mf(v_and, 16*MF_LEN, lout_r->link_idx);
             // printf("mfarr %d\n", mfarr->n_mfs);
 
-            Tri_arr[nTris] = insc_to_Tri_express_rlimit(r_in, r_out, v_and);
-            nTris++;
+            // Tri_arr[nTris] = insc_to_Tri_express_rlimit(r_in, r_out, mfarr->mfs, &(mfarr->n_mfs));
+            // nTris++;
+            free_mf_uint16_t_array(mfarr);
             v_diff = bdd_apply(v_in, v_and, bddop_diff);
-            // free_mf_uint16_t_array(mfarr);
-            v_diff = bdd_apply(v_in, v_and, bddop_diff);
+            // if (lout_r->link_idx == 697)
+            // {
+            //   print_node(v_diff);
+            // }
+            // bdd_delref(v_in);
+            // bdd_addref(v_diff); 
+            // bdd_gbc();
           }
           else {
             v_diff = v_in;
           } 
+          // bdd_gbc();
           v_in = v_diff;
           lout_arrs += 2;
           free(r_out_mf);
-          
         }
         lin_arrs += 2;
         free(r_in_mf);
         // bdd_delref(v_in); 
+        // printf("the node number is: %d\n", bdd_getnodenum());
         bdd_gbc();
-        // printf("after bdd_gbc\n");
       }  
     }
     rule_nums_in_pre = link_in_rule_file->links[i].rule_nums;
   }
   bdd_done();
-  // print_Tri_express(Tri_arr[2000]);
+  print_Tri_express(Tri_arr[2000]);
   struct Tri_arr *tmp = xmalloc(sizeof(uint32_t)+nTris*sizeof(struct matrix_Tri_express *));
   tmp->nTris = nTris;
   printf("nTris %d\n", nTris);
   for (uint32_t i = 0; i < nTris; i++){
     tmp->arr[i] = Tri_arr[i];
   }
+
   return tmp;
 }
+
+
+struct Tri_arr *
+gen_Tri_arr_backup(void) {
+  uint32_t max_CSR = MAX_VAL_RATE*data_allr_nums*data_allr_nums;
+  // struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+sizeof(struct CS_matrix_idx_v *))
+  struct matrix_Tri_express *Tri_arr[max_CSR];
+  uint32_t nTris = 0;
+  uint32_t rule_nums_in_pre = 0;
+  uint32_t rule_nums_out = 0;
+  for (uint32_t i = 0; i < link_in_rule_file->swl_num; i++) {
+    struct link_to_rule *lout_r = get_link_rules(link_out_rule_file, &rule_nums_out, link_in_rule_file->links[i].link_idx);
+    if (lout_r) {
+      struct link *lk = link_get(lout_r->link_idx);
+      print_link(lk);
+      uint32_t rule_nums_in  = link_in_rule_file->links[i].rule_nums - rule_nums_in_pre;
+      printf("%d: %d-%d\n", lout_r->link_idx, rule_nums_in, rule_nums_out);
+      uint32_t *lin_arrs = (uint32_t *)(link_in_rule_data_arrs + 2*rule_nums_in_pre);
+      uint32_t rule_nums_out_pre = lout_r->rule_nums - rule_nums_out;
+      for (uint32_t i_in = 0; i_in < rule_nums_in; i_in++) {  
+        struct of_rule *r_in = rule_get_2idx(*(uint32_t *)lin_arrs, *(uint32_t *)(lin_arrs+1));
+        struct mf_uint16_t_array *r_in_mf_arr = get_r_in_mf_to_array(r_in);
+        uint32_t *lout_arrs = (uint32_t *)(link_out_rule_data_arrs + 2*rule_nums_out_pre);
+        for (uint32_t i_out = 0; i_out < rule_nums_out; i_out++) {
+
+          struct of_rule *r_out = rule_get_2idx(*(uint32_t *)lout_arrs, *(uint32_t *)(lout_arrs+1));
+          // // printf("%d-%d,%d-%d;", r_in->sw_idx, r_in->idx, r_out->sw_idx, r_out->idx);
+          struct mf_uint16_t *r_out_mf = get_r_out_mf(r_out); 
+          uint32_t insc_count = 0;
+          uint32_t mfs_count = 0;
+          // struct mf_uint16_t *insc_arr[150000];//这里的大小是有问题的
+          // struct mf_uint16_t *mfs_arr1[200000];
+          struct mf_uint16_t **insc_arr = xmalloc((r_in_mf_arr->n_mfs)*sizeof(struct mf_uint16_t *));
+          char *buf_mfs;
+          size_t sz_mfs;
+          FILE *mfs_arr = open_memstream (&buf_mfs, &sz_mfs);
+          if(is_mf_allx(r_out_mf)){
+            memcpy(insc_arr, r_in_mf_arr->mfs,(r_in_mf_arr->n_mfs)*sizeof (struct mf_uint16_t *));
+            insc_count = r_in_mf_arr->n_mfs;
+          }
+          else {
+            for (uint32_t i_in_mf = 0; i_in_mf < r_in_mf_arr->n_mfs; i_in_mf++) {
+              struct mf_uint16_t *insc = calc_insc(r_in_mf_arr->mfs[i_in_mf], r_out_mf);
+              if (insc){
+                insc_arr[insc_count] = insc;
+                insc_count++;
+                struct mf_uint16_t_array *arr_tmp = calc_minus_insc(r_in_mf_arr->mfs[i_in_mf], insc);
+                if (arr_tmp){
+                  for (uint32_t j = 0; j < arr_tmp->n_mfs; j++) {                
+                    // mfs_arr[mfs_count] = arr_tmp->mfs[j];
+                    fwrite (&(arr_tmp->mfs[j]),sizeof (r_out_mf), 1, mfs_arr);
+                    mfs_count++;
+                  }
+                } 
+                free(r_in_mf_arr->mfs[i_in_mf]);  
+                r_in_mf_arr->mfs[i_in_mf] = NULL;           
+              }
+              else{
+                // mfs_arr[mfs_count] = r_in_mf_arr->mfs[i_in_mf];
+
+                fwrite (&(r_in_mf_arr->mfs[i_in_mf]),sizeof (r_out_mf), 1, mfs_arr);
+                mfs_count++;
+              }
+            }
+          }
+
+          fclose(mfs_arr);
+          if(insc_count){ 
+            Tri_arr[nTris] = insc_to_Tri_express_rlimit(r_in, r_out, insc_arr, &insc_count);
+            nTris++;
+            // struct links_of_rule *ls = rule_links_get(r_in, IN_LINK); 
+            // print_links_of_rule(ls);
+            free_insc_arr(insc_arr, &insc_count);
+            if (!mfs_count){
+              free(r_out_mf);
+              free(buf_mfs);
+              break;
+            }
+            free(r_in_mf_arr);
+            // if(lout_r->link_idx == 43)
+            //   printf("mfs_count%d;", mfs_count);
+
+            r_in_mf_arr = (struct mf_uint16_t_array *)xmalloc(sizeof(uint32_t)+mfs_count*sizeof(r_out_mf));
+            r_in_mf_arr->n_mfs = mfs_count;
+            // memcpy (r_in_mf_arr->mfs, mfs_arr, mfs_count*sizeof(r_out_mf));
+            memcpy (r_in_mf_arr->mfs, buf_mfs, mfs_count*sizeof(r_out_mf)); 
+          }
+          lout_arrs += 2;
+          free(r_out_mf);
+          free(buf_mfs);
+          free(insc_arr);
+        }
+        lin_arrs += 2;
+      }
+    }
+    rule_nums_in_pre = link_in_rule_file->links[i].rule_nums;
+  }
+
+  struct Tri_arr *tmp = xmalloc(sizeof(uint32_t)+nTris*sizeof(struct matrix_Tri_express *));
+  tmp->nTris = nTris;
+  for (uint32_t i = 0; i < nTris; i++){
+    tmp->arr[i] = Tri_arr[i];
+  }
+  return tmp;
+}
+
 
 struct matrix_CSR *  //通过对链路文件查找两个同链路的头尾端规则，计算是否连通并添加到矩阵
 gen_sparse_matrix(void) {
@@ -2398,7 +3052,8 @@ gen_sparse_matrix(void) {
   // printf("all num = %d\n", nTris);
   struct matrix_CSR *tmp = gen_matrix_CSR_from_Tris(Tri_arr);
   free(Tri_arr);
-  return tmp;
+  // return tmp;
+  return NULL;
 }
 
 struct matrix_CSC *
@@ -2461,96 +3116,64 @@ gen_CSC_from_CSR(struct matrix_CSR *matrix) {
   return tmp;
 }
 
-struct nf_space_pair *
-nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
-  // printf("starting nf_space_connect\n");
-  if(!is_insc_links(a->out->lks, b->in->lks))
-    return NULL;
-  BDD root_a = load_saved_bddarr(a->out->mf);
-  BDD root_b = load_saved_bddarr(b->in->mf);
-  BDD insc = bdd_apply(root_a, root_b, bddop_and);
-  if (!insc) 
-    return NULL;
-
-  struct bdd_saved_arr *bdd_arr_insc = bdd_save_arr(insc);
-  struct nf_space_pair *pair_tmp = xcalloc(1, sizeof *pair_tmp);
-  pair_tmp->in = xcalloc(1, sizeof *(pair_tmp->in));// 1,16(两个指针为16)
-  pair_tmp->in->lks = copy_links_of_rule(a->in->lks);
-  pair_tmp->out = xcalloc(1, sizeof *(pair_tmp->out));// 1,16(两个指针为16)
-  pair_tmp->out->lks = copy_links_of_rule(b->out->lks);
-
-  if (a->mask) {
-    pair_tmp->in->mf = bdd_rw_back(bdd_arr_insc, a->in->mf, a->mask);
-    if (b->mask) {
-      pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
-      pair_tmp->rewrite = xcalloc(1, sizeof *(pair_tmp->rewrite));
-      for (uint32_t j = 0; j < MF_LEN; j++) {
-        pair_tmp->mask->v[j] = (a->mask->v[j])&(b->mask->v[j]);
-        pair_tmp->rewrite->v[j] = ((a->rewrite->v[j])&(b->mask->v[j])) + ((b->rewrite->v[j])&(~(b->mask->v[j])));
-      }
-    }
-    else{
-      pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
-      pair_tmp->rewrite = xcalloc(1, sizeof *(pair_tmp->rewrite));
-      for (uint32_t j = 0; j < MF_LEN; j++) {
-        pair_tmp->mask->v[j] = a->mask->v[j];
-        pair_tmp->rewrite->v[j] = a->rewrite->v[j];
-      }
-    }     
-  }
-  else{    
-    pair_tmp->in->mf = copy_bdd_saved_arr(bdd_arr_insc);;
-    if (!(b->mask)) {
-      pair_tmp->mask = NULL;
-      pair_tmp->rewrite = NULL;
-    }
-  }
-  if (b->mask) {
-    pair_tmp->out->mf = bdd_rw(bdd_arr_insc, b->mask, b->rewrite);
-    if (!(a->mask)){
-      pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
-      pair_tmp->rewrite = xcalloc(1, sizeof *(pair_tmp->rewrite));
-      for (uint32_t j = 0; j < MF_LEN; j++) {
-        pair_tmp->mask->v[j] = b->mask->v[j];
-        pair_tmp->rewrite->v[j] = b->rewrite->v[j];
-      }
-    }
-  }
-  else{
-    pair_tmp->out->mf = copy_bdd_saved_arr(bdd_arr_insc);//建立copy
-  }
-  free(bdd_arr_insc);
-  pair_tmp->r_arr = xmalloc(sizeof (uint32_t)+(a->r_arr->nrs+b->r_arr->nrs -1)*sizeof (struct r_idx));
-  pair_tmp->r_arr->nrs = a->r_arr->nrs+b->r_arr->nrs -1;
-  for (uint32_t i = 0; i < a->r_arr->nrs; i++) {
-    pair_tmp->r_arr->ridx[i].sw_idx = a->r_arr->ridx[i].sw_idx;
-    pair_tmp->r_arr->ridx[i].r_idx = a->r_arr->ridx[i].r_idx;
-  }
-  for (uint32_t i = 0; i < b->r_arr->nrs -1; i++) {
-    pair_tmp->r_arr->ridx[i+a->r_arr->nrs].sw_idx = b->r_arr->ridx[i+1].sw_idx;
-    pair_tmp->r_arr->ridx[i+a->r_arr->nrs].r_idx = b->r_arr->ridx[i+1].r_idx;
-  }
-  return pair_tmp;
-}
 
 struct matrix_element * //a*b,a作用b，不可交换
-elem_connect(struct matrix_element *a, struct matrix_element *b) { 
-  // if (check){
-  //   printf("there is elem_connect begin\n");
-  // }
-  struct nf_space_pair *nps[10000];
+elem_connect(struct matrix_element *a, struct matrix_element *b, uint32_t check) { 
+  if (check){
+    printf("there is elem_connect begin\n");
+  }
+  struct nf_space_pair *nps[30000];
   // printf("%d\n", a->npairs*b->npairs);
   uint32_t count = 0;
   for (uint32_t i = 0; i < a->npairs; i++) {
+    // if (check){
+    //   if (i > 4000){
+    //     printf("%d begin\n", i);
+    //     // printf("a->npairs %d\n", a->npairs);
+    //   }
+    // }
     struct nf_space_pair *np_a = a->nf_pairs[i];
+    // if (check){
+    //   if (i > 1476)
+    //     printf("%d np_a\n", i);
+    // }
+
     for (uint32_t j = 0; j < b->npairs; j++) {
+      // if (check){
+      //   if (i == 1476){
+      //     printf("j = %d test begin\n", j);
+      //     // if(j == 27){
+      //     //   printf("j = 27 test begin\n");
+      //     //   printf("b->npairs %d\n", b->npairs);
+      //     // }
+      //   }
+      // }
       struct nf_space_pair *result = nf_space_connect(np_a, b->nf_pairs[j]);
+      // if (check){
+      //   if (i == 1476){
+      //     if(j == 1){
+      //       printf("end test\n");
+      //       printf("count %d,\n", count);
+      //     }
+
+      //   }
+      // }
       if (result) {
         nps[count] = result;
         count++;
       }
+      
     }
+    // if (check){
+    //   if (i > 1476){
+    //     printf("%d end\n", i);
+    //   }
+    // }
   }
+  if (check){
+    printf("elem_connect end for\n");
+  }
+  // printf("count%d\n", count);
   struct matrix_element *tmp = NULL;
   if (count) {
     tmp = xmalloc(sizeof(struct matrix_element) + count*sizeof(struct nf_space_pair *));
@@ -2563,23 +3186,34 @@ elem_connect(struct matrix_element *a, struct matrix_element *b) {
 }
 
 struct matrix_element *
-row_col_multiply(struct CS_matrix_idx_v_arr *row, struct CS_matrix_idx_v_arr *col) {
+row_col_multiply(struct CS_matrix_idx_v_arr *row, struct CS_matrix_idx_v_arr *col, uint32_t check) {
+  if (check){
+    printf("there is row_col begin\n");
+  }
   uint32_t num_row = row->nidx_vs;
   uint32_t num_col = col->nidx_vs;
-
+  uint32_t check_1 = 0;
+  if (check){
+    printf("num_row %d, num_col %d\n", num_row, num_col);
+  }
   if ((row->idx_vs[0]->idx > col->idx_vs[num_col-1]->idx)||(row->idx_vs[num_row-1]->idx < col->idx_vs[0]->idx)) 
     return NULL;
-
+  if (check){
+    printf("there is row_col check\n");
+  }
   uint32_t count_row = 0, count_col = 0;
   struct matrix_element *tmp = NULL;
   struct matrix_element *elem_tmp = NULL;
   for (uint32_t i = 0; i < num_row + num_col; i++) {
-
     if ((row->idx_vs[count_row]->idx) == (col->idx_vs[count_col]->idx)){
-
-      elem_tmp = elem_connect(row->idx_vs[count_row]->elem, col->idx_vs[count_col]->elem);
+      if (check){
+        if (i == 7)
+          check_1 = 1;
+      }
+      elem_tmp = elem_connect(row->idx_vs[count_row]->elem, col->idx_vs[count_col]->elem, check_1);
       tmp = matrix_elem_plus(tmp, elem_tmp);
       elem_tmp = NULL;
+      // tmp = elem_tmp;
       count_col++;
       count_row++;
     }
@@ -2589,20 +3223,25 @@ row_col_multiply(struct CS_matrix_idx_v_arr *row, struct CS_matrix_idx_v_arr *co
       count_row++;
     if ((count_row >= num_row)||(count_col>=num_col))
       break;
-    if (bdd_getnodenum() > BDDSIZE - 5000)
-      bdd_gbc_fastall();
+  }
+  if (check){
+    printf("after for\n");
+  }
+
+  if (check){
+    printf("after free\n");
   }
   return tmp;
 }
 
 struct CS_matrix_idx_v_arr *
-row_multi_col_multiply(struct CS_matrix_idx_v_arr *row, uint32_t *arr, uint32_t count, struct matrix_CSC *matrix_CSC) {
+row_multi_col_multiply(struct CS_matrix_idx_v_arr *row, uint32_t *arr, uint32_t count, struct matrix_CSC *matrix_CSC, uint32_t check) {
   struct CS_matrix_idx_v_arr *tmp = NULL;
   struct CS_matrix_idx_v *vs[data_allr_nums];
   uint32_t vs_count = 0;
   
   for (uint32_t i = 0; i < count; i++){
-    struct matrix_element *elem_tmp = row_col_multiply(row, matrix_CSC->cols[arr[i]]);
+    struct matrix_element *elem_tmp = row_col_multiply(row, matrix_CSC->cols[arr[i]], check);
     if (elem_tmp) {
       vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
       vs[vs_count]->idx = arr[i];
@@ -2618,44 +3257,59 @@ row_multi_col_multiply(struct CS_matrix_idx_v_arr *row, uint32_t *arr, uint32_t 
       tmp->idx_vs[i] = vs[i];
   }
   // qsort
-  if (bdd_getnodenum() > (BDDSIZE - 10000))
-    bdd_gbc();
   return tmp;
 }
 
 struct CS_matrix_idx_v_arr *
-row_all_col_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSC *matrix_CSC) {
+row_all_col_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSC *matrix_CSC, uint32_t check) {
   struct CS_matrix_idx_v_arr *tmp = NULL;
   struct CS_matrix_idx_v *vs[data_allr_nums];
   uint32_t vs_count = 0;
-
+  uint32_t check_1 = 0;
+  if (check){
+    printf("row_all_col begin\n");
+  }
   for (uint32_t i = 0; i < matrix_CSC->ncols; i++){
     if ( matrix_CSC->cols[i]){
-      struct matrix_element *elem_tmp = row_col_multiply(row, matrix_CSC->cols[i]);
+      if (check){
+        // printf("i = %d\n", i);
+        if (i == 3438){
+          check_1 = 1;
+        }
+      }
+      struct matrix_element *elem_tmp = row_col_multiply(row, matrix_CSC->cols[i], check_1);
       if (elem_tmp) {
         vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
         vs[vs_count]->idx = i;
         vs[vs_count]->elem = elem_tmp;
         vs_count++;
       }
-    }   
+    }
+  }
+  if (check){
+    printf("row_all_col end for\n");
   }
   if(vs_count){
-    // printf("%d\n", vs_count);
+    printf("%d\n", vs_count);
     tmp = xmalloc(sizeof(uint32_t) + vs_count*sizeof(struct CS_matrix_idx_v *));
     tmp->nidx_vs = vs_count;
     // memcpy (tmp->idx_vs, vs, vs_count*sizeof(struct CS_matrix_idx_v *)); 
     for (uint32_t i = 0; i < vs_count; i++)
       tmp->idx_vs[i] = vs[i];
   }
-  // printf("the node number = %d\n", bdd_getnodenum());
-  if (bdd_getnodenum() > BDDSIZE - 10000)
-    bdd_gbc();
+  //qsort
+
   return tmp;
 }
 
 struct matrix_CSR *
 sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix_CSC) {
+  // uint32_t valid_n = 0;
+  // for (uint32_t i = 0; i < matrix_CSR->nrows; i++) {
+  //   if(matrix_CSR->rows[i])
+  //     valid_n += matrix_CSR->rows[i]->nidx_vs;
+  // }
+
   uint32_t threshold = matrix_CSR->nrows/600;
   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+data_allr_nums*sizeof(struct CS_matrix_idx_v_arr *));
   tmp->nrows = data_allr_nums;
@@ -2663,18 +3317,20 @@ sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix_
     tmp->rows[i] = NULL;
   }
 
-  bdd_init(BDDSIZE, BDDOPCHCHE);
-  bdd_setvarnum(16*MF_LEN);
+
   for (uint32_t i = 0; i < matrix_CSR->nrows; i++) {
     if (matrix_CSR->rows[i]){
+      // printf("%d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
+      // tmp->rows[i] = row_all_col_multiply(matrix_CSR->rows[i], matrix_CSC);
+      
       if (matrix_CSR->rows[i]->nidx_vs < threshold) {
-        printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
-        // if (matrix_CSR->rows[i]->nidx_vs == 1){
-        //   uint32_t idx = matrix_CSR->rows[i]->idx_vs[0]->idx;
-          // if (matrix_CSR->rows[idx]){
-          //   printf("%d\n",matrix_CSR->rows[idx]->nidx_vs);
-          // } 
-        // }
+        printf("%d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
+        if (matrix_CSR->rows[i]->nidx_vs == 1){
+          uint32_t idx = matrix_CSR->rows[i]->idx_vs[0]->idx;
+          if (matrix_CSR->rows[idx]){
+            printf("%d\n",matrix_CSR->rows[idx]->nidx_vs);
+          } 
+        }
         // uint32_t arr[threshold*matrix_CSR->nrows];
         uint32_t *arr = xmalloc((threshold*matrix_CSR->nrows)*sizeof(uint32_t));
         uint32_t count = 0;
@@ -2683,7 +3339,7 @@ sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix_
           uint32_t col_row = row->idx_vs[j]->idx;
           struct CS_matrix_idx_v_arr *row_tmp = matrix_CSR->rows[col_row];
           if (row_tmp){
-            for (uint32_t k = 0; k < row_tmp->nidx_vs; k++){
+            for (uint32_t k = 0; k < row_tmp->nidx_vs; k++){ 
               arr[count] = row_tmp->idx_vs[k]->idx;
               count++;
             }
@@ -2700,21 +3356,23 @@ sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix_
               count1++;
             }
           }
-          tmp->rows[i] = row_multi_col_multiply(row, arr1, count1, matrix_CSC);
+          printf("%d\n", count1);
+          
+          tmp->rows[i] = row_multi_col_multiply(row, arr1, count1, matrix_CSC, 0);
         }
         free(arr);
       }
       else{
-        printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
-        tmp->rows[i] = row_all_col_multiply(matrix_CSR->rows[i], matrix_CSC);
+        printf("%d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
+
+        uint32_t check = 0;
+        if (i == 2875){
+            check = 1;
+          }   
+        tmp->rows[i] = row_all_col_multiply(matrix_CSR->rows[i], matrix_CSC, check);
       }
     }
   }
-  // printf("row number:%d\n", matrix_CSR->nrows);
-  // printf("tmp:%d\n", tmp->nrows);
-  bdd_done();
-  // printf("row number:%d\n", matrix_CSR->nrows);
-  // printf("tmp:%d\n", tmp->nrows);
   return tmp;
 }
 

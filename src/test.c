@@ -130,7 +130,6 @@ print_linktorule_test(void) {
   }
 }
 
-
 int
 main (int argc, char **argv)
 {
@@ -141,13 +140,13 @@ main (int argc, char **argv)
   // test();
 
   // 加载net数据
-  // char *net = "stanford";
-  char *net = "stanford_whole";
+  char *net = "stanford";
+  // char *net = "stanford_whole";
   // bool one_step = false;
   load (net);
-  // struct sw *sw0 = sw_get(3);
+  // struct sw *sw0 = sw_get(0);
   // printf("sw%d\n", sw0->sw_idx);
-  // struct of_rule *rule1 = rule_get(sw0, 10);
+  // struct of_rule *rule1 = rule_get(sw0, 22);
   // print_rule(rule1);
 
 
@@ -159,7 +158,7 @@ main (int argc, char **argv)
   link_data_load (linkdir);
   // gettimeofday(&start,NULL);
   // struct matrix_buf *matrix_buf = matrix_init();
-  // matrix_idx = matrix_idx_init ();
+  matrix_idx = matrix_idx_init ();
  
   // calc_set_test();
   
@@ -174,21 +173,27 @@ main (int argc, char **argv)
   // print_rule(r);
 
   // 生成稀疏矩阵
+  gettimeofday(&start,NULL);
   struct matrix_CSR *matrix_CSR = gen_sparse_matrix(); 
+  gettimeofday(&stop,NULL);
+  long long int gen_CSR = diff(&stop, &start)/1000;
   data_unload();
-  // if (matrix_CSR->rows[2940])
-  // {
-  //   printf("num:%d\n", matrix_CSR->rows[2940]->idx_vs[868]->idx);
-  // }
-  // 
-  // struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
+
+  // printf("Staring matrix_CSC gen\n");
+  gettimeofday(&start,NULL);
+  struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
+  gettimeofday(&stop,NULL);
+  long long int gen_CSC = diff(&stop, &start)/1000;
   
+
+  // printf("matrix_CSC gen:%lld us", diff(&stop, &start));
   
   // print_CSR_elem_from_idx(2940,200,matrix_CSR);
   // print_CSC_elem_from_idx(2940,200,matrix_CSC);
-  // gettimeofday(&start,NULL); 
-  // struct matrix_CSR *muti1_CSR = sparse_matrix_multiply(matrix_CSR, matrix_CSC);
-  // gettimeofday(&stop,NULL);
+  gettimeofday(&start,NULL); 
+  struct matrix_CSR *muti1_CSR = sparse_matrix_multiply(matrix_CSR, matrix_CSC);
+  gettimeofday(&stop,NULL);
+  long long int squre = diff(&stop, &start)/1000;
   // printf("matrix_buf squre:%lld us", diff(&stop, &start));
   
   
@@ -224,9 +229,13 @@ main (int argc, char **argv)
 
   // // printf ("%s \n",data_strs);
   // res_free (in);
-
-  // free_matrix_buf(matrix_buf);
-  // free(matrix_idx);
+  printf("gen CSR: %lld ms\n", gen_CSR);
+  printf("gen CSC: %lld ms\n", gen_CSC);
+  printf("matrix squre: %lld ms\n", squre);
+  free_matrix_CSR(matrix_CSR);
+  free_matrix_CSC_fr_CSR(matrix_CSC);
+  free_matrix_CSR(muti1_CSR);
+  free(matrix_idx);
   
   return 0;
 }

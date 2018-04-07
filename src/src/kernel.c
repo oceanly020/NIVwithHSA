@@ -1051,7 +1051,7 @@ void bdd_gbc(void)
    for (n=0 ; n<bddnodesize ; n++)
    {
       if (bddnodes[n].refcou > 0)
-	 bdd_mark(n);
+        bdd_mark(n);
       bddnodes[n].hash = 0;
    }
    

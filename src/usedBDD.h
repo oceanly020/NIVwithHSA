@@ -983,7 +983,7 @@ int bdd_save(FILE *ofile, BDD r)
 {
    int err, n=0;
 
-   if (r < 2)
+   if (r < 2)//0 1 两个节点，也就是只有一个节点的时候
    {
       fprintf(ofile, "0 0 %d\n", r);
       return 0;
@@ -991,13 +991,13 @@ int bdd_save(FILE *ofile, BDD r)
    
    bdd_markcount(r, &n);
    bdd_unmark(r);
-   fprintf(ofile, "%d %d\n", n, bddvarnum);
+   fprintf(ofile, "%d %d\n", n, bddvarnum);//在文件开头记录总数量n，和变量数目
 
    for (n=0 ; n<bddvarnum ; n++)
-      fprintf(ofile, "%d ", bddvar2level[n]);
-   fprintf(ofile, "\n");
+      fprintf(ofile, "%d ", bddvar2level[n]);//把bddvarnum转化为level保存
+   fprintf(ofile, "\n");//然后下一行
    
-   err = bdd_save_rec(ofile, r);
+   err = bdd_save_rec(ofile, r);//保存结构
    bdd_unmark(r);
 
    return err;
@@ -1005,7 +1005,7 @@ int bdd_save(FILE *ofile, BDD r)
 
 static int bdd_save_rec(FILE *ofile, int root)
 {
-   BddNode *node = &bddnodes[root];
+   BddNode *node = &bddnodes[root]; 
    int err;
    
    if (root < 2)
@@ -6103,16 +6103,16 @@ void bdd_gbc(void)
    int n;
    long int c2, c1 = clock();
 
-   if (gbc_handler != NULL)
-   {
-      bddGbcStat s;
-      s.nodes = bddnodesize;
-      s.freenodes = bddfreenum;
-      s.time = 0;
-      s.sumtime = gbcclock;
-      s.num = gbcollectnum;
-      gbc_handler(1, &s);
-   }
+   // if (gbc_handler != NULL)
+   // {
+   //    bddGbcStat s;
+   //    s.nodes = bddnodesize;
+   //    s.freenodes = bddfreenum;
+   //    s.time = 0;
+   //    s.sumtime = gbcclock;
+   //    s.num = gbcollectnum;
+   //    gbc_handler(1, &s);
+   // }
    
    for (r=bddrefstack ; r<bddrefstacktop ; r++)
       bdd_mark(*r);
@@ -6159,16 +6159,33 @@ void bdd_gbc(void)
    gbcclock += c2-c1;
    gbcollectnum++;
 
-   if (gbc_handler != NULL)
-   {
-      bddGbcStat s;
-      s.nodes = bddnodesize;
-      s.freenodes = bddfreenum;
-      s.time = c2-c1;
-      s.sumtime = gbcclock;
-      s.num = gbcollectnum;
-      gbc_handler(0, &s);
+   // if (gbc_handler != NULL)
+   // {
+   //    bddGbcStat s;
+   //    s.nodes = bddnodesize;
+   //    s.freenodes = bddfreenum;
+   //    s.time = c2-c1;
+   //    s.sumtime = gbcclock;
+   //    s.num = gbcollectnum;
+   //    gbc_handler(0, &s);
+   // }
+}
+
+void bdd_gbc_fastall(void)
+{
+   
+   int n;
+   for (n=0 ; n<bddnodesize ; n++)
+      bddnodes[n].hash = 0;  
+   bddfreepos = 0;
+   bddfreenum = bddnodesize - 2;
+   for (n=bddnodesize-1 ; n>=2 ; n--){
+      register BddNode *node = &bddnodes[n];
+      LOWp(node) = -1;
+      node->next = bddfreepos;
+      bddfreepos = n;
    }
+   bdd_operator_reset();
 }
 
 BDD bdd_addref(BDD root)
@@ -6509,7 +6526,6 @@ typedef struct s_Domain
 } Domain;
 
 static void Domain_allocate(Domain*, int);
-static void Domain_allocate1(Domain*, int);
 static void Domain_done(Domain*);
 
 static int    firstbddvar;
@@ -6573,7 +6589,7 @@ int fdd_extdomain(int *dom, int num)
       /* Create bdd variable tables */
    for (n=0 ; n<num ; n++)
    {
-      Domain_allocate1(&domain[n+fdvarnum], dom[n]);
+      Domain_allocate(&domain[n+fdvarnum], dom[n]);
       extravars += domain[n+fdvarnum].binsize;
    }
 
@@ -7188,32 +7204,6 @@ static void Domain_allocate(Domain* d, int range)
    d->ivar = (int *)malloc(sizeof(int)*d->binsize);
    d->var = bddtrue;
 }
-
-static void Domain_allocate1(Domain* d, int range)
-{
-   // int calcsize = 2;
-   
-   // if (range <= 0  || range > INT_MAX/2)
-   // {
-   //    bdd_error(BDD_RANGE);
-   //    return;
-   // }
-
-   // d->realsize = range;
-   d->binsize = range;
-
-   // while (calcsize < range)
-   // {
-   //    d->binsize++;
-   //    calcsize <<= 1;
-   // }
-
-   d->ivar = (int *)malloc(sizeof(int)*d->binsize);
-   d->var = bddtrue;
-}
-
-
-
 
 
 int *fdddec2bin(int var, int val)
