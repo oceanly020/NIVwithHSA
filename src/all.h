@@ -2066,6 +2066,7 @@ print_bdd_saved_arr(struct bdd_saved_arr *bdd_arr){
 
 struct matrix_Tri_express * 
 insc_to_Tri_express_rlimit(struct of_rule *r_in, struct of_rule *r_out, BDD v_and) {
+
   struct nf_space_pair *pair = xcalloc(1, sizeof *pair);
   struct links_of_rule *lks = rule_links_get(r_in, IN_LINK);
   struct links_of_rule *lks_out = rule_links_get(r_in, OUT_LINK);
@@ -2085,13 +2086,14 @@ insc_to_Tri_express_rlimit(struct of_rule *r_in, struct of_rule *r_out, BDD v_an
   pair->out = xcalloc(1, sizeof *(pair->out));
   pair->out->lks = copy_links_of_rule(lks_out);
   pair->r_arr = xmalloc(sizeof (uint32_t)+2*sizeof (struct r_idx));
+
+
   pair->r_arr->nrs = 2;
   pair->r_arr->ridx[0].sw_idx = r_in->sw_idx;
   pair->r_arr->ridx[0].r_idx = r_in->idx;
   pair->r_arr->ridx[1].sw_idx = r_out->sw_idx;
   pair->r_arr->ridx[1].r_idx = r_out->idx;
   pair->out->mf = bdd_arr_out;
-
   if (r_in->mask) {
     struct mask_uint16_t *mask = xcalloc(1, sizeof *mask);
     struct mask_uint16_t *rewrite = xcalloc(1, sizeof *rewrite);
@@ -2218,17 +2220,20 @@ matrix_elem_plus_test(struct matrix_element *a){
 
 struct matrix_CSR *
 gen_matrix_CSR_from_Tris(struct Tri_arr *Tri_arr) {
+
   if (Tri_arr->nTris==0){
     return NULL;
   }
+  printf("matrix_CSR\n");
   // printf("there is wrong: %d - %d\n", data_allr_nums, Tri_arr->nTris);
   qsort(Tri_arr->arr, Tri_arr->nTris,sizeof (struct matrix_Tri_express *), cmp_matrix_Tri_express);
-
+  printf("matrix_CSR\n");
   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+data_allr_nums*sizeof(struct CS_matrix_idx_v_arr *));
   tmp->nrows = data_allr_nums;
   for (int i = 0; i < data_allr_nums; i++){
     tmp->rows[i] = NULL;
   }
+  // printf("matrix_CSR\n");
   struct matrix_Tri_express *Tri_arr_tmp[Tri_arr->nTris];
   Tri_arr_tmp[0] = Tri_arr->arr[0];
   if (Tri_arr->nTris==1){   
@@ -2243,7 +2248,7 @@ gen_matrix_CSR_from_Tris(struct Tri_arr *Tri_arr) {
   uint32_t count = 1, last = 0;
   uint32_t begin = 0, count_row = 1;
   // uint32_t check = 0;
-  printf("matrix_CSR %d - %d\n", Tri_arr->arr[21280]->row_idx, Tri_arr->arr[21280]->col_idx);
+  // printf("matrix_CSR %d - %d\n", Tri_arr->arr[21280]->row_idx, Tri_arr->arr[21280]->col_idx);
 
   for (uint32_t i = 1; i < Tri_arr->nTris; i++) {   
     // for (int i = 0; i < count * MF_LEN; i += MF_LEN) {
@@ -2255,10 +2260,6 @@ gen_matrix_CSR_from_Tris(struct Tri_arr *Tri_arr) {
     }
     Tri_arr_tmp[count] = Tri_arr->arr[i];
     if (Tri_arr_tmp[count]->row_idx != Tri_arr_tmp[count-1]->row_idx) {
-      // if (Tri_arr_tmp[count-1]->row_idx== 2940){
-      //   printf("%d-%d\n",Tri_arr_tmp[count-1]->row_idx, Tri_arr_tmp[begin]->row_idx);
-      //   printf("%d\n",count_row);
-      // }
       uint32_t row_idx = Tri_arr_tmp[begin]->row_idx;     
       tmp->rows[row_idx] = xmalloc(sizeof(uint32_t)+count_row*sizeof(struct CS_matrix_idx_v *));
       // if(!(tmp->rows[row_idx]))
@@ -2312,7 +2313,6 @@ is_mf_allx(struct mf_uint16_t *a) {
 struct Tri_arr *
 gen_Tri_arr_bdd(void) {
   uint32_t max_CSR = MAX_VAL_RATE*data_allr_nums*data_allr_nums;
-  // struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+sizeof(struct CS_matrix_idx_v *))
   struct matrix_Tri_express *Tri_arr[max_CSR];
   uint32_t nTris = 0;
   uint32_t rule_nums_in_pre = 0;
@@ -2338,14 +2338,11 @@ gen_Tri_arr_bdd(void) {
         struct mf_uint16_t *r_in_mf = get_r_in_mf(r_in);
         uint32_t *lout_arrs = (uint32_t *)(link_out_rule_data_arrs + 2*rule_nums_out_pre);
         v_in = mf2bdd(r_in_mf);
-        // if(i_in == 42){
-        //     print_node(v_in);
-
-        // }
+  
         // bdd_addref(v_in);
         for (uint32_t i_out = 0; i_out < rule_nums_out; i_out++) {
           struct of_rule *r_out = rule_get_2idx(*(uint32_t *)lout_arrs, *(uint32_t *)(lout_arrs+1));
-          // // printf("%d-%d,%d-%d;", r_in->sw_idx, r_in->idx, r_out->sw_idx, r_out->idx);
+          // printf("%d-%d,%d-%d;", r_in->sw_idx, r_in->idx, r_out->sw_idx, r_out->idx);
           struct mf_uint16_t *r_out_mf = get_r_out_mf(r_out); 
           
 
@@ -2354,9 +2351,6 @@ gen_Tri_arr_bdd(void) {
           v_and = bdd_apply(v_in, v_out, bddop_and);
                   
           if (v_and){
-            // struct mf_uint16_t_array *mfarr = bdd2mf(v_and, 16*MF_LEN);
-            // printf("mfarr %d\n", mfarr->n_mfs);
-
             Tri_arr[nTris] = insc_to_Tri_express_rlimit(r_in, r_out, v_and);
             nTris++;
             v_diff = bdd_apply(v_in, v_and, bddop_diff);
@@ -2375,13 +2369,12 @@ gen_Tri_arr_bdd(void) {
         free(r_in_mf);
         // bdd_delref(v_in); 
         bdd_gbc();
-        // printf("after bdd_gbc\n");
       }  
     }
     rule_nums_in_pre = link_in_rule_file->links[i].rule_nums;
   }
   bdd_done();
-  // print_Tri_express(Tri_arr[2000]);
+
   struct Tri_arr *tmp = xmalloc(sizeof(uint32_t)+nTris*sizeof(struct matrix_Tri_express *));
   tmp->nTris = nTris;
   printf("nTris %d\n", nTris);
@@ -2431,8 +2424,8 @@ gen_CSC_from_CSR(struct matrix_CSR *matrix) {
   tmp->ncols = data_allr_nums;
   for (int i = 0; i < data_allr_nums; i++)
     tmp->cols[i] = NULL;
-  uint32_t begin = 0, count_col = 1;
 
+  uint32_t begin = 0, count_col = 1;
   for (uint32_t i = 1; i < count; i++) {
     if (Tri_arr[i]->col_idx != Tri_arr[i-1]->col_idx) {
       uint32_t col_idx = Tri_arr[begin]->col_idx;
@@ -2535,9 +2528,6 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
 
 struct matrix_element * //a*b,a作用b，不可交换
 elem_connect(struct matrix_element *a, struct matrix_element *b) { 
-  // if (check){
-  //   printf("there is elem_connect begin\n");
-  // }
   struct nf_space_pair *nps[10000];
   // printf("%d\n", a->npairs*b->npairs);
   uint32_t count = 0;
@@ -2555,9 +2545,8 @@ elem_connect(struct matrix_element *a, struct matrix_element *b) {
   if (count) {
     tmp = xmalloc(sizeof(struct matrix_element) + count*sizeof(struct nf_space_pair *));
     tmp->npairs = count;
-    for (int i = 0; i < count; i++) {
+    for (int i = 0; i < count; i++) 
       tmp->nf_pairs[i] = nps[i]; 
-    }
   }
   return tmp;
 }
@@ -2574,9 +2563,7 @@ row_col_multiply(struct CS_matrix_idx_v_arr *row, struct CS_matrix_idx_v_arr *co
   struct matrix_element *tmp = NULL;
   struct matrix_element *elem_tmp = NULL;
   for (uint32_t i = 0; i < num_row + num_col; i++) {
-
     if ((row->idx_vs[count_row]->idx) == (col->idx_vs[count_col]->idx)){
-
       elem_tmp = elem_connect(row->idx_vs[count_row]->elem, col->idx_vs[count_col]->elem);
       tmp = matrix_elem_plus(tmp, elem_tmp);
       elem_tmp = NULL;
@@ -2641,14 +2628,12 @@ row_all_col_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSC *matrix_
     }   
   }
   if(vs_count){
-    // printf("%d\n", vs_count);
     tmp = xmalloc(sizeof(uint32_t) + vs_count*sizeof(struct CS_matrix_idx_v *));
     tmp->nidx_vs = vs_count;
     // memcpy (tmp->idx_vs, vs, vs_count*sizeof(struct CS_matrix_idx_v *)); 
     for (uint32_t i = 0; i < vs_count; i++)
       tmp->idx_vs[i] = vs[i];
   }
-  // printf("the node number = %d\n", bdd_getnodenum());
   if (bdd_getnodenum() > BDDSIZE - 10000)
     bdd_gbc();
   return tmp;
@@ -2659,9 +2644,8 @@ sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix_
   uint32_t threshold = matrix_CSR->nrows/600;
   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+data_allr_nums*sizeof(struct CS_matrix_idx_v_arr *));
   tmp->nrows = data_allr_nums;
-  for (uint32_t i = 0; i < data_allr_nums; i++){
+  for (uint32_t i = 0; i < data_allr_nums; i++)
     tmp->rows[i] = NULL;
-  }
 
   bdd_init(BDDSIZE, BDDOPCHCHE);
   bdd_setvarnum(16*MF_LEN);
@@ -2669,12 +2653,6 @@ sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix_
     if (matrix_CSR->rows[i]){
       if (matrix_CSR->rows[i]->nidx_vs < threshold) {
         printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
-        // if (matrix_CSR->rows[i]->nidx_vs == 1){
-        //   uint32_t idx = matrix_CSR->rows[i]->idx_vs[0]->idx;
-          // if (matrix_CSR->rows[idx]){
-          //   printf("%d\n",matrix_CSR->rows[idx]->nidx_vs);
-          // } 
-        // }
         // uint32_t arr[threshold*matrix_CSR->nrows];
         uint32_t *arr = xmalloc((threshold*matrix_CSR->nrows)*sizeof(uint32_t));
         uint32_t count = 0;
@@ -2710,11 +2688,21 @@ sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix_
       }
     }
   }
-  // printf("row number:%d\n", matrix_CSR->nrows);
-  // printf("tmp:%d\n", tmp->nrows);
+
   bdd_done();
   // printf("row number:%d\n", matrix_CSR->nrows);
   // printf("tmp:%d\n", tmp->nrows);
   return tmp;
 }
 
+int
+get_value_num_matrix_CSR(struct matrix_CSR *matrix_CSR) {
+  int count = 0;
+  for (uint32_t i = 0; i < matrix_CSR->nrows; i++) {
+    if (matrix_CSR->rows[i]){
+      count += matrix_CSR->rows[i]->nidx_vs;
+    }
+  }
+  return count;
+
+}

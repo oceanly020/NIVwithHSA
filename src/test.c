@@ -173,6 +173,12 @@ main (int argc, char **argv)
   // print_rule(r);
 
   // 生成稀疏矩阵
+
+  // gettimeofday(&start,NULL);
+  // struct Tri_arr *Tri_arr = gen_Tri_arr_bdd();
+  // gettimeofday(&stop,NULL);
+  // long long int gen_Tri_arr = diff(&stop, &start)/1000;
+
   gettimeofday(&start,NULL);
   struct matrix_CSR *matrix_CSR = gen_sparse_matrix(); 
   gettimeofday(&stop,NULL);
@@ -190,13 +196,54 @@ main (int argc, char **argv)
   
   // print_CSR_elem_from_idx(2940,200,matrix_CSR);
   // print_CSC_elem_from_idx(2940,200,matrix_CSC);
-  gettimeofday(&start,NULL); 
+  gettimeofday(&start,NULL);
   struct matrix_CSR *muti1_CSR = sparse_matrix_multiply(matrix_CSR, matrix_CSC);
   gettimeofday(&stop,NULL);
   long long int squre = diff(&stop, &start)/1000;
   // printf("matrix_buf squre:%lld us", diff(&stop, &start));
+
+
+  gettimeofday(&start,NULL); 
+  struct CS_matrix_idx_v_arr *muti1_idx_v_arr = row_all_col_multiply(matrix_CSR->rows[3724], matrix_CSC);
+  // muti1_idx_v_arr = row_all_col_multiply(muti1_idx_v_arr, matrix_CSC);
+  gettimeofday(&stop,NULL);
+  long long int v_m_multiply1 = diff(&stop, &start);
+  gettimeofday(&start,NULL); 
+  muti1_idx_v_arr = row_all_col_multiply(matrix_CSR->rows[3736], matrix_CSC);
+
+  gettimeofday(&stop,NULL);
+  long long int v_m_multiply2 = diff(&stop, &start);
+
+  gettimeofday(&start,NULL);
+  struct matrix_CSR *muti2_CSR = sparse_matrix_multiply(muti1_CSR, matrix_CSC);
+  gettimeofday(&stop,NULL);
+  long long int squre2 = diff(&stop, &start)/1000;
+
+  gettimeofday(&start,NULL);
+  struct matrix_CSR *muti3_CSR = sparse_matrix_multiply(muti2_CSR, matrix_CSC);
+  gettimeofday(&stop,NULL);
+  long long int squre3 = diff(&stop, &start)/1000;
+
+  gettimeofday(&start,NULL);
+  struct matrix_CSR *muti4_CSR = sparse_matrix_multiply(muti3_CSR, matrix_CSC);
+  gettimeofday(&stop,NULL);
+  long long int squre4 = diff(&stop, &start)/1000;
   
-  
+  // printf("gen Tri_arr: %lld ms\n", gen_Tri_arr);
+  printf("gen CSR: %lld ms\n", gen_CSR);
+  printf("gen CSC: %lld ms\n", gen_CSC);
+  printf("matrix squre: %lld ms\n", squre);
+  printf("matrix squre2: %lld ms\n", squre2); 
+  printf("matrix squre3: %lld ms\n", squre3);  
+  printf("matrix squre4: %lld ms\n", squre4);  
+  printf("vector multip ly matrix: %lld us\n", v_m_multiply1);
+  printf("vector multip ly matrix(little elem): %lld us\n", v_m_multiply2);
+  printf("matrix has value: %d\n", get_value_num_matrix_CSR(matrix_CSR)); 
+  printf("matrix squre has value: %d\n", get_value_num_matrix_CSR(muti1_CSR));  
+  printf("matrix squre2 has value: %d\n", get_value_num_matrix_CSR(muti2_CSR));  
+  printf("matrix squre3 has value: %d\n", get_value_num_matrix_CSR(muti3_CSR)); 
+  printf("matrix squre4 has value: %d\n", get_value_num_matrix_CSR(muti4_CSR));  
+
   // uint32_t row_idx = matrix_idx_get_2idx(9,108);
   // uint32_t col_idx = matrix_idx_get_2idx(0,1);
   // printf("row-col: %d - %d;", row_idx, col_idx);
@@ -229,9 +276,7 @@ main (int argc, char **argv)
 
   // // printf ("%s \n",data_strs);
   // res_free (in);
-  printf("gen CSR: %lld ms\n", gen_CSR);
-  printf("gen CSC: %lld ms\n", gen_CSC);
-  printf("matrix squre: %lld ms\n", squre);
+  
   free_matrix_CSR(matrix_CSR);
   free_matrix_CSC_fr_CSR(matrix_CSC);
   free_matrix_CSR(muti1_CSR);
