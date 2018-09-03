@@ -727,7 +727,7 @@ main (int argc, char **argv)
   // printf("matrix squre4 has value: %d\n", get_value_num_matrix_CSR(muti4_CSR));  
   // average_v_matrix_1t(500, matrix_CSR, matrix_CSC);
   // average_v_matrix(500, matrix_CSR, matrix_CSC);
-  average_v_matrix_forall(matrix_CSR, matrix_CSC, muti1_CSC, muti2_CSC);
+  // average_v_matrix_forall(matrix_CSR, matrix_CSC, muti1_CSC, muti2_CSC);
 
   // uint32_t row_idx = matrix_idx_get_2idx(9,108);
   // uint32_t col_idx = matrix_idx_get_2idx(0,1);
