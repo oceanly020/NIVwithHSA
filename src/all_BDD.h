@@ -2933,14 +2933,16 @@ row_matrix_CSR_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSR *matr
 struct matrix_CSR *
 sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix_CSC) {
   // uint32_t threshold = matrix_CSR->nrows/600;
+  uint32_t threshold = 30;
   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+data_allr_nums*sizeof(struct CS_matrix_idx_v_arr *));
   tmp->nrows = data_allr_nums;
   for (uint32_t i = 0; i < data_allr_nums; i++)
     tmp->rows[i] = NULL;
   for (uint32_t i = 0; i < matrix_CSR->nrows; i++) {
     if (matrix_CSR->rows[i]){
-      tmp->rows[i] = row_all_col_multiply(matrix_CSR->rows[i], matrix_CSC);
-      // if (matrix_CSR->rows[i]->nidx_vs < threshold) {
+      // tmp->rows[i] = row_all_col_multiply(matrix_CSR->rows[i], matrix_CSC);
+      if (matrix_CSR->rows[i]->nidx_vs < threshold) {
+        tmp->rows[i] = row_matrix_CSR_multiply(matrix_CSR->rows[i], matrix_CSR);
       //   printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
       //   // uint32_t arr[threshold*matrix_CSR->nrows];
       //   uint32_t *arr = xmalloc((threshold*matrix_CSR->nrows)*sizeof(uint32_t));
@@ -2970,11 +2972,11 @@ sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix_
       //     tmp->rows[i] = row_multi_col_multiply(row, arr1, count1, matrix_CSC);
       //   }
       //   free(arr);
-      // }
-      // else{
-      //   printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
-      //   tmp->rows[i] = row_all_col_multiply(matrix_CSR->rows[i], matrix_CSC);
-      // }
+      }
+      else{
+        // printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
+        tmp->rows[i] = row_all_col_multiply(matrix_CSR->rows[i], matrix_CSC);
+      }
     }
   }
 
