@@ -804,7 +804,7 @@ main (int argc, char **argv)
   // average_v_matrix_1t(500, matrix_CSR, matrix_CSC);
   // average_v_matrix(500, matrix_CSR, matrix_CSC);
 
-  average_v_matrix_forall(matrix_CSR, matrix_CSC, muti1_CSR, muti1_CSC, muti2_CSR, muti2_CSC);
+  // average_v_matrix_forall(matrix_CSR, matrix_CSC, muti1_CSR, muti1_CSC, muti2_CSR, muti2_CSC);
   // average_v_matrix_forall(matrix_CSR, matrix_CSC, muti1_CSC, NULL);
 
   // uint32_t row_idx = matrix_idx_get_2idx(9,108);
