@@ -451,6 +451,127 @@ load_saved_bddarr(struct bdd_saved_arr *bdd_arr) {
 
 }
 
+bool
+bddarr_is_insc (struct bdd_saved_arr *a, struct bdd_saved_arr *b) {
+	if (a->arr_num == 1) {
+		/* code */
+	}
+	if (b->arr_num == 1)
+	{
+		/* code */
+	}
+	if (l == r)
+	  return l;
+       if (ISZERO(l)  ||  ISZERO(r))
+	  return 0;
+       if (ISONE(l))
+	  return r;
+       if (ISONE(r))
+	  return l;
+       break;
+
+	BddCacheData *entry;
+   BDD res;
+   
+   switch (applyop)
+   {
+    case bddop_and:
+       if (l == r)
+	  return l;
+       if (ISZERO(l)  ||  ISZERO(r))
+	  return 0;
+       if (ISONE(l))
+	  return r;
+       if (ISONE(r))
+	  return l;
+       break;
+    case bddop_or:
+       if (l == r)
+	  return l;
+       if (ISONE(l)  ||  ISONE(r))
+	  return 1;
+       if (ISZERO(l))
+	  return r;
+       if (ISZERO(r))
+	  return l;
+       break;
+    case bddop_xor:
+       if (l == r)
+	  return 0;
+       if (ISZERO(l))
+	  return r;
+       if (ISZERO(r))
+	  return l;
+       break;
+    case bddop_nand:
+       if (ISZERO(l) || ISZERO(r))
+	  return 1;
+       break;
+    case bddop_nor:
+       if (ISONE(l)  ||  ISONE(r))
+	  return 0;
+       break;
+   case bddop_imp:
+      if (ISZERO(l))
+	 return 1;
+      if (ISONE(l))
+	 return r;
+      if (ISONE(r))
+	 return 1;
+      break;
+   }
+
+   if (ISCONST(l)  &&  ISCONST(r))
+      res = oprres[applyop][l<<1 | r];
+   else
+   {
+      entry = BddCache_lookup(&applycache, APPLYHASH(l,r,applyop));
+      
+      if (entry->a == l  &&  entry->b == r  &&  entry->c == applyop)
+      {
+#ifdef CACHESTATS
+	 bddcachestats.opHit++;
+#endif
+	 return entry->r.res;
+      }
+#ifdef CACHESTATS
+      bddcachestats.opMiss++;
+#endif
+      
+      if (LEVEL(l) == LEVEL(r))
+      {
+	 PUSHREF( apply_rec(LOW(l), LOW(r)) );
+	 PUSHREF( apply_rec(HIGH(l), HIGH(r)) );
+	 res = bdd_makenode(LEVEL(l), READREF(2), READREF(1));
+      }
+      else
+      if (LEVEL(l) < LEVEL(r))
+      {
+	 PUSHREF( apply_rec(LOW(l), r) );
+	 PUSHREF( apply_rec(HIGH(l), r) );
+	 res = bdd_makenode(LEVEL(l), READREF(2), READREF(1));
+      }
+      else
+      {
+	 PUSHREF( apply_rec(l, LOW(r)) );
+	 PUSHREF( apply_rec(l, HIGH(r)) );
+	 res = bdd_makenode(LEVEL(r), READREF(2), READREF(1));
+      }
+
+      POPREF(2);
+
+      entry->a = l;
+      entry->b = r;
+      entry->c = applyop;
+      entry->r.res = res;
+   }
+
+   return res;
+}
+
+
+
+
 BDD
 bdd_v2x_byvar(BDD root, struct mask_uint16_t *mask) {
 	BddNode *node;

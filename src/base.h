@@ -158,6 +158,9 @@ gen_arrs (const struct parse_nsw *nsw, uint32_t *n) {
 		const struct parse_sw *sw = nsw->sws[i];
 		for (struct parse_rule *r = sw->rules.head; r; r = r->next) {//一直往下一个走，直到没有下一个
 			//head为链表的头指针，可以使用head.next指向链表下一个。
+			// if (r->idx == 1) {
+			// 	print_mf_uint16_t(r->match);
+			// }
 			assert (r->match);//uint16_t的数组
 			//将所有规则写到f中，长度len为一位
 			fwrite (r->match->mf_w, len, 1, f);
@@ -399,6 +402,16 @@ gen_sw (const struct parse_sw *sw, FILE *out, FILE *f_strs, const uint16_t *arrs
 		// tmp->in = gen_ports (ARR (r->in), r->in.n, f_ports, INPORT);//( (X).n > ARR_LEN ((X).e.a) ? (X).e.p : (X).e.a )
 		// tmp->out = gen_ports (ARR (r->out), r->out.n, f_ports, OUTPORT);//生成port号
 		tmp->match.w = arr_find (r->match, arrs, narrs, WILDCARD);//从arrs中找到match
+		// if(r->idx==1){
+		// 	uint32_t k_s=tmp->match.w;
+		// 	for (int k = 0; k < MF_LEN; k++)
+		// 	{
+		// 		printf("%x;", *(uint16_t *)((uint8_t *)arrs+k_s));
+		// 		k_s+=2;
+		// 	}
+		// 	printf("\n");
+		// }
+
 		tmp->match.v = arr_find (r->match, arrs, narrs, VALUE);//从arrs中找到match
 		tmp->mask = arr_find (r->mask, arrs, narrs, VALUE);//预处理，在arrs中查询，应该是生成号，作为hash查询	
 		//如果找到元素则返回指向该元素的指针，否则返回NULL，arrs为没有重复的头
@@ -413,10 +426,18 @@ gen_sw (const struct parse_sw *sw, FILE *out, FILE *f_strs, const uint16_t *arrs
 		// 	tmp->in_link = linkwc_gen (ARR (r->in), r->in.n, f_ports);
 		// }
 		tmp->in_link = linkwc_gen (ARR (r->in_link), r->in_link.n, f_ports);
+		if(r->idx==1){
+			printf("in_link is %x;\n",tmp->in_link);
+			printf("%d\n", ARR (r->in_link)[0]);
+		}
 		tmp->out_link = linkwc_gen (ARR (r->out_link), r->out_link.n, f_ports);
-
+		if(r->idx==1){
+			printf("out_link is %x;\n",tmp->out_link);
+			printf("%d\n", ARR (r->out_link)[0]);
+		}
 		// struct rule_links *rl_out = linkwc_gen (r);
 		// tmp->out_link = 0;
+		
 	}
 	fclose (f_ports);
 	// fclose (f_deps);
@@ -618,7 +639,9 @@ parse_tf (const char *name)
 		在第一次调用时，必需给予参数s字符串，
 		往后的调用则将参数s设置成NULL。每次调用成功则返回指向被分割出片段的指针。*/
 		instr = strtok_r (NULL, "$", &save);//输入序列（端口）
+		
 		match = strtok_r (NULL, "$", &save);//匹配域
+
 		// printf("%s\n", match);
 
 		mask = strtok_r (NULL, "$", &save);//掩码
@@ -636,6 +659,7 @@ parse_tf (const char *name)
 		// printf("%s\n", instr);
 		struct parse_rule *r = xcalloc (1, sizeof *r);//创建规则分配内存
 		r->in = read_array (instr, NULL);//保存成struct arr_ptr_uint32_t
+
 		//ARR (r->in)[0]为一个数组,n为元素个数
 		r->out = read_array (outstr, NULL);
 		/*if (file) {
