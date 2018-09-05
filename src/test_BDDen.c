@@ -228,10 +228,21 @@ average_v_matrix_forall(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix
     // }
     rand_num = (rand() % 3000) + 1;
     if (matrix_CSR->rows[rand_num]){
-      gettimeofday(&start,NULL); 
-      struct CS_matrix_idx_v_arr *muti1_idx_v_arr = row_all_col_multiply(matrix_CSR->rows[rand_num], matrix_CSC);
-      gettimeofday(&stop,NULL);
-      printf("1-1:%lld us; ", diff(&stop, &start));
+      if (matrix_CSR->rows[rand_num]->nidx_vs > 30) {
+        gettimeofday(&start,NULL); 
+        struct CS_matrix_idx_v_arr *muti1_idx_v_arr = row_all_col_multiply(matrix_CSR->rows[rand_num], matrix_CSC);
+        gettimeofday(&stop,NULL);
+        printf("1-1:%lld us; ", diff(&stop, &start));
+      }
+      else{
+        gettimeofday(&start,NULL); 
+        struct CS_matrix_idx_v_arr *muti1_idx_v_arr = row_matrix_CSR_multiply(matrix_CSR->rows[rand_num], matrix_CSR);
+        gettimeofday(&stop,NULL);
+        printf("1-1:%lld us; ", diff(&stop, &start));
+      }
+
+
+
       average1 += diff(&stop, &start);
       average2 += diff(&stop, &start);
       average3 += diff(&stop, &start);
@@ -239,11 +250,22 @@ average_v_matrix_forall(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix
       struct CS_matrix_idx_v_arr *muti2_idx_v_arr = row_all_col_multiply(matrix_CSR->rows[rand_num], matrix_CSC);
       struct CS_matrix_idx_v_arr *muti3_idx_v_arr = row_all_col_multiply(matrix_CSR->rows[rand_num], matrix_CSC);
       if (muti2_idx_v_arr){
-        gettimeofday(&start,NULL); 
-        muti2_idx_v_arr = row_all_col_multiply(muti2_idx_v_arr, matrix_CSC);
-        gettimeofday(&stop,NULL);
-        printf("2-2:%lld us; ", diff(&stop, &start));
-        average2 += diff(&stop, &start);
+        if (muti2_idx_v_arr->nidx_vs > 30) {
+          gettimeofday(&start,NULL); 
+          muti2_idx_v_arr = row_all_col_multiply(muti2_idx_v_arr, matrix_CSC);
+          gettimeofday(&stop,NULL);
+          printf("2-2:%lld us; ", diff(&stop, &start));
+          average2 += diff(&stop, &start);
+        }
+        else{
+          gettimeofday(&start,NULL); 
+          muti2_idx_v_arr = row_matrix_CSR_multiply(muti2_idx_v_arr, matrix_CSR);
+          gettimeofday(&stop,NULL);
+          printf("2-2:%lld us; ", diff(&stop, &start));
+          average2 += diff(&stop, &start);
+        }
+
+        
       }
       if (matrix_CSC1) {
         if (muti3_idx_v_arr) {
@@ -268,11 +290,20 @@ average_v_matrix_forall(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix
       }
 
       if (muti2_idx_v_arr){
-        gettimeofday(&start,NULL); 
-        muti2_idx_v_arr = row_all_col_multiply(muti2_idx_v_arr, matrix_CSC);
-        gettimeofday(&stop,NULL);
-        printf("2-3:%lld us; ", diff(&stop, &start));
-        average2 += diff(&stop, &start);
+        if (muti2_idx_v_arr->nidx_vs > 30) {
+          gettimeofday(&start,NULL); 
+          muti2_idx_v_arr = row_all_col_multiply(muti2_idx_v_arr, matrix_CSC);
+          gettimeofday(&stop,NULL);
+          printf("2-3:%lld us; ", diff(&stop, &start));
+          average2 += diff(&stop, &start);
+        }
+        else{
+          gettimeofday(&start,NULL); 
+          muti2_idx_v_arr = row_matrix_CSR_multiply(muti2_idx_v_arr, matrix_CSR);
+          gettimeofday(&stop,NULL);
+          printf("2-3:%lld us; ", diff(&stop, &start));
+          average2 += diff(&stop, &start);
+        }
       }
       if (matrix_CSC2) {
         if (muti3_idx_v_arr) {
