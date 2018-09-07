@@ -1349,6 +1349,9 @@ matrix_idx_to_r(const uint32_t *matrix_idx) {//从0开始计算
     if (*matrix_idx < *(uint32_t *)(sws_r_num+i))
       return rule_get_2idx(i-1, *matrix_idx - *(uint32_t *)(sws_r_num+i-1) +1);
   }
+  if (*matrix_idx < data_allr_nums) {
+    return rule_get_2idx(swn-1, *matrix_idx - *(uint32_t *)(sws_r_num+swn-1) +1);
+  }
   return NULL;
 }
 
@@ -2744,26 +2747,26 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   // printf("starting nf_space_connect\n");
   // if(!is_insc_links(a->out->lks, b->in->lks))
   //   return NULL;
-  struct timeval start,stop;  //计算时间差 usec
-  gettimeofday(&start,NULL);
+  // struct timeval start,stop;  //计算时间差 usec
+  // gettimeofday(&start,NULL);
   BDD root_a = load_saved_bddarr(a->out->mf);
   BDD root_b = load_saved_bddarr(b->in->mf);
-  gettimeofday(&stop,NULL);
-  if (global_sign < 10) {
-    printf("load_saved_bddarr %lld us\n", diff(&stop, &start));
-  }
-  gettimeofday(&start,NULL);
+  // gettimeofday(&stop,NULL);
+  // if (global_sign < 10) {
+  //   printf("load_saved_bddarr %lld us\n", diff(&stop, &start));
+  // }
+  // gettimeofday(&start,NULL);
   BDD insc = bdd_apply(root_a, root_b, bddop_and);
-  gettimeofday(&stop,NULL);
-  if (global_sign < 10) {
-    printf("bdd_apply %lld us\n", diff(&stop, &start));
-    global_sign++;
-  }
+  // gettimeofday(&stop,NULL);
+  // if (global_sign < 10) {
+  //   printf("bdd_apply %lld us\n", diff(&stop, &start));
+  //   global_sign++;
+  // }
   computation_counter ++;
   if (!insc) 
     return NULL;
   for (int i = 0; i < a->r_arr->nrs - 1; i++) {
-    for (int j = 0; j < a->r_arr->nrs; j++) {
+    for (int j = 0; j < b->r_arr->nrs; j++) {
       if ((a->r_arr->ridx[i].sw_idx == b->r_arr->ridx[j].sw_idx)&&(a->r_arr->ridx[i].r_idx == b->r_arr->ridx[j].r_idx))
         return NULL;
     }
@@ -3306,7 +3309,7 @@ gen_Tri_arr_bdd_fr_port(uint32_t inport) {
 
           v_diff = bdd_apply(v_in, v_and, bddop_diff);
           gettimeofday(&stop,NULL);
-          printf("the diff =: %lld us\n", diff(&stop, &start));
+          // printf("the diff =: %lld us\n", diff(&stop, &start));
           // free_mf_uint16_t_array(mfarr);
           // v_diff = bdd_apply(v_in, v_and, bddop_diff);
         }
