@@ -439,8 +439,8 @@ static uint16_t var2sign[16] = {
 #define VAR2SIGN(a) (var2sign[(a%16)])
 #define FRA2INT(a) ((int) (a))
 #define REF(a)    (bddnodes[a].refcou)
-#define BDDSIZE     120000
-#define BDDOPCHCHE  2000 
+#define BDDSIZE     1000000
+#define BDDOPCHCHE  4000 
 
 struct BddNode_saved {
   int var;
@@ -3010,7 +3010,7 @@ row_matrix_CSR_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSR *matr
     for (uint32_t i = 0; i < vs_count; i++)
       tmp->idx_vs[i] = vs[i];
   }
-  if (bdd_getnodenum() > BDDSIZE - 40000)
+  if (bdd_getnodenum() > BDDSIZE - 10000)
     bdd_gbc();
   return tmp;
 }

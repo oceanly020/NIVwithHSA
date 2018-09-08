@@ -590,6 +590,23 @@ bdd_v2x_byvar(BDD root, struct mask_uint16_t *mask) {
 	bdd_save2stru(HIGHp(node), r, count);
 }
 
+BDD
+bdd_v2x_byvar(BDD root, struct mask_uint16_t *mask) {
+
+	int var = bdd_var(root)
+	if (root < 2)
+		return root;
+
+
+	if (root < mask)
+		return bdd_apply(bdd_v2x_byvar(LOW(root), mask), bdd_v2x_byvar(HIGH(root), mask), bddop_or);
+	else{
+		int level = bdd_var2level(var);
+		return bdd_makenode(level, bdd_v2x_byvar(LOW(root), mask), bdd_v2x_byvar(HIGH(root), mask));
+	}
+}
+
+
 int 
 main() {
 	struct mf_uint16_t *mf1 = xcalloc (1, sizeof *mf1);
