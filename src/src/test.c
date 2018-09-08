@@ -597,6 +597,7 @@ bdd_v2x_byvar(BDD root, struct mask_uint16_t *mask) {
 	if (root < 2)
 		return root;
 
+	
 
 	if (root < mask)
 		return bdd_apply(bdd_v2x_byvar(LOW(root), mask), bdd_v2x_byvar(HIGH(root), mask), bddop_or);

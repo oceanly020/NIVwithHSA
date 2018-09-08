@@ -2887,7 +2887,7 @@ row_col_multiply(struct CS_matrix_idx_v_arr *row, struct CS_matrix_idx_v_arr *co
       count_row++;
     if ((count_row >= num_row)||(count_col>=num_col))
       break;
-    if (bdd_getnodenum() > BDDSIZE - 20000)
+    if (bdd_getnodenum() > BDDSIZE - 100000)
       bdd_gbc_fastall();
   }
   // if(tmp)
@@ -2948,7 +2948,7 @@ row_all_col_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSC *matrix_
     for (uint32_t i = 0; i < vs_count; i++)
       tmp->idx_vs[i] = vs[i];
   }
-  if (bdd_getnodenum() > BDDSIZE - 40000)
+  if (bdd_getnodenum() > BDDSIZE - 100000)
     bdd_gbc();
   return tmp;
 }
@@ -3010,7 +3010,7 @@ row_matrix_CSR_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSR *matr
     for (uint32_t i = 0; i < vs_count; i++)
       tmp->idx_vs[i] = vs[i];
   }
-  if (bdd_getnodenum() > BDDSIZE - 10000)
+  if (bdd_getnodenum() > BDDSIZE - 100000)
     bdd_gbc();
   return tmp;
 }
