@@ -2747,21 +2747,22 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   // printf("starting nf_space_connect\n");
   // if(!is_insc_links(a->out->lks, b->in->lks))
   //   return NULL;
-  // struct timeval start,stop;  //计算时间差 usec
-  // gettimeofday(&start,NULL);
+  struct timeval start,stop;  //计算时间差 usec
+  gettimeofday(&start,NULL);
   BDD root_a = load_saved_bddarr(a->out->mf);
   BDD root_b = load_saved_bddarr(b->in->mf);
-  // gettimeofday(&stop,NULL);
-  // if (global_sign < 10) {
-  //   printf("load_saved_bddarr %lld us\n", diff(&stop, &start));
-  // }
-  // gettimeofday(&start,NULL);
+  gettimeofday(&stop,NULL);
+  if (global_sign < 30) {
+    printf("load_saved_bddarr %lld us\n", diff(&stop, &start));
+  }
+  gettimeofday(&start,NULL);
   BDD insc = bdd_apply(root_a, root_b, bddop_and);
-  // gettimeofday(&stop,NULL);
-  // if (global_sign < 10) {
-  //   printf("bdd_apply %lld us\n", diff(&stop, &start));
-  //   global_sign++;
-  // }
+  gettimeofday(&stop,NULL);
+  if (global_sign < 30) {
+    printf("bdd_apply %lld us\n", diff(&stop, &start));
+  }
+
+  gettimeofday(&start,NULL);
   computation_counter ++;
   if (!insc) 
     return NULL;
@@ -2780,7 +2781,14 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   pair_tmp->out->lks = copy_links_of_rule(b->out->lks);
 
   if (a->mask) {
+    struct timeval start_in,stop_in;
+    gettimeofday(&start_in,NULL);
     pair_tmp->in->mf = bdd_rw_back(bdd_arr_insc, a->in->mf, a->mask);
+    gettimeofday(&stop_in,NULL);
+    if (global_sign < 30) {
+      printf("bdd_rw_back %lld us\n", diff(&stop_in, &start_in));
+    }
+
     if (b->mask) {
       pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
       pair_tmp->rewrite = xcalloc(1, sizeof *(pair_tmp->rewrite));
@@ -2806,7 +2814,13 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
     }
   }
   if (b->mask) {
+    struct timeval start_in,stop_in;
+    gettimeofday(&start_in,NULL);
     pair_tmp->out->mf = bdd_rw(bdd_arr_insc, b->mask, b->rewrite);
+    gettimeofday(&stop_in,NULL);
+    if (global_sign < 30) {
+      printf("bdd_rw %lld us\n", diff(&stop_in, &start_in));
+    }
     if (!(a->mask)){
       pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
       pair_tmp->rewrite = xcalloc(1, sizeof *(pair_tmp->rewrite));
@@ -2832,7 +2846,11 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   }
 
   //
-
+  gettimeofday(&stop,NULL);
+  if (global_sign < 30) {
+    printf("all %lld us\n", diff(&stop, &start));
+    global_sign++;
+  }
   return pair_tmp;
 }
 
