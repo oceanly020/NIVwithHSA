@@ -49,6 +49,9 @@ mf_from_str (const char *s)//每个数组的数都为一组uint32_t的匹配域�
 	// int div = CHAR_BIT * 2; //+ commas;// CHAR_BIT 8位
 	// int len = strlen (s); //+ commas;//返回长度
 	// assert (len % div == 0);
+
+
+	
 	// len /= div;//字节数
 	const char *cur = s;
 	// array_t *res = array_create (len, BIT_UNDEF);

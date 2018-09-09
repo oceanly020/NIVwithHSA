@@ -207,6 +207,8 @@ uint32_t compu_true_counter;//计数器，记录计算成功，需要后续常�
 uint32_t elemconnet_counter;//计数器，记录计算elem连结的数量
 uint32_t global_sign; //限定，求得计算打印
 
+uint16_t uint16_power_sign[16] = {0x0001,0x0002,0x0004,0x0008,0x0010,0x0020,0x0040,0x0080,0x0100,0x0200,0x0400,0x0800,0x1000,0x2000,0x4000,0x8000};
+
 struct PACKED arrs {
   uint32_t len, n;
   uint16_t arrs[0];
@@ -439,8 +441,8 @@ static uint16_t var2sign[16] = {
 #define VAR2SIGN(a) (var2sign[(a%16)])
 #define FRA2INT(a) ((int) (a))
 #define REF(a)    (bddnodes[a].refcou)
-#define BDDSIZE     2000000
-#define BDDOPCHCHE  4000 
+#define BDDSIZE     10000000
+#define BDDOPCHCHE  5000 
 
 struct BddNode_saved {
   int var;
@@ -2200,6 +2202,25 @@ bdd_mask2x(struct bdd_saved_arr *bdd_arr, struct mask_uint16_t *mask) {
   return arr_tmp[bdd_arr->arr_num-1];
 }
 
+
+BDD
+bdd_v2x_bymask(BDD root, struct mask_uint16_t *mask) {
+  
+  if (root < 2)
+    return root;
+  int var = bdd_var(root);
+  int lvl = (int)(var/(16));
+  if ((uint16_power_sign[15 - var%16]) & (uint16_t)(~(mask->v[lvl]))){
+  
+    return bdd_apply(bdd_v2x_bymask(LOW(root), mask), bdd_v2x_bymask(HIGH(root), mask), bddop_or);
+  }
+  else{
+    int level = bdd_var2level(var);
+    return bdd_makenode(level, bdd_v2x_bymask(LOW(root), mask), bdd_v2x_bymask(HIGH(root), mask));
+  }
+}
+
+
 BDD
 rw2bdd(struct mask_uint16_t *mask, struct mask_uint16_t *rw){
   BDD root, tmp;
@@ -2234,6 +2255,7 @@ bdd_rw(struct bdd_saved_arr *bdd_arr, struct mask_uint16_t *mask, struct mask_ui
   return bdd_save_arr(root_rw);
 }
 
+
 struct bdd_saved_arr *
 bdd_rw_back(struct bdd_saved_arr *bdd_arr, struct bdd_saved_arr *bdd_arr_IN, struct mask_uint16_t *mask) {
   BDD root_maskx = bdd_mask2x(bdd_arr, mask);
@@ -2245,12 +2267,18 @@ bdd_rw_back(struct bdd_saved_arr *bdd_arr, struct bdd_saved_arr *bdd_arr_IN, str
 
 BDD
 bdd_rw_BDD(BDD a, struct mask_uint16_t *mask, struct mask_uint16_t *rw) {
-  return 0;
+  BDD root_maskx = bdd_v2x_bymask(a, mask);
+  BDD root_rw = rw2bdd(mask, rw);
+  root_rw = bdd_apply(root_maskx, root_rw, bddop_and);
+  return root_rw;
+
 }
 
 BDD
 bdd_rw_back_BDD(BDD a, BDD a_IN, struct mask_uint16_t *mask) {
-  return 0;
+  BDD root_maskx = bdd_v2x_bymask(a, mask);
+  BDD root_IN = bdd_apply(root_maskx, root_IN, bddop_and);
+  return root_IN;
 }
 
 struct bdd_saved_arr *

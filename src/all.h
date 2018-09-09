@@ -1011,7 +1011,7 @@ print_mask(const uint16_t *mask) {
     printf("%d", (bool)(flag_bit & *mask));
     flag_bit >>= 1;
   }
-  printf("%d", (bool)(flag_bit & *mask));
+  printf("%d", (bool)(flag_bit & *mask)); 
 }
 
 void

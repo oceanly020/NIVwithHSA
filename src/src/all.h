@@ -659,6 +659,7 @@ print_mask(const uint16_t *mask) {
     flag_bit >>= 1;
   }
   printf("%d", (bool)(flag_bit & *mask));
+  printf(",");
 }
 
 void

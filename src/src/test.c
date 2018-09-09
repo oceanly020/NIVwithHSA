@@ -451,159 +451,162 @@ load_saved_bddarr(struct bdd_saved_arr *bdd_arr) {
 
 }
 
-bool
-bddarr_is_insc (struct bdd_saved_arr *a, struct bdd_saved_arr *b) {
-	if (a->arr_num == 1) {
-		/* code */
-	}
-	if (b->arr_num == 1)
-	{
-		/* code */
-	}
-	if (l == r)
-	  return l;
-       if (ISZERO(l)  ||  ISZERO(r))
-	  return 0;
-       if (ISONE(l))
-	  return r;
-       if (ISONE(r))
-	  return l;
-       break;
+// bool
+// bddarr_is_insc (struct bdd_saved_arr *a, struct bdd_saved_arr *b) {
+// 	if (a->arr_num == 1) {
+// 		/* code */
+// 	}
+// 	if (b->arr_num == 1)
+// 	{
+// 		/* code */
+// 	}
+// 	if (l == r)
+// 	  return l;
+//        if (ISZERO(l)  ||  ISZERO(r))
+// 	  return 0;
+//        if (ISONE(l))
+// 	  return r;
+//        if (ISONE(r))
+// 	  return l;
+//        break;
 
-	BddCacheData *entry;
-   BDD res;
+// 	BddCacheData *entry;
+//    BDD res;
    
-   switch (applyop)
-   {
-    case bddop_and:
-       if (l == r)
-	  return l;
-       if (ISZERO(l)  ||  ISZERO(r))
-	  return 0;
-       if (ISONE(l))
-	  return r;
-       if (ISONE(r))
-	  return l;
-       break;
-    case bddop_or:
-       if (l == r)
-	  return l;
-       if (ISONE(l)  ||  ISONE(r))
-	  return 1;
-       if (ISZERO(l))
-	  return r;
-       if (ISZERO(r))
-	  return l;
-       break;
-    case bddop_xor:
-       if (l == r)
-	  return 0;
-       if (ISZERO(l))
-	  return r;
-       if (ISZERO(r))
-	  return l;
-       break;
-    case bddop_nand:
-       if (ISZERO(l) || ISZERO(r))
-	  return 1;
-       break;
-    case bddop_nor:
-       if (ISONE(l)  ||  ISONE(r))
-	  return 0;
-       break;
-   case bddop_imp:
-      if (ISZERO(l))
-	 return 1;
-      if (ISONE(l))
-	 return r;
-      if (ISONE(r))
-	 return 1;
-      break;
-   }
+//    switch (applyop)
+//    {
+//     case bddop_and:
+//        if (l == r)
+// 	  return l;
+//        if (ISZERO(l)  ||  ISZERO(r))
+// 	  return 0;
+//        if (ISONE(l))
+// 	  return r;
+//        if (ISONE(r))
+// 	  return l;
+//        break;
+//     case bddop_or:
+//        if (l == r)
+// 	  return l;
+//        if (ISONE(l)  ||  ISONE(r))
+// 	  return 1;
+//        if (ISZERO(l))
+// 	  return r;
+//        if (ISZERO(r))
+// 	  return l;
+//        break;
+//     case bddop_xor:
+//        if (l == r)
+// 	  return 0;
+//        if (ISZERO(l))
+// 	  return r;
+//        if (ISZERO(r))
+// 	  return l;
+//        break;
+//     case bddop_nand:
+//        if (ISZERO(l) || ISZERO(r))
+// 	  return 1;
+//        break;
+//     case bddop_nor:
+//        if (ISONE(l)  ||  ISONE(r))
+// 	  return 0;
+//        break;
+//    case bddop_imp:
+//       if (ISZERO(l))
+// 	 return 1;
+//       if (ISONE(l))
+// 	 return r;
+//       if (ISONE(r))
+// 	 return 1;
+//       break;
+//    }
 
-   if (ISCONST(l)  &&  ISCONST(r))
-      res = oprres[applyop][l<<1 | r];
-   else
-   {
-      entry = BddCache_lookup(&applycache, APPLYHASH(l,r,applyop));
+//    if (ISCONST(l)  &&  ISCONST(r))
+//       res = oprres[applyop][l<<1 | r];
+//    else
+//    {
+//       entry = BddCache_lookup(&applycache, APPLYHASH(l,r,applyop));
       
-      if (entry->a == l  &&  entry->b == r  &&  entry->c == applyop)
-      {
-#ifdef CACHESTATS
-	 bddcachestats.opHit++;
-#endif
-	 return entry->r.res;
-      }
-#ifdef CACHESTATS
-      bddcachestats.opMiss++;
-#endif
+//       if (entry->a == l  &&  entry->b == r  &&  entry->c == applyop)
+//       {
+// #ifdef CACHESTATS
+// 	 bddcachestats.opHit++;
+// #endif
+// 	 return entry->r.res;
+//       }
+// #ifdef CACHESTATS
+//       bddcachestats.opMiss++;
+// #endif
       
-      if (LEVEL(l) == LEVEL(r))
-      {
-	 PUSHREF( apply_rec(LOW(l), LOW(r)) );
-	 PUSHREF( apply_rec(HIGH(l), HIGH(r)) );
-	 res = bdd_makenode(LEVEL(l), READREF(2), READREF(1));
-      }
-      else
-      if (LEVEL(l) < LEVEL(r))
-      {
-	 PUSHREF( apply_rec(LOW(l), r) );
-	 PUSHREF( apply_rec(HIGH(l), r) );
-	 res = bdd_makenode(LEVEL(l), READREF(2), READREF(1));
-      }
-      else
-      {
-	 PUSHREF( apply_rec(l, LOW(r)) );
-	 PUSHREF( apply_rec(l, HIGH(r)) );
-	 res = bdd_makenode(LEVEL(r), READREF(2), READREF(1));
-      }
+//       if (LEVEL(l) == LEVEL(r))
+//       {
+// 	 PUSHREF( apply_rec(LOW(l), LOW(r)) );
+// 	 PUSHREF( apply_rec(HIGH(l), HIGH(r)) );
+// 	 res = bdd_makenode(LEVEL(l), READREF(2), READREF(1));
+//       }
+//       else
+//       if (LEVEL(l) < LEVEL(r))
+//       {
+// 	 PUSHREF( apply_rec(LOW(l), r) );
+// 	 PUSHREF( apply_rec(HIGH(l), r) );
+// 	 res = bdd_makenode(LEVEL(l), READREF(2), READREF(1));
+//       }
+//       else
+//       {
+// 	 PUSHREF( apply_rec(l, LOW(r)) );
+// 	 PUSHREF( apply_rec(l, HIGH(r)) );
+// 	 res = bdd_makenode(LEVEL(r), READREF(2), READREF(1));
+//       }
 
-      POPREF(2);
+//       POPREF(2);
 
-      entry->a = l;
-      entry->b = r;
-      entry->c = applyop;
-      entry->r.res = res;
-   }
+//       entry->a = l;
+//       entry->b = r;
+//       entry->c = applyop;
+//       entry->r.res = res;
+//    }
 
-   return res;
-}
+//    return res;
+// }
 
 
 
+
+// BDD
+// bdd_v2x_byvar(BDD root, struct mask_uint16_t *mask) {
+// 	BddNode *node;
+
+// 	if (root < 2)
+// 		return;
+// 	if
+// 	node = &bddnodes[root];
+// 	if ((node)->level & MARKON  ||  LOWp(node) == -1)
+// 		return;
+
+// 	(node)->level |= MARKON;
+// 	r[*count] = root;
+// 	(*count)++;
+// 	bdd_save2stru(LOWp(node), r, count);
+// 	bdd_save2stru(HIGHp(node), r, count);
+// }
+
+uint16_t uint16_power_sign[16] = {0x0001,0x0002,0x0004,0x0008,0x0010,0x0020,0x0040,0x0080,0x0100,0x0200,0x0400,0x0800,0x1000,0x2000,0x4000,0x8000};
 
 BDD
-bdd_v2x_byvar(BDD root, struct mask_uint16_t *mask) {
-	BddNode *node;
-
-	if (root < 2)
-		return;
-	if
-	node = &bddnodes[root];
-	if ((node)->level & MARKON  ||  LOWp(node) == -1)
-		return;
-
-	(node)->level |= MARKON;
-	r[*count] = root;
-	(*count)++;
-	bdd_save2stru(LOWp(node), r, count);
-	bdd_save2stru(HIGHp(node), r, count);
-}
-
-BDD
-bdd_v2x_byvar(BDD root, struct mask_uint16_t *mask) {
-
-	int var = bdd_var(root)
-	if (root < 2)
-		return root;
+bdd_v2x_bymask(BDD root, struct mask_uint16_t *mask) {
 
 	
-
-	if (root < mask)
-		return bdd_apply(bdd_v2x_byvar(LOW(root), mask), bdd_v2x_byvar(HIGH(root), mask), bddop_or);
+	if (root < 2)
+		return root;
+	int var = bdd_var(root);
+	int lvl = (int)(var/(16));
+	if ((uint16_power_sign[15 - var%16]) & (uint16_t)(~(mask->v[lvl]))){
+	
+		return bdd_apply(bdd_v2x_bymask(LOW(root), mask), bdd_v2x_bymask(HIGH(root), mask), bddop_or);
+	}
 	else{
 		int level = bdd_var2level(var);
-		return bdd_makenode(level, bdd_v2x_byvar(LOW(root), mask), bdd_v2x_byvar(HIGH(root), mask));
+		return bdd_makenode(level, bdd_v2x_bymask(LOW(root), mask), bdd_v2x_bymask(HIGH(root), mask));
 	}
 }
 
@@ -620,7 +623,11 @@ main() {
 	mf2->mf_w[1] = 0x8fff;
 	mf2->mf_v[0] = 0x0019;
 	mf2->mf_v[1] = 0x1000;
+	struct mask_uint16_t *mask = xcalloc (1, sizeof *mask);
+	mask->v[0] = ~(0x8001);
+	mask->v[1] = ~(0x8420);
 
+	print_mask_uint16_t(mask);
 	// mf1->mf_w[0] = 0xffff;
 	// mf1->mf_w[1] = 0xffff;
 	// mf1->mf_v[0] = 0xffff;
@@ -641,11 +648,23 @@ main() {
     // v1 = bdd_ithvar(0);
     // v1 = mf2bdd_init(mf1);
     v1 = mf2bdd(mf1);
+    // bdd_printtable(v1);
     // bdd_addref(v1);
 
     v2 = mf2bdd(mf2);
+
     
 	BDD v_or = bdd_or(v1, v2);
+	BDD v_x = bdd_v2x_bymask(v_or, mask);
+
+	print_mf_uint16_t_array(bdd2mf(v_or, varnum));
+	print_mf_uint16_t_array(bdd2mf(v_x, varnum));
+	printf("%d\n", bdd_apply(v_or,v_x, bddop_diff));
+
+	// bdd_printtable(v_x);
+	// bdd_printtable(v1);
+	// bdd_printtable(v2);
+
 	// BDD v_diff = bdd_apply(v1, v2, bddop_diff);
 
 	// BDD v_and = bdd_apply(v1, v2, bddop_and);
@@ -663,16 +682,17 @@ main() {
 	// mfarr = bdd2mf(v_op, varnum);
 	// print_mf_uint16_t_array(mfarr);
 	// free_mf_uint16_t_array(mfarr);
-	struct mf_uint16_t_array *mfarr = bdd2mf(v_or, varnum);
-	print_mf_uint16_t_array(mfarr);
 
-	// bdd_printtable(v_or);
-	struct bdd_saved_arr *tmp = bdd_save_arr(v_or);
-	bdd_gbc();
-	v_or = load_saved_bddarr(tmp);
-	// bdd_printtable(v_or);
-	mfarr = bdd2mf(v_or, varnum);
-	print_mf_uint16_t_array(mfarr);
+	// struct mf_uint16_t_array *mfarr = bdd2mf(v_or, varnum);
+	// print_mf_uint16_t_array(mfarr);
+
+	// // bdd_printtable(v_or);
+	// struct bdd_saved_arr *tmp = bdd_save_arr(v_or);
+	// bdd_gbc();
+	// v_or = load_saved_bddarr(tmp);
+	// // bdd_printtable(v_or);
+	// mfarr = bdd2mf(v_or, varnum);
+	// print_mf_uint16_t_array(mfarr);
 
 
 
