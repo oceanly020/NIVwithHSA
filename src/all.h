@@ -3269,6 +3269,28 @@ insc_to_Tri_express_rlimit_simple(uint32_t lk, struct of_rule *r_out, BDD v_and)
   pair->r_arr->ridx[1].r_idx = r_out->idx;
   pair->out->mf = bdd_arr_out;
 
+
+// if (r_in->mask) {
+//     struct mask_uint16_t *mask = xcalloc(1, sizeof *mask);
+//     struct mask_uint16_t *rewrite = xcalloc(1, sizeof *rewrite);
+//     for (uint32_t j = 0; j < MF_LEN; j++) {
+//       mask->v[j] = *(uint16_t *)((uint8_t *)data_arrs+j*add_len+r_in->mask);
+//       rewrite->v[j] = *(uint16_t *)((uint8_t *)data_arrs+j*add_len+r_in->rewrite);
+//     }
+//     struct mf_uint16_t *r_in_mf = get_r_out_mf(r_in);
+//     BDD bdd_in = mf2bdd(r_in_mf);
+//     struct bdd_saved_arr *bdd_arr_in = bdd_save_arr(bdd_in);
+//     struct bdd_saved_arr *bdd_arr_tmp = bdd_rw_back(bdd_arr_out, bdd_arr_in, mask);
+//     free(bdd_arr_in);
+//     pair->in->mf = bdd_arr_tmp;
+//     pair->mask = mask;
+//     pair->rewrite = rewrite;
+//   }
+//   else{
+    
+  // }
+
+
   pair->in->mf = copy_bdd_saved_arr(bdd_arr_out);
   pair->mask = NULL;
   pair->rewrite = NULL;
