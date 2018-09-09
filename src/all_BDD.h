@@ -17,6 +17,7 @@
 #include <dirent.h>  
 #include "usedBDD.h"  
 #include <sys/time.h>
+#include <malloc.h>
 
 //结构体或变量定义
 //自定义
@@ -2318,8 +2319,8 @@ insc_to_Tri_express_rlimit(struct of_rule *r_in, struct of_rule *r_out, BDD v_an
   pair->in->lks = copy_links_of_rule(lks);
   pair->out = xcalloc(1, sizeof *(pair->out));
   pair->out->lks = copy_links_of_rule(lks_out);
-  pair->r_arr = xmalloc(sizeof (uint32_t)+2*sizeof (struct r_idx));
 
+  pair->r_arr = xmalloc(sizeof (uint32_t)+2*sizeof (struct r_idx));
 
   pair->r_arr->nrs = 2;
   pair->r_arr->ridx[0].sw_idx = r_in->sw_idx;
@@ -2710,7 +2711,7 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   // printf("starting nf_space_connect\n");
   // if(!is_insc_links(a->out->lks, b->in->lks))
   //   return NULL;
-  // struct timeval start,stop;  //计算时间差 usec
+  struct timeval start,stop;  //计算时间差 usec
   // gettimeofday(&start,NULL);
   // BDD root_a = load_saved_bddarr(a->out->mf);
   // BDD root_b = load_saved_bddarr(b->in->mf);
@@ -2718,14 +2719,20 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   // if (global_sign < 10) {
   //   printf("load_saved_bddarr %lld us\n", diff(&stop, &start));
   // }
-  // gettimeofday(&start,NULL);
+  gettimeofday(&start,NULL);
   BDD insc = bdd_apply(a->out->mf, b->in->mf, bddop_and);
-  // gettimeofday(&stop,NULL);
-  // if (global_sign < 10) {
-  //   printf("bdd_apply %lld us\n", diff(&stop, &start));
-  //   global_sign++;
-  // }
+  gettimeofday(&stop,NULL);
+  if (global_sign < 10) {
+    printf("bdd_apply %lld us\n", diff(&stop, &start));
+    // global_sign++;
+  }
+
+
+  gettimeofday(&start,NULL);
+
   computation_counter ++;
+
+
   if (!insc) 
     return NULL;
   for (int i = 0; i < a->r_arr->nrs - 1; i++) {
@@ -2734,6 +2741,19 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
         return NULL;
     }
   }
+
+
+  mallopt(M_MMAP_MAX, 0); // 禁止malloc调用mmap分配内存
+  mallopt(M_TRIM_THRESHOLD, -1); // 禁止内存紧缩
+
+  gettimeofday(&stop,NULL);
+  if (global_sign < 10) {
+    printf("!insc %lld us\n", diff(&stop, &start));
+    global_sign++;
+  }
+  gettimeofday(&start,NULL);
+
+
   compu_true_counter ++;
   // struct bdd_saved_arr *bdd_arr_insc = bdd_save_arr(insc);
   struct nf_space_pair *pair_tmp = xcalloc(1, sizeof *pair_tmp);
@@ -2743,7 +2763,13 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   pair_tmp->out->lks = copy_links_of_rule(b->out->lks);
 
   if (a->mask) {
+    struct timeval startin,stopin;  //计算时间差 usec
+    gettimeofday(&startin,NULL);
     pair_tmp->in->mf = bdd_rw_back_BDD(insc, a->in->mf, a->mask);
+    gettimeofday(&stopin,NULL);
+    if (global_sign < 10) {
+      printf("bdd_rw_back_BDD %lld us\n", diff(&stopin, &startin));
+    }
     if (b->mask) {
       pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
       pair_tmp->rewrite = xcalloc(1, sizeof *(pair_tmp->rewrite));
@@ -2769,28 +2795,58 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
     }
   }
   if (b->mask) {
+    struct timeval startin,stopin;  //计算时间差 usec
+    gettimeofday(&startin,NULL);
     pair_tmp->out->mf = bdd_rw_BDD(insc, b->mask, b->rewrite);
+    gettimeofday(&stopin,NULL);
+    if (global_sign < 10) {
+      printf("bdd_rw_BDD %lld us\n", diff(&stopin, &startin));
+    }
     if (!(a->mask)){
+      gettimeofday(&startin,NULL);
       pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
       pair_tmp->rewrite = xcalloc(1, sizeof *(pair_tmp->rewrite));
       for (uint32_t j = 0; j < MF_LEN; j++) {
         pair_tmp->mask->v[j] = b->mask->v[j];
         pair_tmp->rewrite->v[j] = b->rewrite->v[j];
       }
+      gettimeofday(&stopin,NULL);
+      if (global_sign < 10) {
+        printf("!(a->mask) %lld us\n", diff(&stopin, &startin));
+      }
     }
   }
   else{
     pair_tmp->out->mf = insc;//建立copy
   }
+
+  struct timeval startin,stopin;  //计算时间差 usec
+  gettimeofday(&startin,NULL);
   pair_tmp->r_arr = xmalloc(sizeof (uint32_t)+(a->r_arr->nrs+b->r_arr->nrs -1)*sizeof (struct r_idx));
+  // pair_tmp->r_arr = xcalloc(1,sizeof (uint32_t)+(a->r_arr->nrs+b->r_arr->nrs -1)*sizeof (struct r_idx));
+  gettimeofday(&stopin,NULL);
+  if (global_sign < 10) {
+    printf("r_arr1 %lld us num: %d\n", diff(&stopin, &startin), (a->r_arr->nrs+b->r_arr->nrs -1));
+  }
   pair_tmp->r_arr->nrs = a->r_arr->nrs+b->r_arr->nrs -1;
   for (uint32_t i = 0; i < a->r_arr->nrs; i++) {
     pair_tmp->r_arr->ridx[i].sw_idx = a->r_arr->ridx[i].sw_idx;
     pair_tmp->r_arr->ridx[i].r_idx = a->r_arr->ridx[i].r_idx;
   }
+
+
   for (uint32_t i = 0; i < b->r_arr->nrs -1; i++) {
     pair_tmp->r_arr->ridx[i+a->r_arr->nrs].sw_idx = b->r_arr->ridx[i+1].sw_idx;
     pair_tmp->r_arr->ridx[i+a->r_arr->nrs].r_idx = b->r_arr->ridx[i+1].r_idx;
+  }
+  gettimeofday(&stopin,NULL);
+
+  gettimeofday(&stop,NULL);
+  if (global_sign < 10) {
+
+    printf("r_arr %lld us num: %d - %d\n", diff(&stopin, &startin), a->r_arr->nrs, b->r_arr->nrs);
+    printf("bdd_other way %lld us\n", diff(&stop, &start));
+    global_sign++;
   }
 
   return pair_tmp;
@@ -3322,6 +3378,7 @@ print_CS_matrix_v_arr(struct CS_matrix_idx_v_arr *v_arr) {
 
 void
 BDD_init_multiply(void) {
+
   bdd_init(BDDSIZE, BDDOPCHCHE);
   bdd_setvarnum(16*MF_LEN);
 }
