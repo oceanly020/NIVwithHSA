@@ -499,7 +499,7 @@ main (int argc, char **argv)
   print_vElemsNUM_of_Matrix_CSR(matrix_CSR);
 
   gettimeofday(&start,NULL);
-  struct CS_matrix_idx_v_arr *port_CSR_row = gen_sparse_matrix_row_fr_port(100021); 
+  struct CS_matrix_idx_v_arr *port_CSR_row = gen_sparse_matrix_row_fr_port(300003); 
   gettimeofday(&stop,NULL);
   long long int gen_port_CSR_row = diff(&stop, &start)/1000;
 
