@@ -621,7 +621,7 @@ main (int argc, char **argv)
   print_vElemsNUM_of_Matrix_CSR(muti1_CSR);
   print_counter();
   counter_init();
-  free_matrix_CSR(matrix_CSR);
+  // free_matrix_CSR(matrix_CSR);
   // uint32_t r_idx = matrix_idx_get_2idx(14, 1885);
   // print_matrix_element(matrix_CSR->rows[r_idx]->idx_vs[0]->elem);
   // print_matrix_element(muti1_CSR->rows[r_idx]->idx_vs[0]->elem);
