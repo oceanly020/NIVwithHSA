@@ -2783,7 +2783,10 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   if (a->mask) {
     // struct timeval start_in,stop_in;
     // gettimeofday(&start_in,NULL);
-    pair_tmp->in->mf = bdd_rw_back(bdd_arr_insc, a->in->mf, a->mask);
+    if(root_a == insc)
+      pair_tmp->in->mf = copy_bdd_saved_arr(a->in->mf);
+    else
+      pair_tmp->in->mf = bdd_rw_back(bdd_arr_insc, a->in->mf, a->mask);
     // gettimeofday(&stop_in,NULL);
     // if (global_sign < 30) {
     //   printf("bdd_rw_back %lld us\n", diff(&stop_in, &start_in));
@@ -2807,7 +2810,7 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
     }     
   }
   else{    
-    pair_tmp->in->mf = copy_bdd_saved_arr(bdd_arr_insc);;
+    pair_tmp->in->mf = copy_bdd_saved_arr(bdd_arr_insc);
     if (!(b->mask)) {
       pair_tmp->mask = NULL;
       pair_tmp->rewrite = NULL;
@@ -2816,7 +2819,10 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   if (b->mask) {
     // struct timeval start_in,stop_in;
     // gettimeofday(&start_in,NULL);
-    pair_tmp->out->mf = bdd_rw(bdd_arr_insc, b->mask, b->rewrite);
+    if(root_b == insc)
+      pair_tmp->out->mf = copy_bdd_saved_arr(b->out->mf);
+    else
+      pair_tmp->out->mf = bdd_rw(bdd_arr_insc, b->mask, b->rewrite);
     // gettimeofday(&stop_in,NULL);
     // if (global_sign < 30) {
     //   printf("bdd_rw %lld us\n", diff(&stop_in, &start_in));
