@@ -588,8 +588,7 @@ main (int argc, char **argv)
   printf("port->vs multi matrix 2t: %lld us; the len = %d\n", T_port_CSR_ot_row2, port_CSR_ot_row2->nidx_vs);
   print_counter();
   counter_init();
-
-  // print_matrix_element(port_CSR_row2->idx_vs[0]->elem);
+  print_matrix_element(port_CSR_row2->idx_vs[0]->elem);
 
   gettimeofday(&start,NULL); 
   struct CS_matrix_idx_v_arr *port_CSR_row3 = vec_matrix_multiply(port_CSR_row2, matrix_CSC);
@@ -599,7 +598,7 @@ main (int argc, char **argv)
   print_counter();
   counter_init();
   printf("port->vs multi matrix 3t: %lld us; the len = %d\n", T_port_CSR_row3, port_CSR_row3->nidx_vs);
-  // print_matrix_element(port_CSR_row3->idx_vs[0]->elem);
+  print_matrix_element(port_CSR_row3->idx_vs[0]->elem);
 
   gettimeofday(&start,NULL); 
   struct CS_matrix_idx_v_arr *port_CSR_row4 = vec_matrix_multiply(port_CSR_row2, matrix_CSC);
@@ -744,6 +743,8 @@ main (int argc, char **argv)
   print_counter();
   counter_init();
   free_matrix_CSR(muti2_CSR);
+
+
 
 
 
