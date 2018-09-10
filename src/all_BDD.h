@@ -2964,7 +2964,9 @@ row_all_col_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSC *matrix_
 static int
 CS_matrix_idx_v_cmp (const void *a, const void *b)
 {
-  uint32_t c = ((*(struct CS_matrix_idx_v *)a).idx) - ((*(struct CS_matrix_idx_v *)b).idx);
+  struct CS_matrix_idx_v *va = *(struct CS_matrix_idx_v **)a;
+  struct CS_matrix_idx_v *vb = *(struct CS_matrix_idx_v **)b;
+  uint32_t c = (va->idx) - (vb->idx);
   return c;
 }
 

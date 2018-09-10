@@ -2980,7 +2980,10 @@ row_all_col_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSC *matrix_
 static int
 CS_matrix_idx_v_cmp (const void *a, const void *b)
 {
-  uint32_t c = ((*(struct CS_matrix_idx_v *)a).idx) - ((*(struct CS_matrix_idx_v *)b).idx);
+  struct CS_matrix_idx_v *va = *(struct CS_matrix_idx_v **)a;
+  struct CS_matrix_idx_v *vb = *(struct CS_matrix_idx_v **)b;
+  // printf("%d - %d\n", va->idx, vb->idx);
+  uint32_t c = (va->idx) - (vb->idx);
   return c;
 }
 
@@ -3000,7 +3003,7 @@ row_matrix_CSR_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSR *matr
           if (vs_count){
             uint32_t sign = 1;
             for (int k = 0; k < vs_count; k++) {
-              if(j == vs[k]->idx){
+              if(row_matrix->idx_vs[j]->idx == vs[k]->idx){
                 vs[k]->elem = matrix_elem_plus(vs[k]->elem, elem_tmp);
                 sign = 0;
                 break;
@@ -3008,14 +3011,14 @@ row_matrix_CSR_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSR *matr
             }
             if (sign) {
               vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
-              vs[vs_count]->idx = j;
+              vs[vs_count]->idx = row_matrix->idx_vs[j]->idx;
               vs[vs_count]->elem = elem_tmp;
               vs_count ++;
             }      
           }
           else {
             vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
-            vs[vs_count]->idx = j;
+            vs[vs_count]->idx = row_matrix->idx_vs[j]->idx;
             vs[vs_count]->elem = elem_tmp;
             vs_count ++;
           }     
@@ -3025,9 +3028,18 @@ row_matrix_CSR_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSR *matr
     }
   }
 
-
+  for (int i = 0; i < vs_count; i++)
+    {
+      printf("%d;", vs[i]->idx);
+    }
+    printf("\n");
   if(vs_count){
     qsort (vs, vs_count,sizeof(struct CS_matrix_idx_v *), CS_matrix_idx_v_cmp); 
+    for (int i = 0; i < vs_count; i++)
+    {
+      printf("%d;", vs[i]->idx);
+    }
+    printf("\n");
     tmp = xmalloc(sizeof(uint32_t) + vs_count*sizeof(struct CS_matrix_idx_v *));
     tmp->nidx_vs = vs_count;
     // memcpy (tmp->idx_vs, vs, vs_count*sizeof(struct CS_matrix_idx_v *)); 
