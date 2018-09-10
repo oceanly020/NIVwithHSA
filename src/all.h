@@ -2446,7 +2446,7 @@ gen_matrix_CSR_from_Tris(struct Tri_arr *Tri_arr) {
     // for (int i = 0; i < count * MF_LEN; i += MF_LEN) {
     //计数乘以MF_LEN，i+MF_LEN，i，按match所占uint16_t位数循环，在前面的文件中
     if (Tri_is_eq (Tri_arr->arr[i], Tri_arr->arr[last])) {
-      Tri_arr_tmp[count-1]->elem = matrix_elem_plus(Tri_arr_tmp[count-1]->elem, Tri_arr->arr[i]->elem);
+      // Tri_arr_tmp[count-1]->elem = matrix_elem_plus(Tri_arr_tmp[count-1]->elem, Tri_arr->arr[i]->elem);
       free(Tri_arr->arr[i]);
       continue;
     }
