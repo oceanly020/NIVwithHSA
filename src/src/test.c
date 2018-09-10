@@ -638,6 +638,8 @@ main() {
 	// mf2->mf_v[0] = 0x3000;
 	// mf2->mf_v[1] = 0x0000;
 
+	printf("reverse %x\n", ((mf1->mf_w[0])&(mf2->mf_w[0])) | ((mf1->mf_v[0])&((~mf2->mf_w[0]))));
+
     BDD v1, v2;
     bdd_init(2000,100);
     // fdd_extdomain(domain, 2);

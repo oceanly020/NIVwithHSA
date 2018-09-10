@@ -130,7 +130,7 @@ average_v_matrix(int x, struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix
       muti1_idx_v_arr = row_all_col_multiply(muti1_idx_v_arr, matrix_CSC);
     
     gettimeofday(&stop,NULL);
-    printf("%lld us; ", diff(&stop, &start));
+    printf("%ld us; ", diff(&stop, &start));
 
 
     printf("\n");
@@ -161,7 +161,7 @@ average_v_matrix_all(int x, struct matrix_CSR *matrix_CSR, struct matrix_CSC *ma
       gettimeofday(&start,NULL); 
       struct CS_matrix_idx_v_arr *muti1_idx_v_arr = row_all_col_multiply(matrix_CSR->rows[rand_num], matrix_CSC);
       gettimeofday(&stop,NULL);
-      printf("1-1:%lld us; ", diff(&stop, &start));
+      printf("1-1:%ld us; ", diff(&stop, &start));
       average1 += diff(&stop, &start);
       average2 += diff(&stop, &start);
       average3 += diff(&stop, &start);
@@ -173,7 +173,7 @@ average_v_matrix_all(int x, struct matrix_CSR *matrix_CSR, struct matrix_CSC *ma
         gettimeofday(&start,NULL); 
         muti2_idx_v_arr = row_all_col_multiply(muti2_idx_v_arr, matrix_CSC);
         gettimeofday(&stop,NULL);
-        printf("2-2:%lld us; ", diff(&stop, &start));
+        printf("2-2:%ld us; ", diff(&stop, &start));
         average2 += diff(&stop, &start);
       }
       bdd_gbc();
@@ -182,7 +182,7 @@ average_v_matrix_all(int x, struct matrix_CSR *matrix_CSR, struct matrix_CSC *ma
           gettimeofday(&start,NULL);
           struct CS_matrix_idx_v_arr *muti3_idx_v_arr_tmp = row_all_col_multiply(muti3_idx_v_arr, matrix_CSC1);
           gettimeofday(&stop,NULL);
-          printf("3-2:%lld us; ", diff(&stop, &start));
+          printf("3-2:%ld us; ", diff(&stop, &start));
           average3 += diff(&stop, &start);
         }
       }
@@ -192,7 +192,7 @@ average_v_matrix_all(int x, struct matrix_CSR *matrix_CSR, struct matrix_CSC *ma
         gettimeofday(&start,NULL); 
         muti2_idx_v_arr = row_all_col_multiply(muti2_idx_v_arr, matrix_CSC);
         gettimeofday(&stop,NULL);
-        printf("2-3:%lld us; ", diff(&stop, &start));
+        printf("2-3:%ld us; ", diff(&stop, &start));
         average2 += diff(&stop, &start);
       }
       bdd_gbc();
@@ -201,7 +201,7 @@ average_v_matrix_all(int x, struct matrix_CSR *matrix_CSR, struct matrix_CSC *ma
           gettimeofday(&start,NULL);
           struct CS_matrix_idx_v_arr *muti3_idx_v_arr_tmp = row_all_col_multiply(muti3_idx_v_arr, matrix_CSC2);
           gettimeofday(&stop,NULL);
-          printf("3-3:%lld us; ", diff(&stop, &start));
+          printf("3-3:%ld us; ", diff(&stop, &start));
           average3 += diff(&stop, &start);
         }
       
@@ -243,7 +243,7 @@ average_v_matrix_forall(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix
       gettimeofday(&start,NULL); 
       struct CS_matrix_idx_v_arr *muti1_idx_v_arr = row_all_col_multiply(matrix_CSR->rows[rand_num], matrix_CSC);
       gettimeofday(&stop,NULL);
-      printf("1-1:%lld us; ", diff(&stop, &start));
+      printf("1-1:%ld us; ", diff(&stop, &start));
       average1 += diff(&stop, &start);
       average2 += diff(&stop, &start);
       average3 += diff(&stop, &start);
@@ -255,7 +255,7 @@ average_v_matrix_forall(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix
         gettimeofday(&start,NULL); 
         muti2_idx_v_arr = row_all_col_multiply(muti2_idx_v_arr, matrix_CSC);
         gettimeofday(&stop,NULL);
-        printf("2-2:%lld us; ", diff(&stop, &start));
+        printf("2-2:%ld us; ", diff(&stop, &start));
         average2 += diff(&stop, &start);
       }
       bdd_gbc();
@@ -264,7 +264,7 @@ average_v_matrix_forall(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix
           gettimeofday(&start,NULL);
           struct CS_matrix_idx_v_arr *muti3_idx_v_arr_tmp = row_all_col_multiply(muti3_idx_v_arr, matrix_CSC1);
           gettimeofday(&stop,NULL);
-          printf("3-2:%lld us; ", diff(&stop, &start));
+          printf("3-2:%ld us; ", diff(&stop, &start));
           average3 += diff(&stop, &start);
         }
       }
@@ -274,7 +274,7 @@ average_v_matrix_forall(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix
         gettimeofday(&start,NULL); 
         muti2_idx_v_arr = row_all_col_multiply(muti2_idx_v_arr, matrix_CSC);
         gettimeofday(&stop,NULL);
-        printf("2-3:%lld us; ", diff(&stop, &start));
+        printf("2-3:%ld us; ", diff(&stop, &start));
         average2 += diff(&stop, &start);
       }
       bdd_gbc();
@@ -283,7 +283,7 @@ average_v_matrix_forall(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix
           gettimeofday(&start,NULL);
           struct CS_matrix_idx_v_arr *muti3_idx_v_arr_tmp = row_all_col_multiply(muti3_idx_v_arr, matrix_CSC2);
           gettimeofday(&stop,NULL);
-          printf("3-3:%lld us; ", diff(&stop, &start));
+          printf("3-3:%ld us; ", diff(&stop, &start));
           average3 += diff(&stop, &start);
         }
       
@@ -328,7 +328,7 @@ average_v_matrix_1t(int x, struct matrix_CSR *matrix_CSR, struct matrix_CSC *mat
     //   muti1_idx_v_arr = row_all_col_multiply(muti1_idx_v_arr, matrix_CSC);
     
     gettimeofday(&stop,NULL);
-    printf("%lld us; ", diff(&stop, &start));
+    printf("%ld us; ", diff(&stop, &start));
     printf("\n");
     average += diff(&stop, &start);
   }
@@ -362,7 +362,7 @@ average_v_matrix_Rc(int x, struct matrix_CSR *matrix_CSR, struct matrix_CSC *mat
         muti1_idx_v_arr = row_all_col_multiply(muti1_idx_v_arr, matrix_CSC2);
     }
     gettimeofday(&stop,NULL);
-    printf("%lld us; ", diff(&stop, &start));
+    printf("%ld us; ", diff(&stop, &start));
     printf("\n");
     average += diff(&stop, &start);
   }
@@ -389,7 +389,7 @@ link_matrix(int x, struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix_CSC)
     gettimeofday(&start,NULL); 
     struct CS_matrix_idx_v_arr *muti1_idx_v_arr = row_all_col_multiply(matrix_CSR->rows[rand_num], matrix_CSC);
     gettimeofday(&stop,NULL);
-    printf("%lld us; ", diff(&stop, &start));
+    printf("%ld us; ", diff(&stop, &start));
     printf("\n");
     average += diff(&stop, &start);
   }
@@ -421,18 +421,49 @@ print_vElemsNUM_of_Matrix_CSC(struct matrix_CSC *matrix_CSC) {
 }
 
 void
+print_npairsNUM_of_Matrix_CSR(struct matrix_CSR *matrix_CSR) {
+  uint32_t sum = 0;
+  for (int i = 0; i < matrix_CSR->nrows; i++) {
+    if (matrix_CSR->rows[i]) {
+      for (int j = 0; j < matrix_CSR->rows[i]->nidx_vs; j++) {
+        sum += matrix_CSR->rows[i]->idx_vs[j]->elem->npairs;
+      }
+    }
+  }
+  printf("This Matrix_CSR has %d valid npairs\n", sum);
+}
+void
+print_npairsNUM_of_Matrix_CSC(struct matrix_CSC *matrix_CSC) {
+  uint32_t sum = 0;
+  for (int i = 0; i < matrix_CSC->ncols; i++) {
+    if (matrix_CSC->cols[i]) {
+      for (int j = 0; j < matrix_CSC->cols[i]->nidx_vs; j++) {
+        sum += matrix_CSC->cols[i]->idx_vs[j]->elem->npairs;
+      }
+    }
+  }
+  printf("This Matrix_CSC has %d valid npairs\n", sum);
+}
+
+void
 counter_init(void) {
   computation_counter = 0;
   elemconnet_counter = 0;
   compu_true_counter = 0;
+  computation_firstcounter = 0;
   global_sign = 0;
+  time_counter1 = 0;
+  time_counter2 = 0;
 }
 
 void
 print_counter(void){
+  printf("computation_firstcounter = %d\n", elemconnet_counter);
   printf("computation_counter = %d\n", computation_counter);
   printf("compu_true_counter = %d\n", compu_true_counter);
   printf("elemconnet_counter = %d\n", elemconnet_counter);
+  printf("time_counter1 = %ld us\n", time_counter1);
+  printf("time_counter2 = %ld us\n", time_counter2);
 }
 
 int
@@ -497,6 +528,7 @@ main (int argc, char **argv)
   long long int gen_CSR = diff(&stop, &start)/1000;
   printf("gen CSR: %lld ms\n", gen_CSR);
   print_vElemsNUM_of_Matrix_CSR(matrix_CSR);
+  print_npairsNUM_of_Matrix_CSR(matrix_CSR);
   printf("================================================================\n");
 
 
@@ -557,20 +589,20 @@ main (int argc, char **argv)
   // print_bdd_saved_arr(port_CSR_row->idx_vs[0]->elem->nf_pairs[0]->in->mf);
 
 
-  BDD_init_multiply();
-  gettimeofday(&start,NULL); 
-  struct CS_matrix_idx_v_arr *port_CSR_row1 = vec_matrix_multiply(port_CSR_row, matrix_CSC);
-  // muti1_idx_v_arr = row_all_col_multiply(muti1_idx_v_arr, matrix_CSC);
-  gettimeofday(&stop,NULL);
-  long long int T_port_CSR_row1 = diff(&stop, &start);
-  // print_matrix_element(port_CSR_row1->idx_vs[0]->elem);
-  printf("port->vs multi matrix 1t: %lld us; the len = %d\n", T_port_CSR_row1, port_CSR_row1->nidx_vs);
-  // for (int i = 0; i < port_CSR_row1->nidx_vs; i++)
-  //   printf("%d;", port_CSR_row1->idx_vs[i]->idx);
-  // printf("\n");
-  print_counter();
-  counter_init();
-  printf("================================================================\n");
+  // BDD_init_multiply();
+  // gettimeofday(&start,NULL); 
+  // struct CS_matrix_idx_v_arr *port_CSR_row1 = vec_matrix_multiply(port_CSR_row, matrix_CSC);
+  // // muti1_idx_v_arr = row_all_col_multiply(muti1_idx_v_arr, matrix_CSC);
+  // gettimeofday(&stop,NULL);
+  // long long int T_port_CSR_row1 = diff(&stop, &start);
+  // // print_matrix_element(port_CSR_row1->idx_vs[0]->elem);
+  // printf("port->vs multi matrix 1t: %lld us; the len = %d\n", T_port_CSR_row1, port_CSR_row1->nidx_vs);
+  // // for (int i = 0; i < port_CSR_row1->nidx_vs; i++)
+  // //   printf("%d;", port_CSR_row1->idx_vs[i]->idx);
+  // // printf("\n");
+  // print_counter();
+  // counter_init();
+  // printf("================================================================\n");
 
 
   // // print_CS_matrix_idx_v_arr(port_CSR_row1);
@@ -581,20 +613,20 @@ main (int argc, char **argv)
   // print_rule(r);
 
 
-  gettimeofday(&start,NULL); 
-  struct CS_matrix_idx_v_arr *port_CSR_row2 = vec_matrix_multiply(port_CSR_row1, matrix_CSC);
-  // muti1_idx_v_arr = row_all_col_multiply(muti1_idx_v_arr, matrix_CSC);
-  gettimeofday(&stop,NULL);
-  long long int T_port_CSR_row2 = diff(&stop, &start);
-  printf("port->vs multi matrix 2t: %lld us; the len = %d\n", T_port_CSR_row2, port_CSR_row2->nidx_vs);
-  for (int i = 0; i < port_CSR_row2->nidx_vs; i++)
-  {
-    printf("%d;", port_CSR_row2->idx_vs[i]->idx);
-  }
-  printf("\n");
-  print_counter();
-  counter_init();
-  printf("================================================================\n");
+  // gettimeofday(&start,NULL); 
+  // struct CS_matrix_idx_v_arr *port_CSR_row2 = vec_matrix_multiply(port_CSR_row1, matrix_CSC);
+  // // muti1_idx_v_arr = row_all_col_multiply(muti1_idx_v_arr, matrix_CSC);
+  // gettimeofday(&stop,NULL);
+  // long long int T_port_CSR_row2 = diff(&stop, &start);
+  // printf("port->vs multi matrix 2t: %lld us; the len = %d\n", T_port_CSR_row2, port_CSR_row2->nidx_vs);
+  // for (int i = 0; i < port_CSR_row2->nidx_vs; i++)
+  // {
+  //   printf("%d;", port_CSR_row2->idx_vs[i]->idx);
+  // }
+  // printf("\n");
+  // print_counter();
+  // counter_init();
+  // printf("================================================================\n");
 
   // gettimeofday(&start,NULL); 
   // struct CS_matrix_idx_v_arr *port_CSR_ot_row2 = row_matrix_CSR_multiply(port_CSR_row1, matrix_CSR);
@@ -612,14 +644,14 @@ main (int argc, char **argv)
   // printf("================================================================\n");
   // // print_matrix_element(port_CSR_row2->idx_vs[0]->elem);
 
-  gettimeofday(&start,NULL); 
-  struct CS_matrix_idx_v_arr *port_CSR_row3 = vec_matrix_multiply(port_CSR_row2, matrix_CSC);
-  // muti1_idx_v_arr = row_all_col_multiply(muti1_idx_v_arr, matrix_CSC);
-  gettimeofday(&stop,NULL);
-  long long int T_port_CSR_row3 = diff(&stop, &start);
-  print_counter();
-  counter_init();
-  printf("port->vs multi matrix 3t: %lld us; the len = %d\n", T_port_CSR_row3, port_CSR_row3->nidx_vs);
+  // gettimeofday(&start,NULL); 
+  // struct CS_matrix_idx_v_arr *port_CSR_row3 = vec_matrix_multiply(port_CSR_row2, matrix_CSC);
+  // // muti1_idx_v_arr = row_all_col_multiply(muti1_idx_v_arr, matrix_CSC);
+  // gettimeofday(&stop,NULL);
+  // long long int T_port_CSR_row3 = diff(&stop, &start);
+  // print_counter();
+  // counter_init();
+  // printf("port->vs multi matrix 3t: %lld us; the len = %d\n", T_port_CSR_row3, port_CSR_row3->nidx_vs);
   // print_matrix_element(port_CSR_row3->idx_vs[0]->elem);
 
   // gettimeofday(&start,NULL); 
@@ -653,7 +685,7 @@ main (int argc, char **argv)
   // // print_matrix_element(port_CSR_row4->idx_vs[0]->elem);
   // printf("port->vs multi matrix 5t: %lld us; the len = %d\n", T_port_CSR_row5, port_CSR_row5->nidx_vs);
 
-  bdd_done();
+  // bdd_done();
 
 
 /*================================矩阵 对矩阵的计算======================================*/
@@ -664,8 +696,14 @@ main (int argc, char **argv)
   long long int squre = diff(&stop, &start)/1000;
   printf("matrix squre: %lld ms\n", squre);
   print_vElemsNUM_of_Matrix_CSR(muti1_CSR);
+  print_npairsNUM_of_Matrix_CSR(muti1_CSR);
   print_counter();
   counter_init();
+  // struct matrix_CSR *muti1_CSR_compare = sparse_matrix_multiply(matrix_CSR, matrix_CSC);
+  // print_vElemsNUM_of_Matrix_CSR(muti1_CSR_compare);
+  // print_npairsNUM_of_Matrix_CSR(muti1_CSR_compare);
+  // print_counter();
+  // counter_init();
   // free_matrix_CSR(matrix_CSR);
   // uint32_t r_idx = matrix_idx_get_2idx(14, 1885);
   // print_matrix_element(matrix_CSR->rows[r_idx]->idx_vs[0]->elem);
@@ -673,12 +711,13 @@ main (int argc, char **argv)
 
   
   gettimeofday(&start,NULL);
-  struct matrix_CSR *muti1_CSC = gen_CSC_from_CSR(muti1_CSR);
+  struct matrix_CSC *muti1_CSC = gen_CSC_from_CSR(muti1_CSR);
   gettimeofday(&stop,NULL);
   long long int squre_CSC = diff(&stop, &start)/1000;
   printf("matrix squre->CSC: %lld ms\n", squre_CSC);
   print_vElemsNUM_of_Matrix_CSC(muti1_CSC);
   printf("================================================================\n");
+
   // gettimeofday(&start,NULL);
   // struct matrix_CSR *other_CSR = sparse_matrix_multiply_otway(matrix_CSR);
   // gettimeofday(&stop,NULL);
@@ -686,6 +725,7 @@ main (int argc, char **argv)
   // printf("other_CSRmatrix squre: %lld ms\n", squre);
   // print_counter();
   // counter_init();
+  // printf("================================================================\n");
 
 
   
@@ -733,9 +773,15 @@ main (int argc, char **argv)
   long long int squre2 = diff(&stop, &start)/1000;
   printf("matrix squre2: %lld ms\n", squre2);
   print_vElemsNUM_of_Matrix_CSR(muti2_CSR);
+  print_npairsNUM_of_Matrix_CSR(muti2_CSR);
   print_counter();
-  counter_init();
-  free_matrix_CSR(muti1_CSR);
+  counter_init(); 
+  // struct matrix_CSR *muti2_CSR_compare = sparse_matrix_multiply(muti1_CSR_compare, matrix_CSC);
+  // print_vElemsNUM_of_Matrix_CSR(muti2_CSR_compare);
+  // print_npairsNUM_of_Matrix_CSR(muti2_CSR_compare);
+  // print_counter();
+  // counter_init();
+
 
   gettimeofday(&start,NULL);
   struct matrix_CSR *muti2_r_CSR = sparse_matrix_multiply(matrix_CSR, muti1_CSC);
@@ -745,6 +791,9 @@ main (int argc, char **argv)
   print_vElemsNUM_of_Matrix_CSR(muti2_r_CSR);
   print_counter();
   counter_init();
+  printf("================================================================\n");
+
+  // free_matrix_CSR(muti1_CSR);
 
   // gettimeofday(&start,NULL);
   // struct matrix_CSR *muti2_CSC = gen_CSC_from_CSR(muti2_CSR);

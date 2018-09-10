@@ -2217,7 +2217,12 @@ bdd_v2x_bymask(BDD root, struct mask_uint16_t *mask) {
   }
   else{
     int level = bdd_var2level(var);
-    return bdd_makenode(level, bdd_v2x_bymask(LOW(root), mask), bdd_v2x_bymask(HIGH(root), mask));
+    BDD a = bdd_v2x_bymask(LOW(root), mask);
+    BDD b = bdd_v2x_bymask(HIGH(root), mask);
+    if (a == b)
+      return a;
+    else
+      return bdd_makenode(level, a, b);
   }
 }
 
@@ -2743,8 +2748,8 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   }
 
 
-  mallopt(M_MMAP_MAX, 0); // 禁止malloc调用mmap分配内存
-  mallopt(M_TRIM_THRESHOLD, -1); // 禁止内存紧缩
+  // mallopt(M_MMAP_MAX, 0); // 禁止malloc调用mmap分配内存
+  // mallopt(M_TRIM_THRESHOLD, -1); // 禁止内存紧缩
 
   gettimeofday(&stop,NULL);
   if (global_sign < 30) {
@@ -2775,7 +2780,7 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
       pair_tmp->rewrite = xcalloc(1, sizeof *(pair_tmp->rewrite));
       for (uint32_t j = 0; j < MF_LEN; j++) {
         pair_tmp->mask->v[j] = (a->mask->v[j])&(b->mask->v[j]);
-        pair_tmp->rewrite->v[j] = ((a->rewrite->v[j])&(b->mask->v[j])) + ((b->rewrite->v[j])&(~(b->mask->v[j])));
+        pair_tmp->rewrite->v[j] = ((a->rewrite->v[j])&(b->mask->v[j])) | ((b->rewrite->v[j])&(~(b->mask->v[j])));
       }
     }
     else{

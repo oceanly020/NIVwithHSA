@@ -205,7 +205,10 @@ uint32_t data_allr_nums;
 uint32_t computation_counter;//计数器，记录计算某某的数量
 uint32_t compu_true_counter;//计数器，记录计算成功，需要后续常规处理的数量
 uint32_t elemconnet_counter;//计数器，记录计算elem连结的数量
+uint32_t computation_firstcounter;
 uint32_t global_sign; //限定，求得计算打印
+long int time_counter1;
+long int time_counter2;
 
 struct PACKED arrs {
   uint32_t len, n;
@@ -2033,6 +2036,8 @@ bdd_save_arr(BDD root){
   bdd_save2stru(root, arr_tmp, &count);
 
   bdd_unmark(root);
+  // if (count>5000)
+  //   printf("there are 5000 wrong\n");
   
   qsort(arr_tmp, count,sizeof (BDD), cmp_bdd_by_var);
   int var_arr[16*MF_LEN];
@@ -2747,11 +2752,19 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   // printf("starting nf_space_connect\n");
   // if(!is_insc_links(a->out->lks, b->in->lks))
   //   return NULL;
-  // struct timeval start,stop;  //计算时间差 usec
-  // gettimeofday(&start,NULL);
+  struct timeval start,stop;  //计算时间差 usec
+  gettimeofday(&start,NULL);
+  // if ((!(a->out->mf))||(!(b->in->mf)))
+  // {
+  //   printf("there is wrong\n");
+  // }
+
+
+  computation_firstcounter ++;
   BDD root_a = load_saved_bddarr(a->out->mf);
   BDD root_b = load_saved_bddarr(b->in->mf);
-  // gettimeofday(&stop,NULL);
+  gettimeofday(&stop,NULL);
+  time_counter1 += diff(&stop, &start);
   // if (global_sign < 3) {
   //   printf("load_saved_bddarr %lld us\n", diff(&stop, &start));
   // }
@@ -2763,9 +2776,10 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   // }
 
   // gettimeofday(&start,NULL);
-  computation_counter ++;
+  
   if (!insc) 
     return NULL;
+  computation_counter ++;
   for (int i = 0; i < a->r_arr->nrs - 1; i++) {
     for (int j = 0; j < b->r_arr->nrs; j++) {
       if ((a->r_arr->ridx[i].sw_idx == b->r_arr->ridx[j].sw_idx)&&(a->r_arr->ridx[i].r_idx == b->r_arr->ridx[j].r_idx))
@@ -2784,7 +2798,7 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
     // struct timeval start_in,stop_in;
     // gettimeofday(&start_in,NULL);
     // if(root_a == insc)
-    //   pair_tmp->in->mf = copy_bdd_saved_arr(a->in->mf);
+      // pair_tmp->in->mf = copy_bdd_saved_arr(a->in->mf);
     // else
       pair_tmp->in->mf = bdd_rw_back(bdd_arr_insc, a->in->mf, a->mask);
     // gettimeofday(&stop_in,NULL);
@@ -2797,8 +2811,10 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
       pair_tmp->rewrite = xcalloc(1, sizeof *(pair_tmp->rewrite));
       for (uint32_t j = 0; j < MF_LEN; j++) {
         pair_tmp->mask->v[j] = (a->mask->v[j])&(b->mask->v[j]);
-        pair_tmp->rewrite->v[j] = ((a->rewrite->v[j])&(b->mask->v[j])) + ((b->rewrite->v[j])&(~(b->mask->v[j])));
+        pair_tmp->rewrite->v[j] = ((uint16_t)(a->rewrite->v[j])&(uint16_t)(b->mask->v[j])) | ((uint16_t)(b->rewrite->v[j])&((uint16_t)(~b->mask->v[j])));
+        // printf("%x - %x - %x - %x,", a->rewrite->v[j], b->rewrite->v[j], b->mask->v[j], pair_tmp->rewrite->v[j]);
       }
+      // printf("\n");
     }
     else{
       pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
@@ -2819,9 +2835,9 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   if (b->mask) {
     // struct timeval start_in,stop_in;
     // gettimeofday(&start_in,NULL);
-    // if(root_b == insc)
-    //   pair_tmp->out->mf = copy_bdd_saved_arr(b->out->mf);
-    // else
+    if(root_b == insc)
+      pair_tmp->out->mf = copy_bdd_saved_arr(b->out->mf);
+    else
       pair_tmp->out->mf = bdd_rw(bdd_arr_insc, b->mask, b->rewrite);
     // gettimeofday(&stop_in,NULL);
     // if (global_sign < 30) {
@@ -2857,6 +2873,8 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   //   printf("all %lld us\n", diff(&stop, &start));
   //   global_sign++;
   // }
+  gettimeofday(&stop,NULL);
+  time_counter2 += diff(&stop, &start);
   return pair_tmp;
 }
 
@@ -3028,18 +3046,18 @@ row_matrix_CSR_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSR *matr
     }
   }
 
-  for (int i = 0; i < vs_count; i++)
-    {
-      printf("%d;", vs[i]->idx);
-    }
-    printf("\n");
+  // for (int i = 0; i < vs_count; i++)
+  //   {
+  //     printf("%d;", vs[i]->idx);
+  //   }
+  //   printf("\n");
   if(vs_count){
     qsort (vs, vs_count,sizeof(struct CS_matrix_idx_v *), CS_matrix_idx_v_cmp); 
-    for (int i = 0; i < vs_count; i++)
-    {
-      printf("%d;", vs[i]->idx);
-    }
-    printf("\n");
+    // for (int i = 0; i < vs_count; i++)
+    // {
+    //   printf("%d;", vs[i]->idx);
+    // }
+    // printf("\n");
     tmp = xmalloc(sizeof(uint32_t) + vs_count*sizeof(struct CS_matrix_idx_v *));
     tmp->nidx_vs = vs_count;
     // memcpy (tmp->idx_vs, vs, vs_count*sizeof(struct CS_matrix_idx_v *)); 
