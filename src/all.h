@@ -442,7 +442,7 @@ static uint16_t var2sign[16] = {
 #define VAR2SIGN(a) (var2sign[(a%16)])
 #define FRA2INT(a) ((int) (a))
 #define REF(a)    (bddnodes[a].refcou)
-#define BDDSIZE     1000000
+#define BDDSIZE     2000000
 #define BDDOPCHCHE  4000 
 
 struct BddNode_saved {
