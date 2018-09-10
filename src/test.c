@@ -502,11 +502,9 @@ main (int argc, char **argv)
 
   gettimeofday(&start,NULL);
   struct CS_matrix_idx_v_arr *port_CSR_row = gen_sparse_matrix_row_fr_port(300003); 
-  for (int i = 0; i < port_CSR_row->nidx_vs; i++)
-  {
-    printf("%d;", port_CSR_row->idx_vs[i]->idx);
-  }
-  printf("\n");
+  // for (int i = 0; i < port_CSR_row->nidx_vs; i++)
+  //   printf("%d;", port_CSR_row->idx_vs[i]->idx);
+  // printf("\n");
   gettimeofday(&stop,NULL);
   long long int gen_port_CSR_row = diff(&stop, &start)/1000;
 
@@ -567,11 +565,9 @@ main (int argc, char **argv)
   long long int T_port_CSR_row1 = diff(&stop, &start);
   // print_matrix_element(port_CSR_row1->idx_vs[0]->elem);
   printf("port->vs multi matrix 1t: %lld us; the len = %d\n", T_port_CSR_row1, port_CSR_row1->nidx_vs);
-  for (int i = 0; i < port_CSR_row1->nidx_vs; i++)
-  {
-    printf("%d;", port_CSR_row1->idx_vs[i]->idx);
-  }
-  printf("\n");
+  // for (int i = 0; i < port_CSR_row1->nidx_vs; i++)
+  //   printf("%d;", port_CSR_row1->idx_vs[i]->idx);
+  // printf("\n");
   print_counter();
   counter_init();
   printf("================================================================\n");
@@ -682,9 +678,7 @@ main (int argc, char **argv)
   long long int squre_CSC = diff(&stop, &start)/1000;
   printf("matrix squre->CSC: %lld ms\n", squre_CSC);
   print_vElemsNUM_of_Matrix_CSC(muti1_CSC);
-  print_counter();
-  counter_init();
-
+  printf("================================================================\n");
   // gettimeofday(&start,NULL);
   // struct matrix_CSR *other_CSR = sparse_matrix_multiply_otway(matrix_CSR);
   // gettimeofday(&stop,NULL);
