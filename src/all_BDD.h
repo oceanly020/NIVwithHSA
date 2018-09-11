@@ -2314,7 +2314,7 @@ BDD
 bdd_rw_BDD(BDD a, struct mask_uint16_t *mask, struct mask_uint16_t *rw) {
   struct timeval start,stop; 
   gettimeofday(&start,NULL);
-  BDD root_maskx = bdd_v2x_bymask(a, mask);
+  BDD root_maskx = bdd_v2x_bymask_old(a, mask);
   gettimeofday(&stop,NULL);
   time_counter4 += diff(&stop, &start);
   gettimeofday(&start,NULL);
