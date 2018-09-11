@@ -2756,12 +2756,12 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   // mallopt(M_MMAP_MAX, 0); // 禁止malloc调用mmap分配内存
   // mallopt(M_TRIM_THRESHOLD, -1); // 禁止内存紧缩
 
-  gettimeofday(&stop,NULL);
-  if (global_sign < 30) {
-    printf("!insc %lld us\n", diff(&stop, &start));
+  // gettimeofday(&stop,NULL);
+  // if (global_sign < 30) {
+  //   printf("!insc %lld us\n", diff(&stop, &start));
     
-  }
-  gettimeofday(&start,NULL);
+  // }
+  // gettimeofday(&start,NULL);
 
 
   compu_true_counter ++;
