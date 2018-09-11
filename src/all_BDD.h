@@ -2881,7 +2881,8 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
 struct matrix_element * //a*b,a作用b，不可交换
 elem_connect(struct matrix_element *a, struct matrix_element *b) { 
   elemconnet_counter ++;
-  struct nf_space_pair *nps[10000];
+
+  struct nf_space_pair *nps[50000];
   // printf("%d\n", a->npairs*b->npairs);
   uint32_t count = 0;
   for (uint32_t i = 0; i < a->npairs; i++) {
@@ -2893,6 +2894,10 @@ elem_connect(struct matrix_element *a, struct matrix_element *b) {
         count++;
       }
     }
+    // if (count>8000)
+    // {
+    //   printf("there is err\n");
+    // }
   }
   struct matrix_element *tmp = NULL;
   if (count) {
