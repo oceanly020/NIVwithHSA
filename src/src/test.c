@@ -295,7 +295,6 @@ print_node(BDD r) {
 
 
 
-
 struct BddNode_saved {
 	int var;
 	int low;
@@ -448,130 +447,43 @@ load_saved_bddarr(struct bdd_saved_arr *bdd_arr) {
 		arr_tmp[i] = bdd_makenode(level, arr_tmp[bdd_arr->bdd_s[i].low], arr_tmp[bdd_arr->bdd_s[i].high]);
 	}
 	return arr_tmp[bdd_arr->arr_num-1];
-
 }
 
-// bool
-// bddarr_is_insc (struct bdd_saved_arr *a, struct bdd_saved_arr *b) {
-// 	if (a->arr_num == 1) {
-// 		/* code */
-// 	}
-// 	if (b->arr_num == 1)
-// 	{
-// 		/* code */
-// 	}
-// 	if (l == r)
-// 	  return l;
-//        if (ISZERO(l)  ||  ISZERO(r))
-// 	  return 0;
-//        if (ISONE(l))
-// 	  return r;
-//        if (ISONE(r))
-// 	  return l;
-//        break;
 
-// 	BddCacheData *entry;
-//    BDD res;
-   
-//    switch (applyop)
-//    {
-//     case bddop_and:
-//        if (l == r)
-// 	  return l;
-//        if (ISZERO(l)  ||  ISZERO(r))
-// 	  return 0;
-//        if (ISONE(l))
-// 	  return r;
-//        if (ISONE(r))
-// 	  return l;
-//        break;
-//     case bddop_or:
-//        if (l == r)
-// 	  return l;
-//        if (ISONE(l)  ||  ISONE(r))
-// 	  return 1;
-//        if (ISZERO(l))
-// 	  return r;
-//        if (ISZERO(r))
-// 	  return l;
-//        break;
-//     case bddop_xor:
-//        if (l == r)
-// 	  return 0;
-//        if (ISZERO(l))
-// 	  return r;
-//        if (ISZERO(r))
-// 	  return l;
-//        break;
-//     case bddop_nand:
-//        if (ISZERO(l) || ISZERO(r))
-// 	  return 1;
-//        break;
-//     case bddop_nor:
-//        if (ISONE(l)  ||  ISONE(r))
-// 	  return 0;
-//        break;
-//    case bddop_imp:
-//       if (ISZERO(l))
-// 	 return 1;
-//       if (ISONE(l))
-// 	 return r;
-//       if (ISONE(r))
-// 	 return 1;
-//       break;
-//    }
 
-//    if (ISCONST(l)  &&  ISCONST(r))
-//       res = oprres[applyop][l<<1 | r];
-//    else
-//    {
-//       entry = BddCache_lookup(&applycache, APPLYHASH(l,r,applyop));
-      
-//       if (entry->a == l  &&  entry->b == r  &&  entry->c == applyop)
-//       {
-// #ifdef CACHESTATS
-// 	 bddcachestats.opHit++;
-// #endif
-// 	 return entry->r.res;
-//       }
-// #ifdef CACHESTATS
-//       bddcachestats.opMiss++;
-// #endif
-      
-//       if (LEVEL(l) == LEVEL(r))
-//       {
-// 	 PUSHREF( apply_rec(LOW(l), LOW(r)) );
-// 	 PUSHREF( apply_rec(HIGH(l), HIGH(r)) );
-// 	 res = bdd_makenode(LEVEL(l), READREF(2), READREF(1));
-//       }
-//       else
-//       if (LEVEL(l) < LEVEL(r))
-//       {
-// 	 PUSHREF( apply_rec(LOW(l), r) );
-// 	 PUSHREF( apply_rec(HIGH(l), r) );
-// 	 res = bdd_makenode(LEVEL(l), READREF(2), READREF(1));
-//       }
-//       else
-//       {
-// 	 PUSHREF( apply_rec(l, LOW(r)) );
-// 	 PUSHREF( apply_rec(l, HIGH(r)) );
-// 	 res = bdd_makenode(LEVEL(r), READREF(2), READREF(1));
-//       }
-
-//       POPREF(2);
-
-//       entry->a = l;
-//       entry->b = r;
-//       entry->c = applyop;
-//       entry->r.res = res;
-//    }
-
-//    return res;
-// }
+BDD
+mask2bdd(struct mask_uint16_t *mask){
+  BDD root, tmp;
+  root = 1;
+  tmp = 1;  
+  // print_mf_uint16_t(mf);
+  for (int i = 0; i < MF_LEN; i++){
+    int reverse_i = MF_LEN - i - 1;
+    uint16_t sign = 0x0001;
+    for (int j = 0; j < 16; j++){
+      if (!(sign & mask->v[reverse_i])){
+        int level = bdd_var2level(16*MF_LEN - 16*i - j - 1);//
+        root = bdd_makenode(level, tmp, 0);//生成相应变量的一个节点,为0
+        tmp = root;
+      }
+      sign <<= 1;
+    }
+  }
+  bdd_printtable(root);
+  return root;
+}
 
 
 
+BDD
+bdd_v2x_bymask(BDD root, struct mask_uint16_t *mask) {
+  
+  BDD mask_bdd = mask2bdd(mask); 
+  print_mf_uint16_t_array(bdd2mf(mask_bdd, 16*MF_LEN));
 
+  applyop = 2;
+  return bdd_v2x_rec(root, mask_bdd);
+} 
 // BDD
 // bdd_v2x_byvar(BDD root, struct mask_uint16_t *mask) {
 // 	BddNode *node;
@@ -593,7 +505,7 @@ load_saved_bddarr(struct bdd_saved_arr *bdd_arr) {
 uint16_t uint16_power_sign[16] = {0x0001,0x0002,0x0004,0x0008,0x0010,0x0020,0x0040,0x0080,0x0100,0x0200,0x0400,0x0800,0x1000,0x2000,0x4000,0x8000};
 
 BDD
-bdd_v2x_bymask(BDD root, struct mask_uint16_t *mask) {
+bdd_v2x_bymask_old(BDD root, struct mask_uint16_t *mask) {
 
 	
 	if (root < 2)
@@ -638,10 +550,10 @@ main() {
 	// mf2->mf_v[0] = 0x3000;
 	// mf2->mf_v[1] = 0x0000;
 
-	printf("reverse %x\n", ((mf1->mf_w[0])&(mf2->mf_w[0])) | ((mf1->mf_v[0])&((~mf2->mf_w[0]))));
+	// printf("reverse %x\n", ((mf1->mf_w[0])&(mf2->mf_w[0])) | ((mf1->mf_v[0])&((~mf2->mf_w[0]))));
 
     BDD v1, v2;
-    bdd_init(2000,100);
+    bdd_init(5000,400);
     // fdd_extdomain(domain, 2);
 
     int varnum = 16*MF_LEN;
@@ -654,17 +566,28 @@ main() {
     // bdd_addref(v1);
 
     v2 = mf2bdd(mf2);
-
+    // bdd_addref(v2);
+    // bdd_mark(v1);
+    // bdd_mark(v2);
+    // bdd_printtable(v1);
     
 	BDD v_or = bdd_or(v1, v2);
-	BDD v_x = bdd_v2x_bymask(v_or, mask);
+	// bdd_printtable(v1);
 
-	print_mf_uint16_t_array(bdd2mf(v_or, varnum));
+	BDD v_x = bdd_v2x_bymask(v1, mask);
+
+
+
+
+	// bdd_gbc();
+	// print_mf_uint16_t_array(bdd2mf(v_or, varnum));
 	print_mf_uint16_t_array(bdd2mf(v_x, varnum));
-	printf("%d\n", bdd_apply(v_or,v_x, bddop_diff));
+	// printf("%d\n", bdd_apply(v_or,v_x, bddop_diff));
 
 	// bdd_printtable(v_x);
 	// bdd_printtable(v1);
+	// bdd_printtable(v2);
+	// bdd_printtable(v_or);
 	// bdd_printtable(v2);
 
 	// BDD v_diff = bdd_apply(v1, v2, bddop_diff);

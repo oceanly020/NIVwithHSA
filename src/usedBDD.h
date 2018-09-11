@@ -25,6 +25,7 @@
 /* Should *not* be used in bdd_apply calls !!! */
 #define bddop_not      10
 #define bddop_simplify 11
+#define bddop_to_x     12
 
 
 /*=== User BDD types ===*/
@@ -122,6 +123,7 @@ extern int      bdd_varlevel(int);
 extern BDD      bdd_addref(BDD);
 extern BDD      bdd_delref(BDD);
 extern void     bdd_gbc(void);
+extern void     bdd_gbc_except_applycache(void);
 extern int      bdd_scanset(BDD, int**, int*);
 extern BDD      bdd_makeset(int *, int);
 extern bddPair* bdd_newpair(void);
@@ -389,6 +391,7 @@ extern int    bdd_operator_init(int);
 extern void   bdd_operator_done(void);
 extern void   bdd_operator_varresize(void);
 extern void   bdd_operator_reset(void);
+extern void   bdd_operator_reset_except_applycache(void);
 
 extern void   bdd_pairs_init(void);
 extern void   bdd_pairs_done(void);
@@ -1320,6 +1323,15 @@ void bdd_operator_reset(void)
    BddCache_reset(&misccache);
 }
 
+void bdd_operator_reset_except_applycache(void)
+{
+   BddCache_reset(&itecache);
+   BddCache_reset(&quantcache);
+   BddCache_reset(&appexcache);
+   BddCache_reset(&replacecache);
+   BddCache_reset(&misccache);
+}
+
 void bdd_operator_varresize(void)
 {
    if (quantvarset != NULL)
@@ -1624,6 +1636,46 @@ static BDD apply_rec(BDD l, BDD r)
    }
 
    return res;
+}
+
+BDD
+bdd_v2x_rec(BDD root, BDD mask) {
+  BddCacheData *entry;
+  BDD res;
+  if ((root < 2) || (mask < 2))
+    return root;
+  
+
+  entry = BddCache_lookup(&applycache, APPLYHASH(root,mask,12));
+  if (entry->a == root  &&  entry->b == mask  &&  entry->c == 12) {
+#ifdef CACHESTATS
+    bddcachestats.opHit++;
+#endif
+    return entry->r.res;
+#ifdef CACHESTATS
+    bddcachestats.opMiss++;
+#endif
+  }
+  if (LEVEL(root) == LEVEL(mask)) {//root需要变x
+    res = apply_rec(bdd_v2x_rec(LOW(root), LOW(mask)), bdd_v2x_rec(HIGH(root), LOW(mask)));
+  }
+  else if (LEVEL(root) < LEVEL(mask)) {
+    // res = bdd_v2x_rec(root, LOW(mask));
+    PUSHREF( bdd_v2x_rec(LOW(root), mask));
+    PUSHREF( bdd_v2x_rec(HIGH(root), mask));
+    res = bdd_makenode(LEVEL(root), READREF(2), READREF(1));
+    POPREF(2);
+  }
+  else {
+    res = bdd_v2x_rec(root, LOW(mask));
+  }
+
+  entry->a = root;
+  entry->b = mask;
+  entry->c = 12;
+  entry->r.res = res;
+
+  return res;
 }
 
 BDD bdd_and(BDD l, BDD r)
@@ -6169,6 +6221,52 @@ void bdd_gbc(void)
    //    s.num = gbcollectnum;
    //    gbc_handler(0, &s);
    // }
+}
+
+void bdd_gbc_except_applycache(void)
+{
+   int *r;
+   int n;
+   
+   for (r=bddrefstack ; r<bddrefstacktop ; r++)
+      bdd_mark(*r);
+
+   for (n=0 ; n<bddnodesize ; n++)
+   {
+      if (bddnodes[n].refcou > 0)
+    bdd_mark(n);
+      bddnodes[n].hash = 0;
+   }
+   
+   bddfreepos = 0;
+   bddfreenum = 0;
+
+   for (n=bddnodesize-1 ; n>=2 ; n--)
+   {
+      register BddNode *node = &bddnodes[n];
+
+      // if ((LEVELp(node) & MARKON)  &&  LOWp(node) != -1)
+      if (((node)->level & MARKON)  &&  LOWp(node) != -1)
+      {
+    register unsigned int hash;
+
+    (node)->level &= MARKOFF;
+    hash = NODEHASH_K((node)->level, LOWp(node), HIGHp(node));
+
+    // LEVELp(node) &= MARKOFF;
+    // hash = NODEHASH_K(LEVELp(node), LOWp(node), HIGHp(node));
+    node->next = bddnodes[hash].hash;
+    bddnodes[hash].hash = n;
+      }
+      else
+      {
+    LOWp(node) = -1;
+    node->next = bddfreepos;
+    bddfreepos = n;
+    bddfreenum++;
+      }
+   }
+   bdd_operator_reset_except_applycache();
 }
 
 void bdd_gbc_fastall(void)

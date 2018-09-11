@@ -1626,6 +1626,47 @@ static BDD apply_rec(BDD l, BDD r)
    return res;
 }
 
+BDD
+bdd_v2x_rec(BDD root, BDD mask) {
+  BddCacheData *entry;
+  BDD res;
+  if ((root < 2) || (mask < 2))
+    return root;
+  
+
+  entry = BddCache_lookup(&applycache, APPLYHASH(root,mask,12));
+  if (entry->a == root  &&  entry->b == mask  &&  entry->c == 12) {
+#ifdef CACHESTATS
+    bddcachestats.opHit++;
+#endif
+    return entry->r.res;
+#ifdef CACHESTATS
+    bddcachestats.opMiss++;
+#endif
+  }
+  if (LEVEL(root) == LEVEL(mask)) {//root需要变x
+    res = apply_rec(bdd_v2x_rec(LOW(root), LOW(mask)), bdd_v2x_rec(HIGH(root), LOW(mask)));
+  }
+  else if (LEVEL(root) < LEVEL(mask)) {
+    // res = bdd_v2x_rec(root, LOW(mask));
+    PUSHREF( bdd_v2x_rec(LOW(root), mask));
+    PUSHREF( bdd_v2x_rec(HIGH(root), mask));
+    res = bdd_makenode(LEVEL(root), READREF(2), READREF(1));
+    POPREF(2);
+  }
+  else {
+    res = bdd_v2x_rec(root, LOW(mask));
+  }
+
+  entry->a = root;
+  entry->b = mask;
+  entry->c = 12;
+  entry->r.res = res;
+
+  return res;
+}
+
+
 BDD bdd_and(BDD l, BDD r)
 {
    return bdd_apply(l,r,bddop_and);

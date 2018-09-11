@@ -552,6 +552,8 @@ counter_init(void) {
   time_counter1 = 0;
   time_counter2 = 0;
   time_counter3 = 0;
+  time_counter4 = 0;
+  time_counter5 = 0;
 }
 
 void
@@ -562,6 +564,8 @@ print_counter(void){
   printf("time_counter1 = %ld us\n", time_counter1);
   printf("time_counter2 = %ld us\n", time_counter2);
   printf("time_counter3 = %ld us\n", time_counter3);
+  printf("time_counter4 = %ld us\n", time_counter4);
+  printf("time_counter5 = %ld us\n", time_counter5);
 }
 
 int
@@ -628,6 +632,7 @@ main (int argc, char **argv)
   print_vElemsNUM_of_Matrix_CSR(matrix_CSR);
   print_npairsNUM_of_Matrix_CSR(matrix_CSR);
   printf("--------------------------------------\n");
+  bdd_gbc();
 
   // gettimeofday(&start,NULL);
   // struct CS_matrix_idx_v_arr *port_CSR_row = gen_sparse_matrix_row_fr_port(1600001); 
@@ -780,6 +785,7 @@ main (int argc, char **argv)
   print_npairsNUM_of_Matrix_CSR(muti1_CSR);
   print_counter();
   counter_init();
+  // bdd_gbc_except_applycache();
   printf("--------------------------------------\n");
   
   // uint32_t r_idx = matrix_idx_get_2idx(14, 1885);
@@ -856,16 +862,19 @@ main (int argc, char **argv)
   // gettimeofday(&stop,NULL);
   // long long int v_m_multiply2 = diff(&stop, &start);
 
-  // gettimeofday(&start,NULL);
-  // struct matrix_CSR *muti2_CSR = sparse_matrix_multiply(muti1_CSR, matrix_CSR);
-  // gettimeofday(&stop,NULL);
-  // long long int squre2 = diff(&stop, &start)/1000;
-  // printf("matrix squre2: %lld ms\n", squre2);
-  // print_vElemsNUM_of_Matrix_CSR(muti2_CSR);
-  // print_npairsNUM_of_Matrix_CSR(muti2_CSR);
-  // print_counter();
-  // counter_init();
-  // printf("--------------------------------------\n");
+  gettimeofday(&start,NULL);
+  struct matrix_CSR *muti2_CSR = sparse_matrix_multiply(muti1_CSR, matrix_CSR);
+  gettimeofday(&stop,NULL);
+  long long int squre2 = diff(&stop, &start)/1000;
+  printf("matrix squre2: %lld ms\n", squre2);
+  print_vElemsNUM_of_Matrix_CSR(muti2_CSR);
+  print_npairsNUM_of_Matrix_CSR(muti2_CSR);
+  print_counter();
+  counter_init();
+  free_matrix_CSR(muti1_CSR);
+  // bdd_gbc_except_applycache();
+  bdd_gbc();
+  printf("--------------------------------------\n");
 
   // gettimeofday(&start,NULL);
   // struct matrix_CSR *muti2_r_CSR = sparse_matrix_multiply(matrix_CSR, muti1_CSR);
@@ -924,16 +933,16 @@ main (int argc, char **argv)
 
   
 
-  // gettimeofday(&start,NULL);
-  // struct matrix_CSR *muti3_CSR = sparse_matrix_multiply(muti2_CSR, matrix_CSR);
-  // gettimeofday(&stop,NULL);
-  // long long int squre3 = diff(&stop, &start)/1000;
-  // printf("matrix squre3: %lld ms\n", squre3);
-  // print_vElemsNUM_of_Matrix_CSR(muti3_CSR);
-  // print_npairsNUM_of_Matrix_CSR(muti3_CSR);
-  // print_counter();
-  // counter_init();
-  // printf("--------------------------------------\n");
+  gettimeofday(&start,NULL);
+  struct matrix_CSR *muti3_CSR = sparse_matrix_multiply(muti2_CSR, matrix_CSR);
+  gettimeofday(&stop,NULL);
+  long long int squre3 = diff(&stop, &start)/1000;
+  printf("matrix squre3: %lld ms\n", squre3);
+  print_vElemsNUM_of_Matrix_CSR(muti3_CSR);
+  print_npairsNUM_of_Matrix_CSR(muti3_CSR);
+  print_counter();
+  counter_init();
+  printf("--------------------------------------\n");
 
   // gettimeofday(&start,NULL);
   // struct matrix_CSR *muti3_r_CSR = sparse_matrix_multiply(matrix_CSR, muti2_CSR);

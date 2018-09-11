@@ -210,6 +210,8 @@ uint32_t global_sign; //限定，求得计算打印
 long int time_counter1;//时间计数器
 long int time_counter2;
 long int time_counter3;
+long int time_counter4;
+long int time_counter5;
 
 uint16_t uint16_power_sign[16] = {0x0001,0x0002,0x0004,0x0008,0x0010,0x0020,0x0040,0x0080,0x0100,0x0200,0x0400,0x0800,0x1000,0x2000,0x4000,0x8000};
 
@@ -445,8 +447,8 @@ static uint16_t var2sign[16] = {
 #define VAR2SIGN(a) (var2sign[(a%16)])
 #define FRA2INT(a) ((int) (a))
 #define REF(a)    (bddnodes[a].refcou)
-#define BDDSIZE     40000000
-#define BDDOPCHCHE  50000 
+#define BDDSIZE     80000000
+#define BDDOPCHCHE  200000 
 
 struct BddNode_saved {
   int var;
@@ -1422,7 +1424,9 @@ void
 free_nf_space(struct nf_space *a) {
   if(a){
       // free(a->mf);
+      bdd_delref(a->mf);
       free(a->lks);
+      free(a);
   }
 }
 
@@ -2208,7 +2212,7 @@ bdd_mask2x(struct bdd_saved_arr *bdd_arr, struct mask_uint16_t *mask) {
 
 
 BDD
-bdd_v2x_bymask(BDD root, struct mask_uint16_t *mask) {
+bdd_v2x_bymask_old(BDD root, struct mask_uint16_t *mask) {
   
   if (root < 2)
     return root;
@@ -2224,7 +2228,10 @@ bdd_v2x_bymask(BDD root, struct mask_uint16_t *mask) {
     BDD b = bdd_v2x_bymask(HIGH(root), mask);
     if (a == b)
       return a;
-    else
+    if (a == LOW(root)){
+      if (HIGH(root) == b)
+        return root;
+    }
       return bdd_makenode(level, a, b);
   }
 }
@@ -2256,6 +2263,35 @@ rw2bdd(struct mask_uint16_t *mask, struct mask_uint16_t *rw){
   return root;
 }
 
+BDD
+mask2bdd(struct mask_uint16_t *mask){
+  BDD root, tmp;
+  root = 1;
+  tmp = 1;  
+  // print_mf_uint16_t(mf);
+  for (int i = 0; i < MF_LEN; i++){
+    int reverse_i = MF_LEN - i - 1;
+    uint16_t sign = 0x0001;
+    for (int j = 0; j < 16; j++){
+      if (!(sign & mask->v[reverse_i])){
+        int level = bdd_var2level(16*MF_LEN - 16*i - j - 1);//
+        root = bdd_makenode(level, tmp, 0);//生成相应变量的一个节点,为0
+        tmp = root;
+      }
+      sign <<= 1;
+    }
+  }
+  return root;
+}
+
+BDD
+bdd_v2x_bymask(BDD root, struct mask_uint16_t *mask) {
+  BDD mask_bdd = mask2bdd(mask); 
+  applyop = 2;
+  return bdd_v2x_rec(root, mask_bdd);
+} 
+
+
 struct bdd_saved_arr *
 bdd_rw(struct bdd_saved_arr *bdd_arr, struct mask_uint16_t *mask, struct mask_uint16_t *rw) {
   BDD root_maskx = bdd_mask2x(bdd_arr, mask);
@@ -2276,16 +2312,23 @@ bdd_rw_back(struct bdd_saved_arr *bdd_arr, struct bdd_saved_arr *bdd_arr_IN, str
 
 BDD
 bdd_rw_BDD(BDD a, struct mask_uint16_t *mask, struct mask_uint16_t *rw) {
+  struct timeval start,stop; 
+  gettimeofday(&start,NULL);
   BDD root_maskx = bdd_v2x_bymask(a, mask);
+  gettimeofday(&stop,NULL);
+  time_counter4 += diff(&stop, &start);
+  gettimeofday(&start,NULL);
   BDD root_rw = rw2bdd(mask, rw);
   root_rw = bdd_apply(root_maskx, root_rw, bddop_and);
+  gettimeofday(&stop,NULL);
+  time_counter5 += diff(&stop, &start);
   return root_rw;
 }
 
 BDD
 bdd_rw_back_BDD(BDD a, BDD a_IN, struct mask_uint16_t *mask) {
   BDD root_maskx = bdd_v2x_bymask(a, mask);
-  BDD root_IN = bdd_apply(root_maskx, root_IN, bddop_and);
+  BDD root_IN = bdd_apply(root_maskx, a_IN, bddop_and);
   return root_IN;
 }
 
@@ -2335,6 +2378,7 @@ insc_to_Tri_express_rlimit(struct of_rule *r_in, struct of_rule *r_out, BDD v_an
   pair->r_arr->ridx[1].sw_idx = r_out->sw_idx;
   pair->r_arr->ridx[1].r_idx = r_out->idx;
   pair->out->mf = v_and;
+  bdd_addref(pair->out->mf);
   if (r_in->mask) {
     struct mask_uint16_t *mask = xcalloc(1, sizeof *mask);
     struct mask_uint16_t *rewrite = xcalloc(1, sizeof *rewrite);
@@ -2347,11 +2391,13 @@ insc_to_Tri_express_rlimit(struct of_rule *r_in, struct of_rule *r_out, BDD v_an
     BDD bdd_arr_tmp = bdd_rw_back_BDD(v_and, bdd_in, mask);
 
     pair->in->mf = bdd_arr_tmp;
+    bdd_addref(pair->in->mf);
     pair->mask = mask;
     pair->rewrite = rewrite;
   }
   else {
     pair->in->mf = v_and;
+    bdd_addref(pair->in->mf);
     pair->mask = NULL;
     pair->rewrite = NULL;
   }
@@ -2497,6 +2543,8 @@ gen_matrix_CSR_from_Tris(struct Tri_arr *Tri_arr) {
 
 
       // Tri_arr_tmp[count-1]->elem = matrix_elem_plus(Tri_arr_tmp[count-1]->elem, Tri_arr->arr[i]->elem);//保留相同部分，r-r通过两条链路
+      // free(Tri_arr->arr[i]);
+      free_matrix_element(Tri_arr->arr[i]->elem);
       free(Tri_arr->arr[i]);
       continue;
     }
@@ -2749,10 +2797,14 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   pair_tmp->out->lks = copy_links_of_rule(b->out->lks);
 
   if (a->mask) {
-    if(a->out->mf== insc)
+    if(a->out->mf== insc){
       pair_tmp->in->mf = a->in->mf;
-    // else
-      // pair_tmp->in->mf = bdd_rw_back_BDD(insc, a->in->mf, a->mask);
+      bdd_addref(pair_tmp->in->mf);
+    }
+    else{
+      pair_tmp->in->mf = bdd_rw_back_BDD(insc, a->in->mf, a->mask);
+      bdd_addref(pair_tmp->in->mf);
+    }
 
     if (b->mask) {
       pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
@@ -2773,16 +2825,21 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   }
   else{    
     pair_tmp->in->mf = insc;
+    bdd_addref(pair_tmp->in->mf);
     if (!(b->mask)) {
       pair_tmp->mask = NULL;
       pair_tmp->rewrite = NULL;
     }
   }
   if (b->mask) {
-    if(b->in->mf == insc)
+    if(b->in->mf == insc){
       pair_tmp->out->mf = b->out->mf;
-    else
+      bdd_addref(pair_tmp->out->mf);
+    }
+    else{
       pair_tmp->out->mf = bdd_rw_BDD(insc, b->mask, b->rewrite);
+      bdd_addref(pair_tmp->out->mf);
+    }
     if (!(a->mask)){
       // gettimeofday(&startin,NULL);
       pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
@@ -2795,6 +2852,7 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   }
   else{
     pair_tmp->out->mf = insc;//建立copy
+    bdd_addref(pair_tmp->out->mf);
   }
 
   gettimeofday(&stop,NULL);
@@ -2926,6 +2984,7 @@ row_all_col_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSC *matrix_
     for (uint32_t i = 0; i < vs_count; i++)
       tmp->idx_vs[i] = vs[i];
   }
+  // bdd_gbc();
   return tmp;
 }
 
