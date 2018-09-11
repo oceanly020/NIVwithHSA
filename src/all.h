@@ -2801,9 +2801,9 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   if (a->mask) {
     // struct timeval start_in,stop_in;
     // gettimeofday(&start_in,NULL);
-    // if(root_a == insc)
-      // pair_tmp->in->mf = copy_bdd_saved_arr(a->in->mf);
-    // else
+    if(root_a == insc)
+      pair_tmp->in->mf = copy_bdd_saved_arr(a->in->mf);
+    else
       pair_tmp->in->mf = bdd_rw_back(bdd_arr_insc, a->in->mf, a->mask);
     // gettimeofday(&stop_in,NULL);
     // if (global_sign < 30) {
