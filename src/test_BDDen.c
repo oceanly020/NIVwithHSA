@@ -972,7 +972,7 @@ main (int argc, char **argv)
 
 
   gettimeofday(&start,NULL);
-  struct matrix_CSR *muti4_CSR = sparse_matrix_multiply(muti3_CSR, matrix_CSC);
+  struct matrix_CSR *muti4_CSR = sparse_matrix_multiply(muti3_CSR, matrix_CSR);
   gettimeofday(&stop,NULL);
   long long int squre4 = diff(&stop, &start)/1000;
   printf("matrix squre4: %lld ms\n", squre4);
@@ -998,7 +998,7 @@ main (int argc, char **argv)
   printf("/*=====================================================*/\n");
 
   gettimeofday(&start,NULL);
-  struct matrix_CSR *muti5_CSR = sparse_matrix_multiply(muti5_CSR, matrix_CSR);
+  struct matrix_CSR *muti5_CSR = sparse_matrix_multiply(muti4_CSR, matrix_CSR);
   gettimeofday(&stop,NULL);
   long long int squre5 = diff(&stop, &start)/1000;
   printf("matrix squre5: %lld ms\n", squre5);
@@ -1009,7 +1009,7 @@ main (int argc, char **argv)
   printf("--------------------------------------\n");
 
   gettimeofday(&start,NULL);
-  struct matrix_CSR *muti5_r_CSR = sparse_matrix_multiply(matrix_CSR, muti5_CSR);
+  struct matrix_CSR *muti5_r_CSR = sparse_matrix_multiply(matrix_CSR, muti4_CSR);
   gettimeofday(&stop,NULL);
   long long int squre5_r = diff(&stop, &start)/1000;
   printf("matrix squre5_r: %lld ms\n", squre5_r);
