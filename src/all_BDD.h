@@ -447,8 +447,8 @@ static uint16_t var2sign[16] = {
 #define VAR2SIGN(a) (var2sign[(a%16)])
 #define FRA2INT(a) ((int) (a))
 #define REF(a)    (bddnodes[a].refcou)
-#define BDDSIZE     80000000
-#define BDDOPCHCHE  200000 
+#define BDDSIZE     90000000
+#define BDDOPCHCHE  300000 
 
 struct BddNode_saved {
   int var;
@@ -2883,7 +2883,7 @@ struct matrix_element * //a*b,a作用b，不可交换
 elem_connect(struct matrix_element *a, struct matrix_element *b) { 
   elemconnet_counter ++;
 
-  struct nf_space_pair *nps[50000];
+  struct nf_space_pair *nps[100000];
   // printf("%d\n", a->npairs*b->npairs);
   uint32_t count = 0;
   for (uint32_t i = 0; i < a->npairs; i++) {

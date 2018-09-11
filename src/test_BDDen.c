@@ -411,6 +411,7 @@ average_v_matrix_1t(int x, struct matrix_CSR *matrix_CSR, struct matrix_CSC *mat
   printf("average vector multiply matrix 1t: %lld us\n", average);
   bdd_done();
 }
+
 void
 average_v_matrix_Rc(int x, struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix_CSC, struct matrix_CSC *matrix_CSC1, struct matrix_CSC *matrix_CSC2) {
   bdd_init(BDDSIZE, BDDOPCHCHE);
