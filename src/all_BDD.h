@@ -2327,7 +2327,7 @@ bdd_rw_BDD(BDD a, struct mask_uint16_t *mask, struct mask_uint16_t *rw) {
 
 BDD
 bdd_rw_back_BDD(BDD a, BDD a_IN, struct mask_uint16_t *mask) {
-  BDD root_maskx = bdd_v2x_bymask(a, mask);
+  BDD root_maskx = bdd_v2x_bymask_old(a, mask);
   BDD root_IN = bdd_apply(root_maskx, a_IN, bddop_and);
   return root_IN;
 }
@@ -2389,6 +2389,7 @@ insc_to_Tri_express_rlimit(struct of_rule *r_in, struct of_rule *r_out, BDD v_an
     struct mf_uint16_t *r_in_mf = get_r_out_mf(r_in);
     BDD bdd_in = mf2bdd(r_in_mf);
     BDD bdd_arr_tmp = bdd_rw_back_BDD(v_and, bdd_in, mask);
+    // BDD bdd_arr_tmp = bdd_rw_back(v_and, bdd_in, mask);
 
     pair->in->mf = bdd_arr_tmp;
     bdd_addref(pair->in->mf);
