@@ -871,9 +871,9 @@ main (int argc, char **argv)
   print_npairsNUM_of_Matrix_CSR(muti2_CSR);
   print_counter();
   counter_init();
-  free_matrix_CSR(muti1_CSR);
+  // free_matrix_CSR(muti1_CSR);
   // bdd_gbc_except_applycache();
-  bdd_gbc();
+  // bdd_gbc();
   printf("--------------------------------------\n");
 
   // gettimeofday(&start,NULL);
