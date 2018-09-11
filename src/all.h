@@ -207,8 +207,9 @@ uint32_t compu_true_counter;//计数器，记录计算成功，需要后续常�
 uint32_t elemconnet_counter;//计数器，记录计算elem连结的数量
 uint32_t computation_firstcounter;
 uint32_t global_sign; //限定，求得计算打印
-long int time_counter1;
+long int time_counter1;//时间计数器
 long int time_counter2;
+long int time_counter3;
 
 struct PACKED arrs {
   uint32_t len, n;
@@ -2763,13 +2764,14 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   computation_firstcounter ++;
   BDD root_a = load_saved_bddarr(a->out->mf);
   BDD root_b = load_saved_bddarr(b->in->mf);
-  gettimeofday(&stop,NULL);
-  time_counter1 += diff(&stop, &start);
+  
   // if (global_sign < 3) {
   //   printf("load_saved_bddarr %lld us\n", diff(&stop, &start));
   // }
   // gettimeofday(&start,NULL);
   BDD insc = bdd_apply(root_a, root_b, bddop_and);
+  gettimeofday(&stop,NULL);
+  time_counter1 += diff(&stop, &start);
   // gettimeofday(&stop,NULL);
   // if (global_sign < 30) {
   //   printf("bdd_apply %lld us\n", diff(&stop, &start));
@@ -2779,6 +2781,8 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   
   if (!insc) 
     return NULL;
+  gettimeofday(&start,NULL);
+
   computation_counter ++;
   for (int i = 0; i < a->r_arr->nrs - 1; i++) {
     for (int j = 0; j < b->r_arr->nrs; j++) {
@@ -2855,6 +2859,12 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   else{
     pair_tmp->out->mf = copy_bdd_saved_arr(bdd_arr_insc);//建立copy
   }
+
+
+  gettimeofday(&stop,NULL);
+  time_counter2 += diff(&stop, &start);
+  gettimeofday(&start,NULL);
+
   free(bdd_arr_insc);
   pair_tmp->r_arr = xmalloc(sizeof (uint32_t)+(a->r_arr->nrs+b->r_arr->nrs -1)*sizeof (struct r_idx));
   pair_tmp->r_arr->nrs = a->r_arr->nrs+b->r_arr->nrs -1;
@@ -2874,7 +2884,7 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   //   global_sign++;
   // }
   gettimeofday(&stop,NULL);
-  time_counter2 += diff(&stop, &start);
+  time_counter3 += diff(&stop, &start);
   return pair_tmp;
 }
 

@@ -454,6 +454,7 @@ counter_init(void) {
   global_sign = 0;
   time_counter1 = 0;
   time_counter2 = 0;
+  time_counter3 = 0;
 }
 
 void
@@ -464,6 +465,7 @@ print_counter(void){
   printf("elemconnet_counter = %d\n", elemconnet_counter);
   printf("time_counter1 = %ld us\n", time_counter1);
   printf("time_counter2 = %ld us\n", time_counter2);
+  printf("time_counter3 = %ld us\n", time_counter3);
 }
 
 int
