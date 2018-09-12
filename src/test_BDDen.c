@@ -553,6 +553,7 @@ counter_init(void) {
   computation_counter = 0;
   elemconnet_counter = 0;
   compu_true_counter = 0;
+  elem_true_counter = 0;
   global_sign = 0;
   time_counter1 = 0;
   time_counter2 = 0;
@@ -566,6 +567,7 @@ print_counter(void){
   printf("computation_counter = %d\n", computation_counter);
   printf("compu_true_counter = %d\n", compu_true_counter);
   printf("elemconnet_counter = %d\n", elemconnet_counter);
+  printf("elem_true_counter = %d\n", elem_true_counter);
   printf("time_counter1 = %ld us\n", time_counter1);
   printf("time_counter2 = %ld us\n", time_counter2);
   printf("time_counter3 = %ld us\n", time_counter3);
@@ -948,7 +950,7 @@ main (int argc, char **argv)
   // free_matrix_CSR(muti2_CSR);
   // free_matrix_CSR(muti3_r_CSR);
   // bdd_gbc();
-  printf("/*=====================================================*/\n");
+  // printf("/*=====================================================*/\n");
 
   // gettimeofday(&start,NULL);
   // struct matrix_CSR *muti7_twice_CSR = sparse_matrix_multiply(muti3_CSR, muti3_CSR);
@@ -1088,6 +1090,7 @@ main (int argc, char **argv)
   // free_matrix_CSR(muti6_r_CSR);
   // bdd_gbc();
   printf("/*=====================================================*/\n");
+  
   // struct matrix_CSR *muti6_CSC = gen_CSC_from_CSR(muti6_CSR);
   // gettimeofday(&start,NULL); 
   // struct CS_matrix_idx_v_arr *port_CSR_row_muti6 = row_matrix_CSR_multiply(port_CSR_row, muti6_CSR);
@@ -1108,7 +1111,7 @@ main (int argc, char **argv)
   counter_init();
   free_matrix_CSR(muti6_CSR);
   bdd_gbc();
-  printf("--------------------------------------\n");
+  // printf("--------------------------------------\n");
 
   // gettimeofday(&start,NULL);
   // struct matrix_CSR *muti7_r_CSR = sparse_matrix_multiply(matrix_CSR, muti6_CSR);

@@ -556,8 +556,6 @@ struct PACKED links_of_rule{
 //parse.h
 struct matrix_element {
   uint32_t npairs;
-  BDD bdd_in;
-  BDD bdd_out;
   struct nf_space_pair *nf_pairs[0];
 };
 
@@ -1457,8 +1455,6 @@ free_matrix_element(struct matrix_element *elem) {
       if (elem->nf_pairs[i]) 
         free_nf_space_pair(elem->nf_pairs[i]); 
     }
-    bdd_delref(elem->bdd_in);
-    bdd_delref(elem->bdd_out);
     free(elem);
   } 
 }
@@ -2225,12 +2221,12 @@ bdd_v2x_bymask_old(BDD root, struct mask_uint16_t *mask) {
   int lvl = (int)(var/(16));
   if ((uint16_power_sign[15 - var%16]) & (uint16_t)(~(mask->v[lvl]))){
   
-    return bdd_apply(bdd_v2x_bymask_old(LOW(root), mask), bdd_v2x_bymask_old(HIGH(root), mask), bddop_or);
+    return bdd_apply(bdd_v2x_bymask(LOW(root), mask), bdd_v2x_bymask(HIGH(root), mask), bddop_or);
   }
   else{
     int level = bdd_var2level(var);
-    BDD a = bdd_v2x_bymask_old(LOW(root), mask);
-    BDD b = bdd_v2x_bymask_old(HIGH(root), mask);
+    BDD a = bdd_v2x_bymask(LOW(root), mask);
+    BDD b = bdd_v2x_bymask(HIGH(root), mask);
     if (a == b)
       return a;
     if (a == LOW(root)){
@@ -2363,7 +2359,7 @@ insc_to_Tri_express_rlimit(struct of_rule *r_in, struct of_rule *r_out, BDD v_an
   lks_out = links_insc(lks_in, lks_out);
   int add_len = sizeof(uint16_t);
   struct matrix_Tri_express *tmp = xcalloc(1, sizeof *tmp);
-  tmp->elem = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+sizeof(struct nf_space_pair *));
+  tmp->elem = xmalloc(sizeof(uint32_t)+sizeof(struct nf_space_pair *));
   tmp->elem->npairs = 1;
   tmp->row_idx = matrix_idx_get_r(r_in);
   tmp->col_idx = matrix_idx_get_r(r_out);
@@ -2384,9 +2380,6 @@ insc_to_Tri_express_rlimit(struct of_rule *r_in, struct of_rule *r_out, BDD v_an
   pair->r_arr->ridx[1].r_idx = r_out->idx;
   pair->out->mf = v_and;
   bdd_addref(pair->out->mf);
-  tmp->elem->bdd_out = pair->out->mf;
-  bdd_addref(pair->out->mf);
-
   if (r_in->mask) {
     struct mask_uint16_t *mask = xcalloc(1, sizeof *mask);
     struct mask_uint16_t *rewrite = xcalloc(1, sizeof *rewrite);
@@ -2401,15 +2394,11 @@ insc_to_Tri_express_rlimit(struct of_rule *r_in, struct of_rule *r_out, BDD v_an
 
     pair->in->mf = bdd_arr_tmp;
     bdd_addref(pair->in->mf);
-    tmp->elem->bdd_in = pair->in->mf;
-    bdd_addref(pair->in->mf);
     pair->mask = mask;
     pair->rewrite = rewrite;
   }
   else {
     pair->in->mf = v_and;
-    bdd_addref(pair->in->mf);
-    tmp->elem->bdd_in = pair->in->mf;
     bdd_addref(pair->in->mf);
     pair->mask = NULL;
     pair->rewrite = NULL;
@@ -2451,28 +2440,8 @@ matrix_elem_plus(struct matrix_element *a, struct matrix_element *b) {
     return a;
   if (!a)
     return b;
-  struct matrix_element *tmp = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+((a->npairs)+(b->npairs))*sizeof(struct nf_space_pair *));
+  struct matrix_element *tmp = xmalloc(sizeof(uint32_t)+((a->npairs)+(b->npairs))*sizeof(struct nf_space_pair *));
   tmp->npairs = a->npairs + b->npairs;
-  if (a->bdd_in == b->bdd_in) {
-    tmp->bdd_in = a->bdd_in;
-    bdd_delref(a->bdd_in);
-  }
-  else {
-    tmp->bdd_in = bdd_apply(a->bdd_in, b->bdd_in, bddop_or);
-    bdd_delref(a->bdd_in);
-    bdd_delref(b->bdd_in);
-    bdd_addref(tmp->bdd_in);
-  }
-  if (a->bdd_out == b->bdd_out) {
-    tmp->bdd_out = a->bdd_out;
-    bdd_delref(a->bdd_out);
-  }
-  else {
-    tmp->bdd_out = bdd_apply(a->bdd_out, b->bdd_out, bddop_or);
-    bdd_delref(a->bdd_out);
-    bdd_delref(b->bdd_out);
-    bdd_addref(tmp->bdd_out);
-  }
   for (int i = 0; i < a->npairs; i++) {
     tmp->nf_pairs[i] = a->nf_pairs[i]; 
   }
@@ -2930,21 +2899,18 @@ elem_connect(struct matrix_element *a, struct matrix_element *b) {
         count++;
       }
     }
+    // if (count>8000)
+    // {
+    //   printf("there is err\n");
+    // }
   }
   struct matrix_element *tmp = NULL;
   if (count) {
-    tmp = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+count*sizeof(struct nf_space_pair *));
-    tmp->bdd_in = 0;
-    tmp->bdd_out = 0;
+    tmp = xmalloc(sizeof(struct matrix_element) + count*sizeof(struct nf_space_pair *));
     tmp->npairs = count;
-    for (int i = 0; i < count; i++) {
-      tmp->bdd_in = bdd_apply(tmp->bdd_in, nps[i]->in->mf, bddop_or);
-      tmp->bdd_out = bdd_apply(tmp->bdd_out, nps[i]->out->mf,bddop_or);
-      tmp->nf_pairs[i] = nps[i];
-    }
-    bdd_addref(tmp->bdd_in);
-    bdd_addref(tmp->bdd_out);
-  } 
+    for (int i = 0; i < count; i++) 
+      tmp->nf_pairs[i] = nps[i]; 
+  }
   return tmp;
 }
 
@@ -2959,14 +2925,11 @@ row_col_multiply(struct CS_matrix_idx_v_arr *row, struct CS_matrix_idx_v_arr *co
   struct matrix_element *elem_tmp = NULL;
   for (uint32_t i = 0; i < num_row + num_col; i++) {
     if ((row->idx_vs[count_row]->idx) == (col->idx_vs[count_col]->idx)){
-      if(bdd_apply(row->idx_vs[count_row]->elem->bdd_out, col->idx_vs[count_col]->elem->bdd_in, bddop_and)) {
-
-        elem_tmp = elem_connect(row->idx_vs[count_row]->elem, col->idx_vs[count_col]->elem);
-        if (elem_tmp)
-          elem_true_counter++;
-        tmp = matrix_elem_plus(tmp, elem_tmp);
-        elem_tmp = NULL;
-      }
+      elem_tmp = elem_connect(row->idx_vs[count_row]->elem, col->idx_vs[count_col]->elem);
+      if (elem_tmp)
+        elem_true_counter++;
+      tmp = matrix_elem_plus(tmp, elem_tmp);
+      elem_tmp = NULL;
       count_col++;
       count_row++;
     }
@@ -3057,34 +3020,32 @@ row_matrix_CSR_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSR *matr
     if (matrix_CSR->rows[row_idxv->idx]) {
       struct CS_matrix_idx_v_arr *row_matrix = matrix_CSR->rows[row_idxv->idx];
       for (uint32_t j = 0; j < row_matrix->nidx_vs; j++) {
-        if(bdd_apply(row_idxv->elem->bdd_out, row_matrix->idx_vs[j]->elem->bdd_in, bddop_and)) {
-          struct matrix_element *elem_tmp = elem_connect(row_idxv->elem, row_matrix->idx_vs[j]->elem);
-          if (elem_tmp) {
-            if (vs_count){
-              uint32_t sign = 1;
-              for (int k = 0; k < vs_count; k++) {
-                if(row_matrix->idx_vs[j]->idx == vs[k]->idx){
-                  vs[k]->elem = matrix_elem_plus(vs[k]->elem, elem_tmp);
-                  sign = 0;
-                  break;
-                }
+        struct matrix_element *elem_tmp = elem_connect(row_idxv->elem, row_matrix->idx_vs[j]->elem);
+        if (elem_tmp) {
+          if (vs_count){
+            uint32_t sign = 1;
+            for (int k = 0; k < vs_count; k++) {
+              if(row_matrix->idx_vs[j]->idx == vs[k]->idx){
+                vs[k]->elem = matrix_elem_plus(vs[k]->elem, elem_tmp);
+                sign = 0;
+                break;
               }
-              if (sign) {
-                vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
-                vs[vs_count]->idx = row_matrix->idx_vs[j]->idx;
-                vs[vs_count]->elem = elem_tmp;
-                vs_count ++;
-              }      
             }
-            else {
+            if (sign) {
               vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
               vs[vs_count]->idx = row_matrix->idx_vs[j]->idx;
               vs[vs_count]->elem = elem_tmp;
               vs_count ++;
-            }     
+            }      
           }
-          elem_tmp = NULL;
+          else {
+            vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
+            vs[vs_count]->idx = row_matrix->idx_vs[j]->idx;
+            vs[vs_count]->elem = elem_tmp;
+            vs_count ++;
+          }     
         }
+        elem_tmp = NULL;
       }
     }
   }
@@ -3312,7 +3273,7 @@ insc_to_Tri_express_rlimit_simple(uint32_t lk, struct of_rule *r_out, BDD v_and)
   // print_links_of_rule(lks_out);
 
   struct matrix_Tri_express *tmp = xcalloc(1, sizeof *tmp);
-  tmp->elem = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+sizeof(struct nf_space_pair *));
+  tmp->elem = xmalloc(sizeof(uint32_t)+sizeof(struct nf_space_pair *));
   tmp->elem->npairs = 1;
   tmp->row_idx = 0;
   tmp->col_idx = matrix_idx_get_r(r_out);
@@ -3333,16 +3294,8 @@ insc_to_Tri_express_rlimit_simple(uint32_t lk, struct of_rule *r_out, BDD v_and)
   pair->r_arr->ridx[1].sw_idx = r_out->sw_idx;
   pair->r_arr->ridx[1].r_idx = r_out->idx;
   pair->out->mf = v_and;
-  bdd_addref(pair->out->mf);
-  tmp->elem->bdd_out = pair->out->mf;
-  bdd_addref(pair->out->mf);
-
 
   pair->in->mf = v_and;
-  bdd_addref(pair->in->mf);
-  tmp->elem->bdd_in = pair->out->mf;
-  bdd_addref(pair->in->mf);
-
   pair->mask = NULL;
   pair->rewrite = NULL;
 
