@@ -3116,6 +3116,7 @@ sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_
     }
   }
 
+  free_matrix_CSC_fr_CSR(matrix_CSC);
   // printf("row number:%d\n", matrix_CSR->nrows);
   // printf("tmp:%d\n", tmp->nrows);
   return tmp;
