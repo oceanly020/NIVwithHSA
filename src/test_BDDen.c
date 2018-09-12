@@ -224,14 +224,14 @@ average_v_matrix_forall(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix
   struct matrix_CSC *matrix_CSC1 = gen_CSC_from_CSR(matrix_CSR1);
   struct matrix_CSC *matrix_CSC2 = gen_CSC_from_CSR(matrix_CSR2);
   // for (int i = 0; i < matrix_CSR->nrows; i++) {
-  for (int i = 0; i < 800; i++) {
-    // int rand_num = i;
+  for (int i = 0; i < matrix_CSR->nrows; i++) {
+    int rand_num = i;
     // for (rand_num = (rand() % 3000) + 1; rand_num < 3003; rand_num++) {
     //   if (matrix_CSR->rows[rand_num]) {
     //     break;
     //   }
     // }
-    int rand_num = (rand() % 8000) + 1;
+    // int rand_num = (rand() % 8000) + 1;
     struct of_rule *r = matrix_idx_to_r(&rand_num);
 
     printf("the rule: %d - %d;", r->sw_idx, r->idx);
