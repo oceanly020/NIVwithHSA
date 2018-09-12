@@ -2760,6 +2760,7 @@ gen_CSC_from_CSR(struct matrix_CSR *matrix) {
   }
   for (uint32_t i = 0; i < valid_n; i++) 
     free(Tri_arr[i]);
+  free(Tri_arr);
   return tmp;
 }
 
