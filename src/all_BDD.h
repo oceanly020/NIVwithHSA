@@ -2703,6 +2703,8 @@ gen_sparse_matrix(void) {
 
 struct matrix_CSC *
 gen_CSC_from_CSR(struct matrix_CSR *matrix) {
+  if(!matrix)
+    return NULL;
   uint32_t valid_n = 0;
   for (uint32_t i = 0; i < matrix->nrows; i++) {
     if(matrix->rows[i])
@@ -3089,6 +3091,7 @@ sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_
   // uint32_t threshold = matrix_CSR->nrows/600;
   uint32_t threshold = 30;
   struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR1);
+
   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+data_allr_nums*sizeof(struct CS_matrix_idx_v_arr *));
   tmp->nrows = data_allr_nums;
   for (uint32_t i = 0; i < data_allr_nums; i++)

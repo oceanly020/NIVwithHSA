@@ -633,7 +633,7 @@ main (int argc, char **argv)
   print_vElemsNUM_of_Matrix_CSR(matrix_CSR);
   print_npairsNUM_of_Matrix_CSR(matrix_CSR);
   printf("--------------------------------------\n");
-  bdd_gbc();
+  // bdd_gbc();
 
   // gettimeofday(&start,NULL);
   // struct CS_matrix_idx_v_arr *port_CSR_row = gen_sparse_matrix_row_fr_port(1600001); 
@@ -647,12 +647,12 @@ main (int argc, char **argv)
 
   // data_unload();
 
-  gettimeofday(&start,NULL);
-  struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
-  gettimeofday(&stop,NULL);
-  long long int gen_CSC = diff(&stop, &start)/1000;
-  printf("gen CSC: %lld ms\n", gen_CSC);
-  print_npairsNUM_of_Matrix_CSC(matrix_CSC);
+  // gettimeofday(&start,NULL);
+  // struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
+  // gettimeofday(&stop,NULL);
+  // long long int gen_CSC = diff(&stop, &start)/1000;
+  // printf("gen CSC: %lld ms\n", gen_CSC);
+  // print_npairsNUM_of_Matrix_CSC(matrix_CSC);
   printf("/*=====================================================*/\n");
   
   // print_CSR_elem_from_idx(2940,200,matrix_CSR);
