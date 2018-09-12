@@ -2711,9 +2711,9 @@ gen_CSC_from_CSR(struct matrix_CSR *matrix) {
       valid_n += matrix->rows[i]->nidx_vs;
   }
   // uint32_t max_CSR = MAX_VAL_RATE*data_allr_nums*data_allr_nums;
-  struct matrix_Tri_express *Tri_arr[valid_n];
-  // printf("valid_n%d\n", valid_n);
   // struct matrix_Tri_express *Tri_arr[valid_n];
+  // printf("valid_n%d\n", valid_n);
+  struct matrix_Tri_express **Tri_arr = xmalloc(valid_n*sizeof(struct matrix_Tri_express *));
   for (int i = 0; i < valid_n; i++)
     Tri_arr[i] = xcalloc(1,sizeof *(Tri_arr[i]));
   uint32_t count = 0;
