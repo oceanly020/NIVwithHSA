@@ -3095,7 +3095,7 @@ sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_
   gettimeofday(&start,NULL);
   struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR1);
   gettimeofday(&stop,NULL);
-  printf("gen CSC: %lld ms\n", diff(&stop, &start)/1000);
+  printf("gen CSC: %ld ms\n", diff(&stop, &start)/1000);
 
 
   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+data_allr_nums*sizeof(struct CS_matrix_idx_v_arr *));
