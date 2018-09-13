@@ -213,6 +213,10 @@ long int time_counter2;
 long int time_counter3;
 long int time_counter4;
 long int time_counter5;
+long int time_counter_elemplus;
+long int time_counter_elembdd_withpair;
+long int time_counter_nf_space_connect;
+long int time_counter_eleminsc;
 
 uint16_t uint16_power_sign[16] = {0x0001,0x0002,0x0004,0x0008,0x0010,0x0020,0x0040,0x0080,0x0100,0x0200,0x0400,0x0800,0x1000,0x2000,0x4000,0x8000};
 
@@ -448,8 +452,8 @@ static uint16_t var2sign[16] = {
 #define VAR2SIGN(a) (var2sign[(a%16)])
 #define FRA2INT(a) ((int) (a))
 #define REF(a)    (bddnodes[a].refcou)
-#define BDDSIZE     90000000
-#define BDDOPCHCHE  300000 
+#define BDDSIZE     100000000
+#define BDDOPCHCHE  400000 
 
 struct BddNode_saved {
   int var;
@@ -2317,23 +2321,30 @@ bdd_rw_back(struct bdd_saved_arr *bdd_arr, struct bdd_saved_arr *bdd_arr_IN, str
 
 BDD
 bdd_rw_BDD(BDD a, struct mask_uint16_t *mask, struct mask_uint16_t *rw) {
-  struct timeval start,stop; 
-  gettimeofday(&start,NULL);
+  // struct timeval start,stop; 
+  // gettimeofday(&start,NULL);
   BDD root_maskx = bdd_v2x_bymask(a, mask);
-  gettimeofday(&stop,NULL);
-  time_counter4 += diff(&stop, &start);
-  gettimeofday(&start,NULL);
+  // gettimeofday(&stop,NULL);
+  // time_counter4 += diff(&stop, &start);
+  // gettimeofday(&start,NULL);
   BDD root_rw = rw2bdd(mask, rw);
   root_rw = bdd_apply(root_maskx, root_rw, bddop_and);
-  gettimeofday(&stop,NULL);
-  time_counter5 += diff(&stop, &start);
+  // gettimeofday(&stop,NULL);
+  // time_counter5 += diff(&stop, &start);
   return root_rw;
 }
 
 BDD
 bdd_rw_back_BDD(BDD a, BDD a_IN, struct mask_uint16_t *mask) {
+  // struct timeval start,stop; 
+  // gettimeofday(&start,NULL);
   BDD root_maskx = bdd_v2x_bymask(a, mask);
+  // gettimeofday(&stop,NULL);
+  // time_counter4 += diff(&stop, &start);
+  // gettimeofday(&start,NULL);
   BDD root_IN = bdd_apply(root_maskx, a_IN, bddop_and);
+  // gettimeofday(&stop,NULL);
+  // time_counter5 += diff(&stop, &start);
   return root_IN;
 }
 
@@ -2802,20 +2813,20 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   // printf("starting nf_space_connect\n");
   // if(!is_insc_links(a->out->lks, b->in->lks))
   //   return NULL;
-  struct timeval start,stop;  //计算时间差 usec
+  // struct timeval start,stop;  //计算时间差 usec
   // BDD root_a = load_saved_bddarr(a->out->mf);
   // BDD root_b = load_saved_bddarr(b->in->mf);
-  gettimeofday(&start,NULL);
+  // gettimeofday(&start,NULL);
   BDD insc = bdd_apply(a->out->mf, b->in->mf, bddop_and);
-  gettimeofday(&stop,NULL);
-  time_counter1 += diff(&stop, &start);
+  // gettimeofday(&stop,NULL);
+  // time_counter1 += diff(&stop, &start);
 
   computation_counter ++;
 
 
   if (!insc) 
     return NULL;
-  gettimeofday(&start,NULL);
+  // gettimeofday(&start,NULL);
 
   for (int i = 0; i < a->r_arr->nrs - 1; i++) {
     for (int j = 0; j < b->r_arr->nrs; j++) {
@@ -2891,9 +2902,9 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
     bdd_addref(pair_tmp->out->mf);
   }
 
-  gettimeofday(&stop,NULL);
-  time_counter2 += diff(&stop, &start);
-  gettimeofday(&start,NULL);
+  // gettimeofday(&stop,NULL);
+  // time_counter2 += diff(&stop, &start);
+  // gettimeofday(&start,NULL);
 
   pair_tmp->r_arr = xmalloc(sizeof (uint32_t)+(a->r_arr->nrs+b->r_arr->nrs -1)*sizeof (struct r_idx));
   // pair_tmp->r_arr = xcalloc(1,sizeof (uint32_t)+(a->r_arr->nrs+b->r_arr->nrs -1)*sizeof (struct r_idx));
@@ -2908,8 +2919,8 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
     pair_tmp->r_arr->ridx[i+a->r_arr->nrs].r_idx = b->r_arr->ridx[i+1].r_idx;
   }
 
-  gettimeofday(&stop,NULL);
-  time_counter3 += diff(&stop, &start);
+  // gettimeofday(&stop,NULL);
+  // time_counter3 += diff(&stop, &start);
 
   return pair_tmp;
 }
@@ -2917,13 +2928,16 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
 struct matrix_element * //a*b,a作用b，不可交换
 elem_connect(struct matrix_element *a, struct matrix_element *b) { 
   elemconnet_counter ++;
-
+  // struct timeval start,stop; 
   struct nf_space_pair *nps[100000];
   // printf("%d\n", a->npairs*b->npairs);
   uint32_t count = 0;
+
+  // gettimeofday(&start,NULL);
   for (uint32_t i = 0; i < a->npairs; i++) {
     struct nf_space_pair *np_a = a->nf_pairs[i];
     for (uint32_t j = 0; j < b->npairs; j++) {
+
       struct nf_space_pair *result = nf_space_connect(np_a, b->nf_pairs[j]);
       if (result) {
         nps[count] = result;
@@ -2931,7 +2945,10 @@ elem_connect(struct matrix_element *a, struct matrix_element *b) {
       }
     }
   }
+  // gettimeofday(&stop,NULL);
+  // time_counter_nf_space_connect += diff(&stop, &start);
   struct matrix_element *tmp = NULL;
+  // gettimeofday(&start,NULL);
   if (count) {
     tmp = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+count*sizeof(struct nf_space_pair *));
     tmp->bdd_in = 0;
@@ -2945,6 +2962,8 @@ elem_connect(struct matrix_element *a, struct matrix_element *b) {
     bdd_addref(tmp->bdd_in);
     bdd_addref(tmp->bdd_out);
   } 
+  // gettimeofday(&stop,NULL);
+  // time_counter_elembdd_withpair += diff(&stop, &start);
   return tmp;
 }
 
@@ -2959,12 +2978,23 @@ row_col_multiply(struct CS_matrix_idx_v_arr *row, struct CS_matrix_idx_v_arr *co
   struct matrix_element *elem_tmp = NULL;
   for (uint32_t i = 0; i < num_row + num_col; i++) {
     if ((row->idx_vs[count_row]->idx) == (col->idx_vs[count_col]->idx)){
+      // struct timeval start,stop; 
+      // gettimeofday(&start,NULL);
+      // BDD insc = bdd_apply(row->idx_vs[count_row]->elem->bdd_out, col->idx_vs[count_col]->elem->bdd_in, bddop_and);
+      // gettimeofday(&stop,NULL);
+      // time_counter_eleminsc += diff(&stop, &start);
       if(bdd_apply(row->idx_vs[count_row]->elem->bdd_out, col->idx_vs[count_col]->elem->bdd_in, bddop_and)) {
-
+        // gettimeofday(&start,NULL);
         elem_tmp = elem_connect(row->idx_vs[count_row]->elem, col->idx_vs[count_col]->elem);
+        // gettimeofday(&stop,NULL);
+        // time_counter1 += diff(&stop, &start);
         if (elem_tmp)
           elem_true_counter++;
+        
+        // gettimeofday(&start,NULL);
         tmp = matrix_elem_plus(tmp, elem_tmp);
+        // gettimeofday(&stop,NULL);
+        // time_counter_elemplus += diff(&stop, &start);
         elem_tmp = NULL;
       }
       count_col++;
@@ -3140,20 +3170,29 @@ sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_
   printf("gen CSC: %ld ms\n", diff(&stop, &start)/1000);
 
 
-  struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+data_allr_nums*sizeof(struct CS_matrix_idx_v_arr *));
-  tmp->nrows = data_allr_nums;
-  for (uint32_t i = 0; i < data_allr_nums; i++)
+  struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+(matrix_CSR->nrows)*sizeof(struct CS_matrix_idx_v_arr *));
+  tmp->nrows = matrix_CSR->nrows;
+  for (uint32_t i = 0; i < matrix_CSR->nrows; i++)
     tmp->rows[i] = NULL;
   for (uint32_t i = 0; i < matrix_CSR->nrows; i++) {
     if (matrix_CSR->rows[i]){
       // tmp->rows[i] = row_all_col_multiply(matrix_CSR->rows[i], matrix_CSC);
       if (matrix_CSR->rows[i]->nidx_vs < threshold) {
+
+        gettimeofday(&start,NULL);
+
+
         tmp->rows[i] = row_matrix_CSR_multiply(matrix_CSR->rows[i], matrix_CSR1);
+        gettimeofday(&stop,NULL);
+        time_counter4+= diff(&stop, &start);
       //   printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
       }
       else{
         // printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
+        gettimeofday(&start,NULL);
         tmp->rows[i] = row_all_col_multiply(matrix_CSR->rows[i], matrix_CSC);
+        gettimeofday(&stop,NULL);
+        time_counter5+= diff(&stop, &start);
       }
     }
   }
@@ -3161,6 +3200,45 @@ sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_
   free_matrix_CSC_fr_CSR(matrix_CSC);
   // printf("row number:%d\n", matrix_CSR->nrows);
   // printf("tmp:%d\n", tmp->nrows);
+  return tmp;
+}
+
+struct matrix_CSR *
+sparse_matrix_multiply_CSC(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_CSR1, struct matrix_CSC *matrix_CSC) {
+  // uint32_t threshold = matrix_CSR->nrows/600;
+  uint32_t threshold = 100;
+  struct timeval start,stop; 
+  gettimeofday(&start,NULL);
+  gettimeofday(&stop,NULL);
+  printf("gen CSC: %ld ms\n", diff(&stop, &start)/1000);
+
+
+  struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+(matrix_CSR->nrows)*sizeof(struct CS_matrix_idx_v_arr *));
+  tmp->nrows = matrix_CSR->nrows;
+  for (uint32_t i = 0; i < matrix_CSR->nrows; i++)
+    tmp->rows[i] = NULL;
+  for (uint32_t i = 0; i < matrix_CSR->nrows; i++) {
+    if (matrix_CSR->rows[i]){
+      // tmp->rows[i] = row_all_col_multiply(matrix_CSR->rows[i], matrix_CSC);
+      if (matrix_CSR->rows[i]->nidx_vs < threshold) {
+
+        gettimeofday(&start,NULL);
+
+
+        tmp->rows[i] = row_matrix_CSR_multiply(matrix_CSR->rows[i], matrix_CSR1);
+        gettimeofday(&stop,NULL);
+        time_counter4+= diff(&stop, &start);
+      //   printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
+      }
+      else{
+        // printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
+        gettimeofday(&start,NULL);
+        tmp->rows[i] = row_all_col_multiply(matrix_CSR->rows[i], matrix_CSC);
+        gettimeofday(&stop,NULL);
+        time_counter5+= diff(&stop, &start);
+      }
+    }
+  }
   return tmp;
 }
 
