@@ -3162,7 +3162,7 @@ all_row_col_multiply(struct matrix_CSR *matrix_CSR, struct CS_matrix_idx_v_arr *
 struct matrix_CSR *
 sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_CSR1) {
   // uint32_t threshold = matrix_CSR->nrows/600;
-  uint32_t threshold = 100;
+  uint32_t threshold = 50;
   struct timeval start,stop; 
   gettimeofday(&start,NULL);
   struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR1);
