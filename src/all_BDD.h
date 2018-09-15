@@ -3237,7 +3237,7 @@ all_row_col_multiply(struct matrix_CSR *matrix_CSR, struct CS_matrix_idx_v_arr *
 struct matrix_CSR *
 sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_CSR1) {
   // uint32_t threshold = matrix_CSR->nrows/600;
-  uint32_t threshold = 9000;
+  uint32_t threshold = 60;
   struct timeval start,stop; 
   gettimeofday(&start,NULL);
   struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR1);
@@ -3255,8 +3255,8 @@ sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_
 
         gettimeofday(&start,NULL);
 
-        tmp->rows[i] = row_matrix_CSR_multiply_bysort(matrix_CSR->rows[i], matrix_CSR1);
-        // tmp->rows[i] = row_matrix_CSR_multiply(matrix_CSR->rows[i], matrix_CSR1);
+        // tmp->rows[i] = row_matrix_CSR_multiply_bysort(matrix_CSR->rows[i], matrix_CSR1);
+        tmp->rows[i] = row_matrix_CSR_multiply(matrix_CSR->rows[i], matrix_CSR1);
         gettimeofday(&stop,NULL);
         time_counter4+= diff(&stop, &start);
       //   printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
@@ -3280,7 +3280,7 @@ sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_
 struct matrix_CSR *
 sparse_matrix_multiply_CSC(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_CSR1, struct matrix_CSC *matrix_CSC) {
   // uint32_t threshold = matrix_CSR->nrows/600;
-  uint32_t threshold = 100;
+  uint32_t threshold = 8000;
   struct timeval start,stop; 
   gettimeofday(&start,NULL);
   gettimeofday(&stop,NULL);
@@ -3299,7 +3299,7 @@ sparse_matrix_multiply_CSC(struct matrix_CSR *matrix_CSR, struct matrix_CSR *mat
         gettimeofday(&start,NULL);
 
 
-        tmp->rows[i] = row_matrix_CSR_multiply(matrix_CSR->rows[i], matrix_CSR1);
+        tmp->rows[i] = row_matrix_CSR_multiply_bysort(matrix_CSR->rows[i], matrix_CSR1);
         gettimeofday(&stop,NULL);
         time_counter4+= diff(&stop, &start);
       //   printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
