@@ -21,9 +21,9 @@
 
 //结构体或变量定义
 //自定义
-#define MF_LEN 8 //128位bit， 8×16
+// #define MF_LEN 8 //128位bit， 8×16
 // #define MF_LEN 2 //32位bit standford
-// #define MF_LEN 3 //48位bit i2
+#define MF_LEN 3 //48位bit i2
 #define NW_DST_H 0
 #define NW_DST_L 1
 #define VALID_OFS 1
@@ -2557,14 +2557,16 @@ gen_matrix_CSR_from_Tris(struct Tri_arr *Tri_arr) {
   printf("matrix_CSR\n");
   // printf("there is wrong: %d - %d\n", data_allr_nums, Tri_arr->nTris);
   qsort(Tri_arr->arr, Tri_arr->nTris,sizeof (struct matrix_Tri_express *), cmp_matrix_Tri_express);
-  printf("matrix_CSR\n");
+  
   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+data_allr_nums*sizeof(struct CS_matrix_idx_v_arr *));
   tmp->nrows = data_allr_nums;
   for (int i = 0; i < data_allr_nums; i++){
     tmp->rows[i] = NULL;
   }
+  printf("matrix_CSR\n");
   // printf("matrix_CSR\n");
-  struct matrix_Tri_express *Tri_arr_tmp[Tri_arr->nTris];
+  // struct matrix_Tri_express *Tri_arr_tmp[Tri_arr->nTris];
+  struct matrix_Tri_express **Tri_arr_tmp = xcalloc(Tri_arr->nTris,sizeof(struct matrix_Tri_express *));
   Tri_arr_tmp[0] = Tri_arr->arr[0];
   if (Tri_arr->nTris==1){   
     uint32_t row_idx = Tri_arr_tmp[0]->row_idx;
@@ -2628,6 +2630,7 @@ gen_matrix_CSR_from_Tris(struct Tri_arr *Tri_arr) {
   for (uint32_t i = 0; i < count; i++) {
     free(Tri_arr_tmp[i]);
   }
+  free(Tri_arr_tmp);
   printf("all num = %d\n", count);
   return tmp;
 }
@@ -2672,7 +2675,11 @@ gen_Tri_arr_bdd(void) {
         struct mf_uint16_t *r_in_mf = get_r_in_mf(r_in);
 
         uint32_t *lout_arrs = (uint32_t *)(link_out_rule_data_arrs + 2*rule_nums_out_pre);
+        struct timeval start,stop; 
+        gettimeofday(&start,NULL);
         v_in = mf2bdd(r_in_mf);
+        gettimeofday(&stop,NULL);
+        time_counter_elemplus+=diff(&stop, &start);
         // if ((r_in->sw_idx == 0) && (r_in->idx == 1))
         // {
         //   print_rule(r_in);
@@ -2696,8 +2703,10 @@ gen_Tri_arr_bdd(void) {
           //   print_mf_uint16_t(r_out_mf);
           // }
           
-
+          // gettimeofday(&start,NULL);
           v_out = mf2bdd(r_out_mf);
+          // gettimeofday(&stop,NULL);
+          // time_counter_elemplus+=diff(&stop, &start);
           BDD v_and, v_diff;
           v_and = bdd_apply(v_in, v_out, bddop_and);
                   
@@ -2705,15 +2714,19 @@ gen_Tri_arr_bdd(void) {
             Tri_arr[nTris] = insc_to_Tri_express_rlimit(r_in, r_out, v_and);
             nTris++;
             v_diff = bdd_apply(v_in, v_and, bddop_diff);
-            // free_mf_uint16_t_array(mfarr);
-            // v_diff = bdd_apply(v_in, v_and, bddop_diff);
           }
           else {
             v_diff = v_in;
           } 
           v_in = v_diff;
+          if (!v_in){
+            free(r_out_mf);
+            break;
+          }
+
           lout_arrs += 2;
           free(r_out_mf);
+          
           
         }
         lin_arrs += 2;
@@ -2736,8 +2749,12 @@ gen_Tri_arr_bdd(void) {
 
 struct matrix_CSR *  //通过对链路文件查找两个同链路的头尾端规则，计算是否连通并添加到矩阵
 gen_sparse_matrix(void) {
+  struct timeval start,stop; 
+  gettimeofday(&start,NULL);
   struct Tri_arr *Tri_arr = gen_Tri_arr_bdd();
-  print_Tri_express(Tri_arr->arr[2000]);
+  gettimeofday(&stop,NULL);
+  printf("gen_Tri_arr_bdd: %ld ms\n", diff(&stop, &start)/1000);
+  printf("mf2bdd: %ld ms\n", time_counter_elemplus/1000);
   // printf("all num = %d\n", nTris);
   struct matrix_CSR *tmp = gen_matrix_CSR_from_Tris(Tri_arr);
   free(Tri_arr);
@@ -2927,7 +2944,7 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
 
 struct matrix_element * //a*b,a作用b，不可交换
 elem_connect(struct matrix_element *a, struct matrix_element *b) { 
-  elemconnet_counter ++;
+  
   // struct timeval start,stop; 
   struct nf_space_pair *nps[100000];
   // printf("%d\n", a->npairs*b->npairs);
@@ -2983,9 +3000,11 @@ row_col_multiply(struct CS_matrix_idx_v_arr *row, struct CS_matrix_idx_v_arr *co
       // BDD insc = bdd_apply(row->idx_vs[count_row]->elem->bdd_out, col->idx_vs[count_col]->elem->bdd_in, bddop_and);
       // gettimeofday(&stop,NULL);
       // time_counter_eleminsc += diff(&stop, &start);
+      elemconnet_counter ++;
       if(bdd_apply(row->idx_vs[count_row]->elem->bdd_out, col->idx_vs[count_col]->elem->bdd_in, bddop_and)) {
         // gettimeofday(&start,NULL);
         elem_tmp = elem_connect(row->idx_vs[count_row]->elem, col->idx_vs[count_col]->elem);
+        
         // gettimeofday(&stop,NULL);
         // time_counter1 += diff(&stop, &start);
         if (elem_tmp)
@@ -3087,9 +3106,12 @@ row_matrix_CSR_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSR *matr
     if (matrix_CSR->rows[row_idxv->idx]) {
       struct CS_matrix_idx_v_arr *row_matrix = matrix_CSR->rows[row_idxv->idx];
       for (uint32_t j = 0; j < row_matrix->nidx_vs; j++) {
+        elemconnet_counter ++;
         if(bdd_apply(row_idxv->elem->bdd_out, row_matrix->idx_vs[j]->elem->bdd_in, bddop_and)) {
           struct matrix_element *elem_tmp = elem_connect(row_idxv->elem, row_matrix->idx_vs[j]->elem);
+
           if (elem_tmp) {
+            elem_true_counter++;
             if (vs_count){
               uint32_t sign = 1;
               for (int k = 0; k < vs_count; k++) {
@@ -3162,14 +3184,13 @@ all_row_col_multiply(struct matrix_CSR *matrix_CSR, struct CS_matrix_idx_v_arr *
 struct matrix_CSR *
 sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_CSR1) {
   // uint32_t threshold = matrix_CSR->nrows/600;
-  uint32_t threshold = 50;
+  uint32_t threshold = 3000;
   struct timeval start,stop; 
   gettimeofday(&start,NULL);
   struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR1);
   gettimeofday(&stop,NULL);
   printf("gen CSC: %ld ms\n", diff(&stop, &start)/1000);
-
-
+  
   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+(matrix_CSR->nrows)*sizeof(struct CS_matrix_idx_v_arr *));
   tmp->nrows = matrix_CSR->nrows;
   for (uint32_t i = 0; i < matrix_CSR->nrows; i++)
