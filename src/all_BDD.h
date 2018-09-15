@@ -3155,7 +3155,7 @@ row_matrix_CSR_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSR *matr
 struct CS_matrix_idx_v_arr *
 row_matrix_CSR_multiply_bysort(struct CS_matrix_idx_v_arr *row, struct matrix_CSR *matrix_CSR) {
   struct CS_matrix_idx_v_arr *tmp = NULL;
-  struct CS_matrix_idx_v *vs[200000];
+  struct CS_matrix_idx_v *vs[100000];
   // printf("there not wrong\n");
   // uint32_t max_CSR = MAX_VAL_RATE*data_allr_nums*data_allr_nums;
   // struct matrix_Tri_express **Tri_arr = xmalloc(max_CSR*sizeof(struct matrix_Tri_express *));
