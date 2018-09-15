@@ -3154,6 +3154,64 @@ row_matrix_CSR_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSR *matr
 }
 
 struct CS_matrix_idx_v_arr *
+row_matrix_CSR_multiply_bysort(struct CS_matrix_idx_v_arr *row, struct matrix_CSR *matrix_CSR) {
+  struct CS_matrix_idx_v_arr *tmp = NULL;
+  struct CS_matrix_idx_v *vs[data_allr_nums];
+  uint32_t vs_count = 0;
+
+  for (int i = 0; i < row->nidx_vs; i++) {
+    struct CS_matrix_idx_v *row_idxv = row->idx_vs[i];
+    if (matrix_CSR->rows[row_idxv->idx]) {
+      struct CS_matrix_idx_v_arr *row_matrix = matrix_CSR->rows[row_idxv->idx];
+      for (uint32_t j = 0; j < row_matrix->nidx_vs; j++) {
+        elemconnet_counter ++;
+        if(bdd_apply(row_idxv->elem->bdd_out, row_matrix->idx_vs[j]->elem->bdd_in, bddop_and)) {
+          struct matrix_element *elem_tmp = elem_connect(row_idxv->elem, row_matrix->idx_vs[j]->elem);
+
+          if (elem_tmp) {
+            elem_true_counter++;
+            if (vs_count){
+              uint32_t sign = 1;
+              for (int k = 0; k < vs_count; k++) {
+                if(row_matrix->idx_vs[j]->idx == vs[k]->idx){
+                  vs[k]->elem = matrix_elem_plus(vs[k]->elem, elem_tmp);
+                  sign = 0;
+                  break;
+                }
+              }
+              if (sign) {
+                vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
+                vs[vs_count]->idx = row_matrix->idx_vs[j]->idx;
+                vs[vs_count]->elem = elem_tmp;
+                vs_count ++;
+              }      
+            }
+            else {
+              vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
+              vs[vs_count]->idx = row_matrix->idx_vs[j]->idx;
+              vs[vs_count]->elem = elem_tmp;
+              vs_count ++;
+            }     
+          }
+          elem_tmp = NULL;
+        }
+      }
+    }
+  }
+
+
+  if(vs_count){
+    qsort (vs, vs_count,sizeof(struct CS_matrix_idx_v *), CS_matrix_idx_v_cmp); 
+    tmp = xmalloc(sizeof(uint32_t) + vs_count*sizeof(struct CS_matrix_idx_v *));
+    tmp->nidx_vs = vs_count;
+    // memcpy (tmp->idx_vs, vs, vs_count*sizeof(struct CS_matrix_idx_v *)); 
+    for (uint32_t i = 0; i < vs_count; i++)
+      tmp->idx_vs[i] = vs[i];
+  }
+  return tmp;
+}
+
+struct CS_matrix_idx_v_arr *
 all_row_col_multiply(struct matrix_CSR *matrix_CSR, struct CS_matrix_idx_v_arr *col) {
   struct CS_matrix_idx_v_arr *tmp = NULL;
   struct CS_matrix_idx_v *vs[data_allr_nums];
@@ -3184,7 +3242,7 @@ all_row_col_multiply(struct matrix_CSR *matrix_CSR, struct CS_matrix_idx_v_arr *
 struct matrix_CSR *
 sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_CSR1) {
   // uint32_t threshold = matrix_CSR->nrows/600;
-  uint32_t threshold = 3000;
+  uint32_t threshold = 9000;
   struct timeval start,stop; 
   gettimeofday(&start,NULL);
   struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR1);
