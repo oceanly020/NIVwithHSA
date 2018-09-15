@@ -3155,8 +3155,8 @@ row_matrix_CSR_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSR *matr
 struct CS_matrix_idx_v_arr *
 row_matrix_CSR_multiply_bysort(struct CS_matrix_idx_v_arr *row, struct matrix_CSR *matrix_CSR) {
   struct CS_matrix_idx_v_arr *tmp = NULL;
-  struct CS_matrix_idx_v *vs[100000];
-  printf("there not wrong\n");
+  struct CS_matrix_idx_v *vs[200000];
+  // printf("there not wrong\n");
   // uint32_t max_CSR = MAX_VAL_RATE*data_allr_nums*data_allr_nums;
   // struct matrix_Tri_express **Tri_arr = xmalloc(max_CSR*sizeof(struct matrix_Tri_express *));
   uint32_t vs_count = 0;
@@ -3174,10 +3174,10 @@ row_matrix_CSR_multiply_bysort(struct CS_matrix_idx_v_arr *row, struct matrix_CS
             elem_true_counter++;
             vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
             vs[vs_count]->idx = row_matrix->idx_vs[j]->idx;
-            vs[vs_count] = elem_tmp;
+            vs[vs_count]->elem = elem_tmp;
             vs_count ++;
-            if (vs_count>100000 - 1)
-              printf("there is wrong\n");
+            // if (vs_count>100000 - 1)
+            //   printf("there is wrong\n");
           }     
           elem_tmp = NULL;
         }
