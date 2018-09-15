@@ -3156,7 +3156,9 @@ row_matrix_CSR_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSR *matr
 struct CS_matrix_idx_v_arr *
 row_matrix_CSR_multiply_bysort(struct CS_matrix_idx_v_arr *row, struct matrix_CSR *matrix_CSR) {
   struct CS_matrix_idx_v_arr *tmp = NULL;
-  struct CS_matrix_idx_v *vs[data_allr_nums];
+  struct CS_matrix_idx_v *vs[200000];
+  // uint32_t max_CSR = MAX_VAL_RATE*data_allr_nums*data_allr_nums;
+  // struct matrix_Tri_express **Tri_arr = xmalloc(max_CSR*sizeof(struct matrix_Tri_express *));
   uint32_t vs_count = 0;
 
   for (int i = 0; i < row->nidx_vs; i++) {
@@ -3170,29 +3172,11 @@ row_matrix_CSR_multiply_bysort(struct CS_matrix_idx_v_arr *row, struct matrix_CS
 
           if (elem_tmp) {
             elem_true_counter++;
-            if (vs_count){
-              uint32_t sign = 1;
-              for (int k = 0; k < vs_count; k++) {
-                if(row_matrix->idx_vs[j]->idx == vs[k]->idx){
-                  vs[k]->elem = matrix_elem_plus(vs[k]->elem, elem_tmp);
-                  sign = 0;
-                  break;
-                }
-              }
-              if (sign) {
-                vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
-                vs[vs_count]->idx = row_matrix->idx_vs[j]->idx;
-                vs[vs_count]->elem = elem_tmp;
-                vs_count ++;
-              }      
-            }
-            else {
-              vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
-              vs[vs_count]->idx = row_matrix->idx_vs[j]->idx;
-              vs[vs_count]->elem = elem_tmp;
-              vs_count ++;
-            }     
-          }
+            vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
+            vs[vs_count]->idx = row_matrix->idx_vs[j]->idx;
+            vs[vs_count] = elem_tmp;
+            vs_count ++;
+          }     
           elem_tmp = NULL;
         }
       }
@@ -3202,10 +3186,21 @@ row_matrix_CSR_multiply_bysort(struct CS_matrix_idx_v_arr *row, struct matrix_CS
 
   if(vs_count){
     qsort (vs, vs_count,sizeof(struct CS_matrix_idx_v *), CS_matrix_idx_v_cmp); 
-    tmp = xmalloc(sizeof(uint32_t) + vs_count*sizeof(struct CS_matrix_idx_v *));
-    tmp->nidx_vs = vs_count;
+    uint32_t count = 1;
+    for (uint32_t i = 1; i < vs_count; i++) {   
+      if (vs[i]->idx == vs[count-1]->idx) {
+        vs[count-1]->elem = matrix_elem_plus(vs[count-1]->elem, vs[i]->elem);//保留相同部分，r-r通过两条链路
+        free(vs[i]);
+        continue;
+      }
+      vs[count] = vs[i];
+      count++; 
+    }
+
+    tmp = xmalloc(sizeof(uint32_t) + count*sizeof(struct CS_matrix_idx_v *));
+    tmp->nidx_vs = count;
     // memcpy (tmp->idx_vs, vs, vs_count*sizeof(struct CS_matrix_idx_v *)); 
-    for (uint32_t i = 0; i < vs_count; i++)
+    for (uint32_t i = 0; i < count; i++)
       tmp->idx_vs[i] = vs[i];
   }
   return tmp;
@@ -3260,8 +3255,8 @@ sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_
 
         gettimeofday(&start,NULL);
 
-
-        tmp->rows[i] = row_matrix_CSR_multiply(matrix_CSR->rows[i], matrix_CSR1);
+        tmp->rows[i] = row_matrix_CSR_multiply_bysort(matrix_CSR->rows[i], matrix_CSR1);
+        // tmp->rows[i] = row_matrix_CSR_multiply(matrix_CSR->rows[i], matrix_CSR1);
         gettimeofday(&stop,NULL);
         time_counter4+= diff(&stop, &start);
       //   printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
