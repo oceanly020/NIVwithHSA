@@ -3282,7 +3282,7 @@ sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_
 struct matrix_CSR *
 sparse_matrix_multiply_CSC(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_CSR1, struct matrix_CSC *matrix_CSC) {
   // uint32_t threshold = matrix_CSR->nrows/600;
-  uint32_t threshold = 8000;
+  uint32_t threshold = 9000;
   struct timeval start,stop; 
   gettimeofday(&start,NULL);
   gettimeofday(&stop,NULL);
