@@ -480,14 +480,6 @@ struct PACKED nf_space_pair {
   struct r_idxs *r_arr;
 };
 
-// struct PACKED nf_s_pair {
-//   struct nf_space nf_s_in;
-//   struct nf_space nf_s_out; 
-// };
-
-
-
-
 struct PACKED of_rule {
   uint32_t sw_idx;
   uint32_t idx;
@@ -602,6 +594,42 @@ struct Tri_arr {
   struct matrix_Tri_express *arr[];
 };
 
+// new sw and trie
+struct ex_rule {
+  uint32_t sw_idx;
+  uint32_t idx;
+  struct mf_uint16_t *mf_in;
+  struct mf_uint16_t *mf_out;
+  struct mask_uint16_t *mask;
+  struct mask_uint16_t *rewrite; 
+  struct links_of_rule *lks_in;
+  struct links_of_rule *lks_out;
+};
+
+struct ex_rules_arr {
+  uint32_t nrules;
+  struct ex_rule *rules[0];
+};
+
+struct switch_rs {
+  uint32_t sw_idx;
+  uint32_t nrules;
+  struct ex_rule *rules[0];
+};
+
+struct trie_node {
+  uint32_t level;
+  uint32_t isleaf;
+  struct trie_node *reverse_node;
+  struct ex_rules_arr *local_rules;
+  struct ex_rules_arr *relevent_rules;
+  struct trie_node *branchs[3];
+};
+
+// struct trie_terminal {
+//   struct trie_node *reverse_node;
+//   struct ex_rules_arr *rules_arr;
+// };
 
 
 
@@ -644,6 +672,7 @@ timeval_subtract(struct timeval* result, struct timeval* x, struct timeval* y) {
 /*========================================================================*/
 struct sw *sw_get(const uint32_t idx);
 struct of_rule *rule_get(struct sw *sw, const int idx);
+struct ex_rule *ex_rule_get(struct switch_rs *sw, const int idx);
 struct of_rule *rule_get_2idx(const uint32_t sw_idx, const uint32_t r_idx);
 struct links_of_rule *rule_links_get_2idx(struct sw *sw, const uint32_t idx, const uint32_t sign);
 struct links_of_rule *rule_links_get(const struct of_rule *rule, const uint32_t sign);
@@ -669,6 +698,7 @@ void print_links_of_rule(const struct links_of_rule *ls);
 void print_link_to_rule(const uint32_t link_idx, const struct link_to_rule_file *lr_file, 
                     const uint32_t *lr_data_arrs);
 void print_rule(const struct of_rule *rule);
+void print_ex_rule(const struct ex_rule *rule);
 void print_mf_uint16_t(const struct mf_uint16_t *a);
 void print_mf_uint16_t_array(const struct mf_uint16_t_array *arr);
 void print_mask_uint16_t(const struct mask_uint16_t *a);
@@ -820,6 +850,13 @@ rule_get(struct sw *sw, const int idx) {
   struct of_rule *rule = &(sw->rules[idx-1]);
   return (rule);
 }
+
+struct ex_rule * //sw从0开始，r_idx为of_rule->idx从1开始
+ex_rule_get(struct switch_rs *sw, const int idx) {
+  struct ex_rule *rule = sw->rules[idx-1];
+  return (rule);
+}
+
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 
 struct of_rule *
 rule_get_2idx(const uint32_t sw_idx, const uint32_t r_idx) {//sw从0开始，r_idx为of_rule->idx从1开始
@@ -1114,6 +1151,39 @@ print_rule(const struct of_rule *rule) {
   printf("OUT_LINK:");
   if (lks_out)
     print_links_of_rule(lks_out);
+  else
+    printf("NULL");
+  printf("\n");
+}
+
+void
+print_ex_rule(const struct ex_rule *rule) {
+  int add_len = sizeof(uint16_t);
+  printf("sw_idx:%d; ", rule->sw_idx);
+  printf("r_idx:%d; ", rule->idx);
+  printf("mf_in:");
+  print_mf_uint16_t(rule->mf_in);
+  printf("; ");
+  printf("mf_out:");
+  print_mf_uint16_t(rule->mf_out);
+  printf("; ");
+  if (rule->mask) {
+    printf("mask:");
+    print_mask_uint16_t(rule->mask);
+    printf("; ");
+    printf("rewrite:");
+    print_mask_uint16_t(rule->rewrite);
+    printf("; ");
+  }
+  printf("IN_LINK:");
+  if (rule->lks_in)
+    print_links_of_rule(rule->lks_in);
+  else
+    printf("NULL");
+  printf("; ");
+  printf("OUT_LINK:");
+  if (rule->lks_out)
+    print_links_of_rule(rule->lks_out);
   else
     printf("NULL");
   printf("\n");
@@ -3633,10 +3703,250 @@ BDD_init_multiply(void) {
 }
 
 
-/*稀疏向量处理for test*/
+/*提取rules 到用于冲突处理的结构体*/
 /*========================================================================*/
 
-// struct matrix_CSR *
-// gen_row_by_ridx(){
+struct ex_rule *
+gen_ex_rule_from_of(struct of_rule *of_r) {
+  if (!of_r)
+    return NULL;
+  int add_len = sizeof(uint16_t);
+  struct ex_rule *tmp = xcalloc(1, sizeof *tmp);
+  tmp->sw_idx = of_r->sw_idx;
+  tmp->idx = of_r->idx;
+  struct links_of_rule *lks_out = rule_links_get(of_r, OUT_LINK);
+  struct links_of_rule *lks_in = rule_links_get(of_r, IN_LINK);
+  tmp->lks_in = copy_links_of_rule(lks_in);
+  tmp->lks_out = copy_links_of_rule(lks_out);
+  tmp->mf_in = get_r_out_mf(of_r);
+  tmp->mf_out = get_r_in_mf(of_r);
+  if (of_r->mask) {
+    tmp->mask = xcalloc(1,sizeof(struct mask_uint16_t));
+    tmp->rewrite = xcalloc(1,sizeof(struct mask_uint16_t));
+    for (uint32_t j = 0; j < MF_LEN; j++) {
+      tmp->mask->v[j] = *(uint16_t *)((uint8_t *)data_arrs+j*add_len+of_r->mask);
+      tmp->rewrite->v[j] = *(uint16_t *)((uint8_t *)data_arrs+j*add_len+of_r->rewrite);
+    }
+  }
+  else {
+    tmp->mask = NULL;
+    tmp->rewrite = NULL;
+  }
+  return tmp;
+}
+
+struct switch_rs *
+gen_sw_rules(uint32_t sw_idx) {
+  struct sw *sw = sw_get(sw_idx);
+
+  if(!sw)
+    return NULL;
+  struct switch_rs *tmp = xmalloc(2*sizeof(uint32_t)+(sw->nrules)*sizeof(struct ex_rule *));
+  tmp->sw_idx = sw->sw_idx;
+  tmp->nrules = sw->nrules;
+  for (int i = 0; i < tmp->nrules; i++) {
+    struct of_rule *of_r = rule_get(sw, i+1);
+    tmp->rules[i] = gen_ex_rule_from_of(of_r);
+  }
+
+  return tmp;
+}
+
+/*trie结构*/
+/*========================================================================*/
+
+// struct ex_rule {
+//   uint32_t sw_idx;
+//   uint32_t idx;
+//   struct mf_uint16_t *mf_in;
+//   struct mf_uint16_t *mf_out;
+//   struct mask_uint16_t *mask;
+//   struct mask_uint16_t *rewrite; 
+//   struct links_of_rule *lks_in;
+//   struct links_of_rule *lks_out;
+// };
+
+// struct ex_rules_arr {
+//   uint32_t nrules;
+//   struct ex_rule *rules[0];
+// };
+// struct trie_node {
+//   uint32_t level;
+//   uint32_t isleaf;
+//   struct trie_node *reverse_node;
+//   struct ex_rules_arr *local_rules;
+//   struct ex_rules_arr *relevent_rules;
+//   struct trie_node *branchs[3];
+
+// };
+
+
+struct trie_node *
+crate_trie_node_init(void) {
+  struct trie_node *tmp = xcalloc(1, sizeof *tmp);
+  tmp->level = 0;
+  tmp->isleaf = 0;
+  tmp->reverse_node = NULL;
+  tmp->local_rules = NULL;
+  tmp->relevent_rules = NULL;
+  for (int i = 0; i < 3; i++)
+    tmp->branchs[i] = NULL;
+  return tmp;
+}
+
+uint32_t
+local_rules_has_r(struct ex_rules_arr *local_rs, struct ex_rule *r){//1->has same r
+  if (!local_rs) {
+    return 0;
+  }
+  for (int i = 0; i <local_rs->nrules; i++) {
+    if ((r->sw_idx == local_rs->rules[i]->sw_idx)&& (r->idx == local_rs->rules[i]->idx))
+      return 1;
+  }
+  return 0;
+}
+
+struct ex_rules_arr *
+add_local_rules(struct ex_rules_arr *local_rs, struct ex_rule *r){
+  if (!local_rs) {
+    struct ex_rules_arr *tmp = xcalloc(1, sizeof *tmp);
+    tmp->nrules = 1;
+    tmp->rules[0] = r;
+    return tmp;
+  }
+  for (int i = 0; i <local_rs->nrules; i++) {
+    if ((r->sw_idx == local_rs->rules[i]->sw_idx)&& (r->idx == local_rs->rules[i]->idx))
+      return local_rs;
+  }
+  struct ex_rules_arr *tmp = xmalloc(sizeof(uint32_t)+(local_rs->nrules+1)*sizeof(struct ex_rule *));
+  tmp->nrules = local_rs->nrules + 1;
+  for (int i = 0; i < local_rs->nrules; i++) 
+    tmp->rules[i] = local_rs->rules[i];
+  tmp->rules[local_rs->nrules] = r;
+  free(local_rs);
+  return tmp;
+}
+
+uint32_t
+trie_insert_rule (struct trie_node *root, struct ex_rule *r) {
+  struct trie_node *tmp = root;
+  struct mf_uint16_t *mf = r->mf_in;
+  for (int i = 0; i < MF_LEN; i++){
+    uint16_t sign = 0x8000;
+    for (int j = 0; j < 16; j++){
+      if (sign & mf->mf_w[i]) {
+        if (tmp->branchs[2]) {//*
+          tmp = tmp->branchs[2];
+        }
+        else {
+          tmp->branchs[2] = crate_trie_node_init();
+          tmp->branchs[2]->level = tmp->level+1;
+          tmp->branchs[2]->reverse_node = tmp;
+          tmp = tmp->branchs[2];
+        }
+      }
+      else {
+        if (sign & mf->mf_v[i]) {
+          if (tmp->branchs[1]) {//1
+            tmp = tmp->branchs[1];
+          }
+          else {
+            tmp->branchs[1] = crate_trie_node_init();
+            tmp->branchs[1]->level = tmp->level+1;
+            tmp->branchs[1]->reverse_node = tmp;
+            tmp = tmp->branchs[1];
+          }
+        }
+        else {
+          if (tmp->branchs[0]) {//0
+            tmp = tmp->branchs[0];
+          }
+          else {
+            tmp->branchs[0] = crate_trie_node_init();
+            tmp->branchs[0]->level = tmp->level+1;
+            tmp->branchs[0]->reverse_node = tmp;
+            tmp = tmp->branchs[0];
+          }
+        }
+      }
+      sign >>= 1;
+    }  
+  }
+  tmp->isleaf = 1;
+  if (local_rules_has_r(tmp->local_rules, r))
+    return 0;
+  tmp->local_rules = add_local_rules(tmp->local_rules, r);
+  return 1;
+}
+
+void
+trie_find_insect_rules(struct trie_node *root, struct ex_rule *r) { //breadth first search
+  struct trie_node *tmp = root;
+  struct mf_uint16_t *mf = r->mf_in;
+  uint32_t count = 0;
+  struct trie_node *arr[data_allr_nums];
   
-// }
+  for (int i = 0; i < MF_LEN; i++) {
+    uint16_t sign = 0x8000;
+    for (int j = 0; j < 16; j++) {
+      uint32_t count_tmp = 0;
+      for (int k = 0; k < count; k++) {
+        /* code */
+      }
+      if (sign & mf->mf_w[i]) {
+        
+      }
+      else {
+        if (sign & mf->mf_v[i]) {
+          if (tmp->branchs[1]) {//1
+            tmp = tmp->branchs[1];
+          }
+          else {
+            tmp->branchs[1] = crate_trie_node_init();
+            tmp->branchs[1]->level = tmp->level+1;
+            tmp->branchs[1]->reverse_node = tmp;
+            tmp = tmp->branchs[1];
+          }
+        }
+        else {
+          if (tmp->branchs[0]) {//0
+            tmp = tmp->branchs[0];
+          }
+          else {
+            tmp->branchs[0] = crate_trie_node_init();
+            tmp->branchs[0]->level = tmp->level+1;
+            tmp->branchs[0]->reverse_node = tmp;
+            tmp = tmp->branchs[0];
+          }
+        }
+      }
+      sign >>= 1;
+    }  
+  }
+
+
+
+
+
+}
+
+uint32_t
+trie_add_rule(struct trie_node *root, struct ex_rule *r) {
+  uint32_t haschange = trie_insert_rule (root, r);
+  if (!haschange)
+    return 0;
+  trie_find_insect_rules(root, r);
+  return 1;
+}
+
+// struct switch_rs {
+//   uint32_t sw_idx;
+//   uint32_t nrules;
+//   struct ex_rule *rules[0];
+// };
+void
+trie_add_rules_for_sw(struct trie_node *root, struct switch_rs *sw) {
+  for (int i = 0; i < sw->nrules; i++) {
+    trie_add_rule(root, sw->rules[i]);
+  }
+}
