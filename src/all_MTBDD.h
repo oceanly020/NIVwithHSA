@@ -21,8 +21,10 @@
 
 //结构体或变量定义
 //自定义
-#define MF_LEN 8 //128位bit， 8×16
-// #define MF_LEN 2 //32位bit standford
+// #define FIELD_LEN 2 //48位bit i2
+#define FIELD_LEN 7 //128位bit
+#define MF_LEN 8 //128位bit， 8×16 standford whole
+// #define MF_LEN 2 //32位bit standford simple
 // #define MF_LEN 3 //48位bit i2
 #define NW_DST_H 0
 #define NW_DST_L 1
@@ -398,6 +400,11 @@ struct res {
 };
 
 //自己定义
+struct PACKED wc_uint8_t {
+  uint8_t w;
+  uint8_t v;
+};
+
 struct PACKED wc_uint16_t {
   uint16_t w;
   uint16_t v;
@@ -416,6 +423,11 @@ struct PACKED range_uint16_t {
 struct PACKED mf_uint16_t {
   uint16_t mf_w[MF_LEN];
   uint16_t mf_v[MF_LEN];
+};
+
+struct PACKED mf_uint8_t {
+  uint8_t mf_w[MF_LEN*2];
+  uint8_t mf_v[MF_LEN*2];
 };
 
 struct PACKED mask_uint16_t {
@@ -626,6 +638,36 @@ struct trie_node {
   struct trie_node *branchs[3];
 };
 
+// new sw and bdd rules
+struct bdd_rule {
+  uint32_t sw_idx;
+  uint32_t idx;
+  BDD mf_in;
+  BDD mf_out;
+  BDD vtnode_in;
+  BDD mtbdd_in;
+  struct mask_uint16_t *mask;
+  struct mask_uint16_t *rewrite; 
+  struct links_of_rule *lks_in;
+  struct links_of_rule *lks_out;
+  
+};
+
+struct bdd_rules_arr {
+  uint32_t nrules;
+  struct bdd_rule *rules[0];
+};
+
+struct switch_bdd_rs {
+  uint32_t sw_idx;
+  uint32_t nrules;
+  struct bdd_rule *rules[0];
+};
+
+struct bdd_arrs{
+  uint32_t nbdds;
+  uint32_t bdds[0];
+};
 // struct trie_terminal {
 //   struct trie_node *reverse_node;
 //   struct ex_rules_arr *rules_arr;
@@ -3964,6 +4006,8 @@ trie_find_insect_rules(struct trie_node *root, struct ex_rule *r) { //breadth fi
     arr[i]->relevent_rules = add_rule_to_ex_rules_arr(arr[i]->relevent_rules, r);
 }
 
+
+
 uint32_t
 trie_add_rule(struct trie_node *root, struct ex_rule *r) {
   uint32_t haschange = trie_insert_rule (root, r);
@@ -3973,12 +4017,218 @@ trie_add_rule(struct trie_node *root, struct ex_rule *r) {
   return 1;
 }
 
+
 void
 trie_add_rules_for_sw(struct trie_node *root, struct switch_rs *sw) {
   for (int i = 0; i < sw->nrules; i++) {
     trie_add_rule(root, sw->rules[i]);
   }
 }
+
+void
+greed_calc_arule_insc_sw(struct switch_rs *sw, uint32_t idx) {
+  uint32_t insc_counter = 0;
+  for (int i = 0; i < sw->nrules; i++) {
+    struct mf_uint16_t *a = calc_insc(sw->rules[idx-1]->mf_in, sw->rules[i]->mf_in);
+    if(a){
+      insc_counter++;
+      free(a);
+    }
+  }
+  printf("This rule insect %d rules\n", insc_counter);
+}
+
+
+
+uint32_t field_sign[8] = {0, 2, 6, 10, 11, 13, 15, 16};
+
+struct ec {
+  uint32_t l_b;
+  uint32_t h_b;
+};
+
+uint32_t
+trie_process_ec_arule(struct trie_node *root, struct ex_rule *r) {
+  struct mf_uint16_t *mf = r->mf_in;
+  uint32_t count = 1;
+  struct trie_node *arr[data_allr_nums];
+  arr[0] = root;
+
+  uint32_t node_tr_counter = 0;
+  // printf("this is right\n");
+
+  //find all the inscrules
+  for (int i = 0; i < MF_LEN; i++) {
+    uint16_t sign = 0x8000;
+    for (int j = 0; j < 16; j++) {
+      uint32_t count_tmp = 0;
+      struct trie_node *tmp[data_allr_nums];
+      if (sign & mf->mf_w[i]) {
+        for (int k = 0; k < count; k++) {
+          if (arr[k]->branchs[0]){
+            tmp[count_tmp] = arr[k]->branchs[0];
+            count_tmp++;
+            // node_tr_counter++;
+
+          }
+          if (arr[k]->branchs[1]){
+            tmp[count_tmp] = arr[k]->branchs[1];
+            count_tmp++;
+            // node_tr_counter++;
+          }
+          if (arr[k]->branchs[2]){
+            tmp[count_tmp] = arr[k]->branchs[2];
+            count_tmp++;
+            // node_tr_counter++;
+          }   
+        }
+      }
+      else {
+        if (sign & mf->mf_v[i]) {
+          for (int k = 0; k < count; k++) {
+            if (arr[k]->branchs[1]){
+              tmp[count_tmp] = arr[k]->branchs[1];
+              count_tmp++;
+              // node_tr_counter++;
+            }
+            if (arr[k]->branchs[2]){
+              tmp[count_tmp] = arr[k]->branchs[2];
+              count_tmp++;
+              // node_tr_counter++;
+            }   
+          }
+        }
+        else {
+          for (int k = 0; k < count; k++) {
+            if (arr[k]->branchs[0]){
+              tmp[count_tmp] = arr[k]->branchs[0];
+              count_tmp++;
+              // node_tr_counter++;
+            }
+            if (arr[k]->branchs[2]){
+              tmp[count_tmp] = arr[k]->branchs[2];
+              count_tmp++;
+              // node_tr_counter++;
+            }   
+          }
+        }
+      }
+      sign >>= 1;
+      for (int k = 0; k < count_tmp; k++) {
+        arr[k] = tmp[k];
+      }
+      count = count_tmp;
+    }  
+  }
+
+  // printf("node_tr_counter is %d\n", node_tr_counter);
+
+  struct ex_rule *r_arr[data_allr_nums];
+  uint32_t insc_r_count = 0;
+  for (int i = 0; i < count; i++){
+    for (int j = 0; j < arr[i]->local_rules->nrules; j++) {
+      r_arr[insc_r_count] = arr[i]->local_rules->rules[j];
+      insc_r_count++;
+    }
+  }
+
+  for (int field_i = 0; field_i < FIELD_LEN; field_i++) {//standford data has 7fields
+    uint32_t sign = 0;
+    // uint16_t upmask = 0x8000;
+    // uint16_t downmask = 0x0080;
+    uint32_t len = field_sign[field_i+1] - field_sign[field_i+1];
+    // sign = field_sign[field_i]/2;
+    uint32_t iscross = 0;
+    // if (field_sign[field_i]%2 != 0) {
+    //   // sign = field_sign[field_i]/2;
+    //   iscross = 1;
+    // }
+    // else{
+    //   // sign = field_sign[field_i]/2;
+    //   iscross = 0;
+    // }
+    // uint32_t l_v_arr[insc_r_count];
+    // uint32_t h_v_arr[insc_r_count];
+    uint32_t v_arr[2*insc_r_count];
+
+    for (int r_i = 0; r_i < insc_r_count; r_i++) {//for every r in the insect set
+      uint32_t h_v = 0;
+      uint32_t l_v = 0;
+      for (int len_i = 0; len_i < len; len_i++) {
+        uint16_t masksign = 0;
+        uint32_t mf_sign = (field_sign[field_i] + len_i)/2;
+        if ((field_sign[field_i] + len_i)%2)
+          masksign = 0x0080;
+        else
+          masksign = 0x8000;
+        for (int c_i = 0; c_i < 8; c_i++) {
+          if (masksign & r_arr[r_i]->mf_in->mf_w[mf_sign]) {//wildcard 
+            h_v |= 1;
+          }
+          else if (masksign & r_arr[r_i]->mf_in->mf_v[mf_sign]) {//1
+            l_v |= 1;
+            h_v |= 1;
+          }
+          // else {
+          //   l_v <<= 1;
+          //   h_v <<= 1;
+          // }
+          if ((len_i == (len-1))&&(c_i == 7))
+            break;
+          l_v <<= 1;
+          h_v <<= 1;
+          masksign >>=1;
+        }
+      }
+      v_arr[r_i*2] = l_v;
+      v_arr[r_i*2+1] = h_v;
+    }
+    qsort(v_arr, 2*insc_r_count,sizeof(uint32_t), uint32_t_cmp);
+
+    uint32_t last = v_arr[0];
+    for (int i = 0; i < 2*insc_r_count; i++) {
+      if(v_arr[i] != last){
+        struct ec *tmp = xmalloc(sizeof *tmp);
+        tmp->l_b = last;
+        tmp->h_b = v_arr[i];
+        free(tmp);
+        last = v_arr[i];
+      }
+    }
+  }
+
+    // arr[i]->relevent_rules = add_rule_to_ex_rules_arr(arr[i]->relevent_rules, r);
+  return insc_r_count;
+}
+
+void
+trie_add_rules_for_sw_test_difflast1(struct trie_node *root, struct switch_rs *sw, uint32_t idx) {
+  struct timeval start,stop;
+  uint32_t order[sw->nrules];
+  for (int i = 0; i < sw->nrules; i++)
+    order[i] = i;
+  order[idx-1] = sw->nrules - 1;
+  order[sw->nrules - 1] = idx - 1;
+
+  for (int i = 0; i < sw->nrules-1; i++) {
+    trie_insert_rule (root, sw->rules[order[i]]);
+  }
+
+
+  gettimeofday(&start,NULL);
+  trie_insert_rule (root, sw->rules[order[sw->nrules-1]]);
+  uint32_t insc_r_count = trie_process_ec_arule(root, sw->rules[order[sw->nrules-1]]);
+  gettimeofday(&stop,NULL);
+  long long int T_up_last1 = diff(&stop, &start);
+  printf("Build trie test\n");
+  printf("Test the last one with idx %d: %lld us\n", sw->rules[order[sw->nrules - 1]]->idx, T_up_last1);
+  printf("This rule insect %d rules\n", insc_r_count);
+
+
+}
+
+// switch_bddrs_to_mtbdd_test_difflast1
+
 
 struct trie_node *
 get_terminal_by_r(struct trie_node *root, struct ex_rule *r) {
@@ -4015,14 +4265,9 @@ get_terminal_by_r(struct trie_node *root, struct ex_rule *r) {
 /*MTBDD结构*/
 /*========================================================================*/
 
-struct bdd_arrs{
-  uint32_t nbdds;
-  uint32_t bdds[0];
-};
-
 
 BDD
-ex_rule_to_BDD(struct ex_rule *r) {
+ex_rule_to_MTBDD(struct ex_rule *r) {
   BDD root, tmp;
   struct rule_records_arr *rr = xmalloc(sizeof *rr);
   rr->nrules = 1;
@@ -4050,59 +4295,170 @@ ex_rule_to_BDD(struct ex_rule *r) {
   return root;
 }
 
-
-struct bdd_arrs *
-get_bdds_by_sw(struct switch_rs *sw){
-  struct bdd_arrs *tmp = xmalloc((sw->nrules+1)*sizeof(uint32_t));
-  tmp->nbdds = sw->nrules;
-  for (int i = 0; i < sw->nrules; i++) {
-    tmp->bdds[i] = ex_rule_to_BDD(sw->rules[i]);
-    bdd_addref(tmp->bdds[i]);
-    printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum()); 
-  }
-  // printf("bdd_getnodenum :%d\n", bdd_getnodenum()); 
-  return tmp;
-
-}
-
 BDD
-mtbdd_add_rules_fr_arrs(struct bdd_arrs *arr) {
-  BDD root = 0;
-  for (int i = 0; i < arr->nbdds; i++) {
-    bdd_delref(root);
-    root = mtbdd_apply(root, arr->bdds[i]);
-    bdd_addref(root);
-    // bdd_gbc();
-    printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum()); 
+bdd_rule_get_mtbdd_in(struct ex_rule *r, BDD tnode) {
+  BDD root, tmp;
+  tmp = tnode;
+  root = tmp;
+  for (int i = 0; i < MF_LEN; i++){
+    int reverse_i = MF_LEN - i - 1;
+    uint16_t sign = 0x0001;
+    for (int j = 0; j < 16; j++){
+      if (!(sign & r->mf_in->mf_w[reverse_i])){
+        int level = bdd_var2level(16*MF_LEN - 16*i - j - 1);//生成相应变量的一个节点
+        if (sign & r->mf_in->mf_v[reverse_i]){
+          root = bdd_makenode(level, 0, tmp);
+        }
+        else{
+          root = bdd_makenode(level, tmp, 0);//生成相应变量的一个节点
+        }
+        tmp = root;
+      }
+      sign <<= 1;
+    }
   }
   return root;
 }
 
-// struct rule_record {
-//   uint32_t sw_idx;
-//   uint32_t idx;
-// };
+struct bdd_rule *
+ex_rule_to_bdd_rule(struct ex_rule *r) {
+  struct bdd_rule *bdd_r = xmalloc(sizeof *bdd_r);
+  bdd_r->sw_idx = r->sw_idx;  
+  bdd_r->idx = r->idx;
+  bdd_r->mask = r->mask;
+  bdd_r->rewrite = r->rewrite;
+  bdd_r->lks_in = r->lks_in;
+  bdd_r->lks_out = r->lks_out;
+  bdd_r->mf_in = mf2bdd(r->mf_in);
+  bdd_addref(bdd_r->mf_in);
+  bdd_r->mf_out = mf2bdd(r->mf_out);
+  bdd_addref(bdd_r->mf_out);
+  bdd_r->vtnode_in = mtbdd_maketnode_fr_pofr(bdd_r->mf_in, bdd_r->sw_idx, bdd_r->idx);
+  bdd_addref(bdd_r->vtnode_in);
+  bdd_r->mtbdd_in = bdd_rule_get_mtbdd_in(r, bdd_r->vtnode_in); 
+  bdd_addref(bdd_r->mtbdd_in);
+  return bdd_r;
+}
 
-// struct rule_records_arr {
-//   uint32_t nrules;
-//   struct rule_record rules[0];
-// };
+struct switch_bdd_rs *
+switch_rs_to_bdd_rs(struct switch_rs *sw){
+  struct switch_bdd_rs *tmp = xmalloc(2*sizeof(uint32_t)+(sw->nrules)*sizeof(struct bdd_rule *));
+  tmp->sw_idx = sw->sw_idx;
+  tmp->nrules = sw->nrules;
+  for (int i = 0; i < sw->nrules; i++) {
+    tmp->rules[i] = ex_rule_to_bdd_rule(sw->rules[i]);
+    // printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum()); 
+  }
+  printf("switch_bdd_rs %d has %d rules.\n", sw->sw_idx, sw->nrules); 
+  printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum()); 
+  return tmp;
+}
 
-// typedef struct s_BddNode /* Node table entry */
-// {
-//    unsigned int refcou : 10;
-//    unsigned int level  : 22;
-//    int low;
-//    int high;
-//    int hash;
-//    int next;
-//    // int value;
-//    // struct rule_records_arr *rule_records;
-// } BddNode;
+void
+switch_bddrs_getinscbdd_test_diff1(struct switch_bdd_rs *sw, uint32_t idx) {
+  BDD self_final = sw->rules[idx-1]->mf_in;
+  BDD tmp = 0;
 
-// typedef struct s_MTBddValue /* Node table entry */
-// {  
-//    int hash;
-//    int next;
-//    struct rule_records_arr *rule_records;
-// } MTBddValue;
+
+  uint32_t insc_counter = 0;
+  for (int i = 0; i < idx-1; i++) {
+    // BDD insc = bdd_apply(sw->rules[idx-1]->mf_in, sw->rules[i]->mf_in, bddop_and);
+    // if (bdd_apply(sw->rules[idx-1]->mf_in, sw->rules[i]->mf_in, bddop_and)){
+    //   // insc_counter++;
+    // }
+    // bdd_delref(self_final);
+    self_final = bdd_apply(self_final, sw->rules[i]->mf_in, bddop_diff);
+    // bdd_addref(self_final);
+    // // check_bddfalse(sw->rules[idx-1]->mf_in, sw->rules[i]->mf_in);
+    // if (sw->rules[idx-1]->mf_in == 0){
+    //   printf("this rule is been coverd\n");
+    //   break;
+    // }
+    // bdd_gbc();
+    // printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum()); 
+  }
+  for (int i = idx; i < sw->nrules; i++){
+    tmp = bdd_apply(self_final, sw->rules[i]->mf_in, bddop_diff);
+    if (tmp) {
+      tmp = 0;
+    }
+    tmp = 0;
+
+    // BDD insc = bdd_apply(sw->rules[idx-1]->mf_in, sw->rules[i]->mf_in, bddop_and);
+    // if (bdd_apply(sw->rules[idx-1]->mf_in, sw->rules[i]->mf_in, bddop_and)){
+      // insc_counter++;
+      // printf("the insec idx %d\n", i);
+      // printf("the last rule has %d nodes\n", bdd_nodecount(insc));
+    // }
+  }
+  // printf("This rule insect %d rules\n", insc_counter);
+  // if (sw->rules[idx-1]->mf_in != 0){
+  //   for (int i = idx; i < sw->nrules; i++) {
+  //     // check_bddfalse(sw->rules[idx-1]->mf_in, sw->rules[i]->mf_in);
+  //     BDD insc = bdd_apply(self_final, sw->rules[i]->mf_in, bddop_and);
+  //     BDD diff = bdd_apply(sw->rules[i]->mf_in, insc, bddop_diff);
+  //   }
+  // }
+  
+}
+
+// BDD
+// switch_bddrs_to_mtbdd(BDD root, struct switch_bdd_rs *sw) {
+//   // BDD root = 0;
+
+//   for (int i = 0; i < sw->nrules; i++) {
+//     bdd_delref(root);
+//     root = mtbdd_add_r(root, sw->rules[i]->mtbdd_in, 0);
+//     bdd_addref(root);
+//     // bdd_gbc();
+//     // printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum()); 
+//   }
+//   printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum()); 
+//   return root;
+// }
+
+
+BDD
+switch_bddrs_to_mtbdd_test_difflast1(struct switch_bdd_rs *sw, uint32_t idx) {
+  struct timeval start,stop;
+  BDD root = 0;
+
+  uint32_t order[sw->nrules];
+  // root = mtbdd_add_r(root, sw->rules[sw->nrules - 1]->mtbdd_in, 0);
+  for (int i = 0; i < sw->nrules; i++)
+    order[i] = i;
+  order[idx-1] = sw->nrules - 1;
+  order[sw->nrules - 1] = idx-1;
+
+  for (int i = 0; i < sw->nrules-1; i++) {
+
+    gettimeofday(&start,NULL);
+    bdd_delref(root);
+    root = mtbdd_add_r(root, sw->rules[order[i]]->mtbdd_in, 0);
+    bdd_addref(root);
+    gettimeofday(&stop,NULL);
+    long long int T_for_add = diff(&stop, &start);
+    if (i > 0 && i < 50) {
+      printf("Test the rule idx %d: %lld us\n", i+1, T_for_add);
+    }
+
+    // bdd_gbc();
+    // printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum()); 
+  }
+  // printf("the root has %d nodes\n", bdd_nodecount(root));
+  gettimeofday(&start,NULL);
+  bdd_delref(root);
+  root = mtbdd_add_r(root, sw->rules[order[sw->nrules - 1]]->mtbdd_in, 0);
+  bdd_addref(root);
+  gettimeofday(&stop,NULL);
+  long long int T_up_last1 = diff(&stop, &start);
+  printf("the last rule has %d nodes\n", bdd_nodecount(sw->rules[order[sw->nrules - 1]]->mtbdd_in));
+  printf("the root has %d nodes\n", bdd_nodecount(root));
+  printf("Test the last one with idx %d: %lld us\n", sw->rules[order[sw->nrules - 1]]->idx, T_up_last1);
+  // printf("This rule insect %d rules\n", mtbddvalues[(bddnodes[sw->rules[order[sw->nrules - 1]]->vtnode_in].high)].test_count);
+  printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum()); 
+  return root;
+}
+
+
+//end

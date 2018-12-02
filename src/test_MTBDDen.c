@@ -186,63 +186,95 @@ main (int argc, char **argv)
   // struct sw *sw0 = sw_get(0);
   // struct of_rule *rule1 = rule_get(sw0, 22);
   // print_rule(rule1);
-  struct switch_rs *swr0 = gen_sw_rules(14);
-  struct ex_rule *ex_rule1 = ex_rule_get(swr0, 22);
-  // print_ex_rule(ex_rule1);
+
+  uint32_t test_sw_idx = 14;
+  uint32_t test_r_idx = 28;
+  struct switch_rs *swr0 = gen_sw_rules(test_sw_idx);
+  printf("sw %d has %d rules.\n", swr0->sw_idx, swr0->nrules);
+  // struct ex_rule *ex_rule1 = ex_rule_get(swr0, 22);
+  
+
+  printf("==============================================================\n");
+  // print_ex_rule(ex_rule1); 
 
   //made trie and updating rules
   /*==============================================================================*/
   struct trie_node *trie_root = crate_trie_node_init();
+
+  trie_add_rules_for_sw_test_difflast1(trie_root, swr0, test_r_idx);
+  printf("-------------------------------------------------------\n");
+
   gettimeofday(&start,NULL);
-  trie_add_rules_for_sw(trie_root, swr0);
+  greed_calc_arule_insc_sw(swr0, test_r_idx);
   gettimeofday(&stop,NULL);
-  long long int build_trie = diff(&stop, &start);
-  printf("build trie from sw0: %lld us\n", build_trie);
+  long long int T_greed_calc = diff(&stop, &start);
+  printf("Test the greedy find wildcard insc with idx %d: %lld us\n", test_r_idx,T_greed_calc);
+  printf("-------------------------------------------------------\n");
+
+  // gettimeofday(&start,NULL);
+  // trie_add_rules_for_sw(trie_root, swr0);
+  // gettimeofday(&stop,NULL);
+  // long long int build_trie = diff(&stop, &start);
+  // printf("build trie from sw0: %lld us\n", build_trie);
+  // printf("-------------------------------------------------------\n");
+
+
 
   // struct trie_node *tn = get_terminal_by_r(root, ex_rule1);
   // print_trie_node(tn);
 
   //made MTBDD(muli-terminal) and updating rules
   /*==============================================================================*/
-  bdd_init(100000000,10000000,100000);
+  bdd_init(100000000,10000000,1000000);
 
   bdd_setvarnum(16*MF_LEN);
 
-
-
-  // printf("level of 0 is %d\n", bddnodes[0].level);
   gettimeofday(&start,NULL);
-  BDD ex_rule_bdd = ex_rule_to_BDD(ex_rule1);
+  struct switch_bdd_rs *sw_tmp = switch_rs_to_bdd_rs(swr0);
   gettimeofday(&stop,NULL);
-  long long int T_rule_to_BDD = diff(&stop, &start);
-  printf("get BDD from a rule: %lld us\n", T_rule_to_BDD);
+  long long int T_sw_to_BDD = diff(&stop, &start);
+  printf("get BDD from switch_rs: %lld us\n", T_sw_to_BDD);
+  printf("-------------------------------------------------------\n");
 
   gettimeofday(&start,NULL);
-  struct bdd_arrs *arr = get_bdds_by_sw(swr0);
+  switch_bddrs_getinscbdd_test_diff1(sw_tmp, test_r_idx);
   gettimeofday(&stop,NULL);
-  long long int sw0_to_BDDs = diff(&stop, &start);
-  printf("get BDD arrs from sw: %lld us\n", sw0_to_BDDs);
+  long long int T_getinscbdd = diff(&stop, &start);
+  printf("Test the greedy find bdd insc with idx %d: %lld us\n", test_r_idx,T_getinscbdd);
+  printf("-------------------------------------------------------\n");
 
-  // rule_record_cmp()
-  // bdd_printtable(arr->bdds[10]);
+  BDD *fn_mtbdd = switch_bddrs_to_mtbdd_test_difflast1(sw_tmp, test_r_idx);
+  printf("-------------------------------------------------------\n");
 
-  gettimeofday(&start,NULL);
-  BDD mtbdd_root = mtbdd_add_rules_fr_arrs(arr);
-  gettimeofday(&stop,NULL);
-  long long int sw0_to_mtbdd = diff(&stop, &start);
-  printf("get MTBDD from sw: %lld us\n", sw0_to_mtbdd);
+  // gettimeofday(&start,NULL);
+  // BDD *fn_mtbdd = switch_bddrs_to_mtbdd(0, sw_tmp);
+  // gettimeofday(&stop,NULL);
+  // long long int T_sw_bdd_to_mtbdd = diff(&stop, &start);
+  // printf("get MTBDD from switch_bdd_rs: %lld us\n", T_sw_bdd_to_mtbdd);
+  // printf("-------------------------------------------------------\n");
 
-  bdd_addref(mtbdd_root);
-  bdd_gbc();
-  printf("bdd_getnodenum :%d\n", bdd_getnodenum()); 
 
+
+  // // printf("level of 0 is %d\n", bddnodes[0].level);
+  // gettimeofday(&start,NULL);
+  // BDD ex_rule_bdd = ex_rule_to_BDD(ex_rule1);
+  // gettimeofday(&stop,NULL);
+  // long long int T_rule_to_BDD = diff(&stop, &start);
+  // printf("get BDD from a rule: %lld us\n", T_rule_to_BDD);
+
+  // // rule_record_cmp()
+  // // bdd_printtable(arr->bdds[10]);
+
+  // bdd_addref(mtbdd_root);
+  // bdd_gbc();
   // printf("bdd_getnodenum :%d\n", bdd_getnodenum()); 
 
+  // // printf("bdd_getnodenum :%d\n", bdd_getnodenum()); 
+
+
+
+
   bdd_done();
-
-
-
-
 
   data_unload();
   free(matrix_idx);  

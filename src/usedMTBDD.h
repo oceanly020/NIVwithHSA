@@ -17,7 +17,7 @@
 #define bddop_nand      3
 #define bddop_nor       4
 #define bddop_imp       5
-#define bddop_biimp     640
+#define bddop_biimp     6
 #define bddop_diff      7
 #define bddop_less      8
 #define bddop_invimp    9
@@ -27,7 +27,8 @@
 #define bddop_simplify 11
 #define bddop_to_x     12
 #define mtbddop_apply  13
-
+#define mtbddop_addr   14
+#define mtbddop_delr   15
 
 /*=== User BDD types ===*/
 typedef int BDD;
@@ -291,6 +292,7 @@ struct rule_record {
 };
 
 struct rule_records_arr {
+  // uint32_t main_nrules;
   uint32_t nrules;
   struct rule_record rules[0];
 };
@@ -309,7 +311,11 @@ typedef struct s_BddNode {/* Node table entry */
 typedef struct s_MTBddValue {/* Node table entry */
   int hash;
   int next;
-  // BDD insc_bdd;
+  int test_count;
+  BDD self_bdd;
+  BDD coveredby_bdd;
+  BDD covering_bdd;
+  struct rule_record *main_rule;
   struct rule_records_arr *rule_records;
 } MTBddValue;
 
@@ -346,6 +352,8 @@ extern jmp_buf   bddexception;
 extern int       bddreorderdisabled;
 extern int       bddresized;
 extern bddCacheStat bddcachestats;
+
+
 
 /*=== KERNEL DEFINITIONS ===*/
 #define VERSION 22
@@ -1197,6 +1205,10 @@ static bddallsathandler allsatHandler; /* Callback handler for bdd_allsat() */
 
 extern bddCacheStat bddcachestats;
 
+int       hit_cache_counter;
+int       calc_node_counter;
+int       test_counter;
+
    /* Internal prototypes */
 static BDD    not_rec(BDD);
 static BDD    apply_rec(BDD, BDD);
@@ -1456,42 +1468,49 @@ static BDD not_rec(BDD r) {
 }
 
 /*=== APPLY ===*/
+BDD
+check_bddfalse(BDD l, BDD r) {
+  CHECKa(l, bddfalse);
+  CHECKa(r, bddfalse);
+  return 0;
+}
+
 BDD bdd_apply(BDD l, BDD r, int op) {
-   BDD res;
-   firstReorder = 1;
-   
-   CHECKa(l, bddfalse);
-   CHECKa(r, bddfalse);
+  BDD res;
+  firstReorder = 1;
 
-   if (op<0 || op>bddop_invimp)
-   {
-      bdd_error(BDD_OP);
-      return bddfalse;
-   }
+  CHECKa(l, bddfalse);
+  CHECKa(r, bddfalse);
 
- again:
-   if (setjmp(bddexception) == 0)
-   {
-      INITREF;
-      applyop = op;
-      
-      if (!firstReorder)
-	 bdd_disable_reorder();
-      res = apply_rec(l, r);
-      if (!firstReorder)
-	 bdd_enable_reorder();
-   }
-   else
-   {
-      bdd_checkreorder();
+  if (op<0 || op>bddop_invimp)
+  {
+    bdd_error(BDD_OP);
+    return bddfalse;
+  }
 
-      if (firstReorder-- == 1)
-	 goto again;
-      res = BDDZERO;  /* avoid warning about res being uninitialized */
-   }
-   
-   checkresize();
-   return res;
+  again:
+  if (setjmp(bddexception) == 0)
+  {
+    INITREF;
+    applyop = op;
+    
+    if (!firstReorder)
+      bdd_disable_reorder();
+    res = apply_rec(l, r);
+    if (!firstReorder)
+      bdd_enable_reorder();
+  }
+  else
+  {
+    bdd_checkreorder();
+
+    if (firstReorder-- == 1)
+      goto again;
+    res = BDDZERO;  /* avoid warning about res being uninitialized */
+  }
+
+  checkresize();
+  return res;
 }
 
 static BDD apply_rec(BDD l, BDD r) {
@@ -1624,13 +1643,6 @@ bdd_v2x_rec(BDD root, BDD mask) {
 }
 
 BDD
-mtbdd_apply(BDD a, BDD b) {
-  CHECKa(a, bddfalse);
-  CHECKa(b, bddfalse);
-  return mtbdd_apply_rec(a,b);
-}
-
-BDD
 mtbdd_apply_rec(BDD a, BDD b) { 
   BddCacheData *entry;
   BDD res;
@@ -1685,6 +1697,106 @@ mtbdd_apply_rec(BDD a, BDD b) {
   entry->c = 13;
   entry->r.res = res;
 
+  return res;
+}
+
+BDD
+mtbdd_apply(BDD a, BDD b) {
+  CHECKa(a, bddfalse);
+  CHECKa(b, bddfalse);
+  return mtbdd_apply_rec(a,b);
+}
+
+BDD
+ mtbdd_apply_addr_rec(BDD l, BDD r) { 
+  BddCacheData *entry;
+  BDD res;
+  if (r < 1)
+    return l;
+  if (l < 1)
+    return r;
+  
+  // if (LOW(l) == 2 && LOW(r) == 2)
+  //   res = mtbdd_maketnode_fr_2tn_add(l, r);
+  // if (LOW(a) == 1 && LOW(b) == 1)
+  //   return mtbdd_maketnode_fr2spec(a, b);
+  if (r == 1 || l == 1)
+    bdd_error(BDD_ILLBDD);
+
+  entry = BddCache_lookup(&applycache, APPLYHASH(l,r,14));
+  if (entry->a == l  &&  entry->b == r  &&  entry->c == 14) {
+    // hit_cache_counter++;
+    return entry->r.res;
+  }
+  
+  // if ((LOW(l) == 2) && (LOW(r) == 2))
+  //   return mtbdd_maketnode_fr_2tn_add(l, r);
+
+  if (LOW(l) == 2) {
+    if ((LOW(r) == 2)) {
+  // if ((LOW(l) == 2) && (LOW(r) == 2)) {
+      res = mtbdd_maketnode_fr_2tn_add(l, r);
+    }
+    else{
+      res = bdd_makenode(LEVEL(r), mtbdd_apply_addr_rec(l, LOW(r)), mtbdd_apply_addr_rec(l, HIGH(r)));
+    }
+    
+  // else if (LOW(l) == 2) {
+    // PUSHREF( mtbdd_apply_addr_rec(l, LOW(r)) );
+    // PUSHREF( mtbdd_apply_addr_rec(l, HIGH(r)) );
+    // res = bdd_makenode(LEVEL(r), READREF(2), READREF(1));
+    // res = bdd_makenode(LEVEL(r), mtbdd_apply_addr_rec(l, LOW(r)), mtbdd_apply_addr_rec(l, HIGH(r)));
+  }
+  else if(LOW(r) == 2) {
+    // PUSHREF( mtbdd_apply_addr_rec(LOW(l), r) );
+    // PUSHREF( mtbdd_apply_addr_rec(HIGH(l), r) );
+    // res = bdd_makenode(LEVEL(r), READREF(2), READREF(1));
+    res = bdd_makenode(LEVEL(l), mtbdd_apply_addr_rec(LOW(l), r), mtbdd_apply_addr_rec(HIGH(l), r));
+  }
+  else{
+    if (LEVEL(l) == LEVEL(r)) {
+      // PUSHREF( mtbdd_apply_addr_rec(LOW(l), LOW(r)));
+      // PUSHREF( mtbdd_apply_addr_rec(HIGH(l), HIGH(r)));
+      // res = bdd_makenode(LEVEL(l), READREF(2), READREF(1));
+      res = bdd_makenode(LEVEL(l), mtbdd_apply_addr_rec(LOW(l), LOW(r)), mtbdd_apply_addr_rec(HIGH(l), HIGH(r)));
+    }
+    else if (LEVEL(l) < LEVEL(r)) {
+      // PUSHREF( mtbdd_apply_addr_rec(LOW(l), r) );
+      // PUSHREF( mtbdd_apply_addr_rec(HIGH(l), r) );
+      // res = bdd_makenode(LEVEL(l), READREF(2), READREF(1));
+      res = bdd_makenode(LEVEL(l), mtbdd_apply_addr_rec(LOW(l), r), mtbdd_apply_addr_rec(HIGH(l), r));
+    }
+    else {
+      // PUSHREF( mtbdd_apply_addr_rec(l, LOW(r)) );
+      // PUSHREF( mtbdd_apply_addr_rec(l, HIGH(r)) );
+      // res = bdd_makenode(LEVEL(r), READREF(2), READREF(1));
+      res = bdd_makenode(LEVEL(r), mtbdd_apply_addr_rec(l, LOW(r)), mtbdd_apply_addr_rec(l, HIGH(r)));
+    }
+  }
+
+  // POPREF(2);
+  entry->a = l;
+  entry->b = r;
+  entry->c = 14;
+  entry->r.res = res;
+
+  return res;
+}
+
+BDD
+mtbdd_add_r(BDD a, BDD b, uint32_t sign) {
+  CHECKa(a, bddfalse);
+  CHECKa(b, bddfalse);
+  hit_cache_counter = 0;
+  calc_node_counter = 0;
+  BDD res = mtbdd_apply_addr_rec(a, b);
+  if (sign == 1) {
+    printf("the hit_cache_counter is %d\n", hit_cache_counter);
+    printf("the calc_node_counter is %d\n", calc_node_counter);
+    // printf("a has %d nodes\n", bdd_nodecount(a));
+    // printf("b has %d nodes\n", bdd_nodecount(b));
+    // printf("res has %d nodes\n", bdd_nodecount(res));
+  }
   return res;
 }
 
@@ -3155,10 +3267,11 @@ static double satcountln_rec(int root) {
 /*=== COUNT NUMBER OF ALLOCATED NODES ===*/
 int bdd_nodecount(BDD r) {
   int num=0;
-
+  test_counter = 0;
   CHECK(r);
 
   bdd_markcount(r, &num);
+  printf("the valuenode has %d\n", test_counter);
   bdd_unmark(r);
 
   return num;
@@ -5326,6 +5439,10 @@ int          bddresized;        /* Flag indicating a resize of the nodetable */
 
 bddCacheStat bddcachestats;
 
+
+
+
+
 /*=== PRIVATE KERNEL VARIABLES ===*/
 static BDD*     bddvarset;             /* Set of defined BDD variables */
 static int      gbcollectnum;          /* Number of garbage collections */
@@ -5361,7 +5478,7 @@ static char *errorstrings[BDD_ERRNUM] =
 #define VALUEHASH_K(lvl,l,h) (TRIPLE(lvl,l,h) % mtbddvaluesize)
 
 int bdd_init(int initnodesize, int initvaluesize, int cs) {
-// int bdd_init(int initnodesize, int cs)
+  // int bdd_init(int initnodesize, int cs)
   int n, err;
   if (bddrunning)
     return bdd_error(BDD_RUNNING);
@@ -5390,17 +5507,22 @@ int bdd_init(int initnodesize, int initvaluesize, int cs) {
   }
   bddnodes[bddnodesize-1].next = 0;
 
-  bddnodes[0].refcou = bddnodes[1].refcou = MAXREF;
+  bddnodes[0].refcou = bddnodes[1].refcou = bddnodes[2].refcou = MAXREF;
   LOW(0) = HIGH(0) = 0;
-  LOW(1) = HIGH(1) = 1;
-  // LOW(2) = HIGH(2) = 2;
+  LOW(1) = HIGH(1) = 0;
+  LOW(2) = HIGH(2) = 0;
 
   for (n=0 ; n<mtbddvaluesize ; n++) {
     // mtbddvalues[n].refcou = 0;
     mtbddvalues[n].hash = 0;
+    mtbddvalues[n].test_count = 0;
     // LEVEL(n) = 0;
     // mtbddvalues[n].level = 0;
     mtbddvalues[n].next = n+1;
+    mtbddvalues[n].self_bdd = BDDZERO;
+    mtbddvalues[n].coveredby_bdd = BDDZERO;
+    mtbddvalues[n].covering_bdd = BDDZERO;
+    mtbddvalues[n].main_rule = NULL;
     mtbddvalues[n].rule_records = NULL;
   }
   mtbddvalues[mtbddvaluesize-1].next = -1;
@@ -5411,9 +5533,9 @@ int bdd_init(int initnodesize, int initvaluesize, int cs) {
     return err;
   }
 
-  bddfreepos = 2;
+  bddfreepos = 3;
   mtbddfreepos = 0;
-  bddfreenum = bddnodesize-2;
+  bddfreenum = bddnodesize-3;
   mtbddfreenum = mtbddvaluesize;
 
   bddrunning = 1;
@@ -5820,7 +5942,7 @@ void bdd_gbc(void) {
   bddfreepos = 0;
   bddfreenum = 0;
 
-  for (n=bddnodesize-1 ; n>=2 ; n--) {
+  for (n=bddnodesize-1 ; n>=3 ; n--) {
     register BddNode *node = &bddnodes[n];
 
     // if ((LEVELp(node) & MARKON)  &&  LOWp(node) != -1)
@@ -5950,7 +6072,7 @@ BDD bdd_delref(BDD root) {
 void bdd_mark(int i) {
   BddNode *node;
 
-  if (i < 2)
+  if (i < 3)
     return;
 
   node = &bddnodes[i];
@@ -5961,7 +6083,7 @@ void bdd_mark(int i) {
   (node)->level |= MARKON;
   // LEVELp(node) |= MARKON;
 
-  if (LOWp(node) == 1)
+  if (LOWp(node) == 2)
     return;
 
   bdd_mark(LOWp(node));
@@ -5992,15 +6114,32 @@ void bdd_mark_upto(int i, int level) {
 void bdd_markcount(int i, int *cou) {
   BddNode *node;
 
-  if (i < 2)
+  if (i < 2){
+    // test_counter ++;
     return;
+  }
+
 
   node = &bddnodes[i];
+
   if (MARKEDp(node)  ||  LOWp(node) == -1)
     return;
 
+  if(LOWp(node) == HIGHp(node)){
+    // test_counter ++;
+    printf("%d;", LOWp(node));
+    printf("%d;", LOWp(node));
+    printf("\n");
+  }
+
   SETMARKp(node);
   *cou += 1;
+
+
+  if (LOWp(node) == 2){
+    test_counter ++;
+    return;
+  }
 
   bdd_markcount(LOWp(node), cou);
   bdd_markcount(HIGHp(node), cou);
@@ -6017,6 +6156,9 @@ void bdd_unmark(int i) {
   if (!MARKEDp(node)  ||  LOWp(node) == -1)
     return;
   UNMARKp(node);
+
+  if (LOWp(node) == 2)
+    return;
 
   bdd_unmark(LOWp(node));
   bdd_unmark(HIGHp(node));
@@ -6048,12 +6190,12 @@ int bdd_makenode(unsigned int level, int low, int high) {
   register unsigned int hash;
   register int res;
 
-  #ifdef CACHESTATS
-  bddcachestats.uniqueAccess++;
-  #endif
+  // #ifdef CACHESTATS
+  // bddcachestats.uniqueAccess++;
+  // #endif
   /* check whether childs are equal */
   if (low == high)
-    if (low != 1)
+    if (low != 2)
       return low;
 
   /* Try to find an existing node of this kind */
@@ -6063,22 +6205,22 @@ int bdd_makenode(unsigned int level, int low, int high) {
   while(res != 0) {
     // if (LEVEL(res) == level  &&  LOW(res) == low  &&  HIGH(res) == high)
     if (bddnodes[res].level == level  &&  LOW(res) == low  &&  HIGH(res) == high) {
-      #ifdef CACHESTATS
-      bddcachestats.uniqueHit++;
-      #endif
+      // #ifdef CACHESTATS
+      // bddcachestats.uniqueHit++;
+      // #endif
       return res;
     }
 
     res = bddnodes[res].next;
-    #ifdef CACHESTATS
-    bddcachestats.uniqueChain++;
-    #endif
+    // #ifdef CACHESTATS
+    // bddcachestats.uniqueChain++;
+    // #endif
   }
 
   /* No existing node -> build one */
-  #ifdef CACHESTATS
-  bddcachestats.uniqueMiss++;
-  #endif
+  // #ifdef CACHESTATS
+  // bddcachestats.uniqueMiss++;
+  // #endif
 
   /* Any free nodes to use ? */
   if (bddfreepos == 0) {
@@ -6230,6 +6372,60 @@ mtbdd_maketnode_1r(struct rule_records_arr *rule_records){
   return res;
 }
 
+BDD//from new rule's parameter, may have the same, here the same means have same insc_bdd and same 1 ridx. other condition will be have same insc_bdd
+mtbdd_maketnode_fr_pofr(BDD bdd_ofr, uint32_t sw_idx, uint32_t idx){
+  register MTBddValue *node;
+  register unsigned int hash;
+  register int res;
+
+
+  /* Try to find an existing node of this kind */
+  hash = VALUEHASH_K(1, sw_idx, idx);
+  res = mtbddvalues[hash].hash;
+  while(res != 0) {
+    if (sw_idx == mtbddvalues[res].main_rule->sw_idx  &&  idx == mtbddvalues[res].main_rule->idx)
+      return res;
+    res = mtbddvalues[res].next;
+  }
+
+  /* No existing node -> build one */
+  /* Any free nodes to use ? */
+  // if (bddfreepos == 0)
+
+  if (mtbddfreepos == -1) {
+    bdd_error(BDD_NODENUM);
+    bdderrorcond = abs(BDD_NODENUM);
+    return 0;
+  }
+
+  /* Build new node */
+  res = mtbddfreepos;
+  mtbddfreepos = mtbddvalues[mtbddfreepos].next;
+  mtbddfreenum--;
+  // bddproduced++;
+  node = &mtbddvalues[res];
+
+  /* Fullfill the new node */
+  node->self_bdd = bdd_ofr;
+  bdd_addref(node->self_bdd);
+  node->coveredby_bdd = BDDZERO;
+  node->covering_bdd = BDDZERO;
+  node->main_rule = malloc(sizeof(*(node->main_rule)));
+  node->main_rule->sw_idx = sw_idx;
+  node->main_rule->idx = idx;
+  node->rule_records = NULL;
+  // node->rule_records = rule_records;
+
+  /* Insert new node to hashtable */
+  node->next = mtbddvalues[hash].hash;
+  mtbddvalues[hash].hash = res;
+
+  res = bdd_makenode(0, 2, res);
+
+  // mtbddvaluevaluecount ++;
+  return res;
+}
+
 //tnode1为基底， tnode2为添加r的
 BDD 
 mtbdd_maketnode_fr2spec(BDD tnode1, BDD tnode2){
@@ -6240,6 +6436,92 @@ mtbdd_maketnode_fr2spec(BDD tnode1, BDD tnode2){
     return tnode1;
   // return tnode2;
   return mtbdd_maketnode_1r(tmp);
+}
+
+
+
+BDD
+mtbdd_maketnode_fr_2tn_add(BDD tnode1, BDD tnode2){
+  // register MTBddValue *v1 = &mtbddvalues[(bddnodes[tnode1].high)];
+  // register MTBddValue *v2 = &mtbddvalues[(bddnodes[tnode2].high)];
+  MTBddValue *v1 = &mtbddvalues[(bddnodes[tnode1].high)];
+  MTBddValue *v2 = &mtbddvalues[(bddnodes[tnode2].high)];
+  /*先留sw_idx不同的问题，在这里先不考虑来实验，只考虑rule 的idx来区分节点
+  也就是，在同一个bdd下会发现生成了两个不同的mtbddvalue，那么怎样放到同一个中
+  先默认sw_idx相同*/
+  
+  if (v1->main_rule->idx <= v2->main_rule->idx) {
+    hit_cache_counter++;
+    // if (v1->self_bdd == v2->self_bdd) {
+    //   v1->test_count++;
+    //   v2->test_count++;
+    //   bdd_delref(v2->self_bdd);
+    //   v2->self_bdd = BDDZERO;
+    //   //v1->self_bdd not change;
+
+    //   bdd_delref(v2->coveredby_bdd);
+    //   v2->coveredby_bdd = v1->self_bdd;
+    //   bdd_addref(v2->coveredby_bdd);
+
+    //   bdd_delref(v1->covering_bdd);
+    //   v1->covering_bdd = v1->self_bdd;
+    //   bdd_addref(v1->covering_bdd);
+    //   return tnode1;
+    // }
+    // BDD insc = bdd_apply(v1->self_bdd, v2->self_bdd, bddop_and);
+    // if(insc){
+    //   v1->test_count++;
+    //   v2->test_count++;
+    // }
+    // bdd_delref(v2->self_bdd);
+    // v2->self_bdd = bdd_apply(v2->self_bdd, v1->self_bdd, bddop_diff);
+    // bdd_addref(v2->self_bdd);
+    //v1->self_bdd not change;
+
+    // bdd_delref(v2->coveredby_bdd);
+    // v2->coveredby_bdd = bdd_apply(v2->coveredby_bdd, insc, bddop_xor);
+    // bdd_addref(v2->coveredby_bdd);
+
+    // bdd_delref(v1->covering_bdd);
+    // v1->covering_bdd = bdd_apply(v1->covering_bdd, insc, bddop_xor);;
+    // bdd_addref(v1->covering_bdd);
+    return tnode1;
+  }
+  // if (v1->self_bdd == v2->self_bdd) {
+    // v1->test_count++;
+    // v2->test_count++;
+    // bdd_delref(v1->self_bdd);
+    // v1->self_bdd = BDDZERO;
+    //v2->self_bdd not change;
+
+  //   bdd_delref(v1->coveredby_bdd);
+  //   v1->coveredby_bdd = v2->self_bdd;
+  //   bdd_addref(v1->coveredby_bdd);
+
+  //   bdd_delref(v2->covering_bdd);
+  //   v2->covering_bdd = v2->self_bdd;
+  //   bdd_addref(v2->covering_bdd);
+  //   return tnode2;
+  // }
+  // BDD insc = bdd_apply(v1->self_bdd, v2->self_bdd, bddop_and);
+  // if(insc){
+  //   v1->test_count++;
+  //   v2->test_count++;
+  // }
+  // bdd_delref(v1->self_bdd);
+  // v1->self_bdd = bdd_apply(v1->self_bdd, v2->self_bdd, bddop_diff);
+  // bdd_addref(v1->self_bdd);
+  //v1->self_bdd not change;
+
+  // bdd_delref(v1->coveredby_bdd);
+  // v1->coveredby_bdd = bdd_apply(v1->coveredby_bdd, insc, bddop_xor);
+  // bdd_addref(v1->coveredby_bdd);
+
+  // bdd_delref(v2->covering_bdd);
+  // v2->covering_bdd = bdd_apply(v2->covering_bdd, insc, bddop_xor);;
+  // bdd_addref(v2->covering_bdd);
+  calc_node_counter++;
+  return tnode2;
 }
 
 int bdd_noderesize(int doRehash) {
@@ -6371,7 +6653,6 @@ void bdd_fdd_init(void) {
   fdvarnum = fdvaralloc = 0;
   firstbddvar = 0;
 }
-
 
 void bdd_fdd_done(void) {
   int n;
@@ -6939,7 +7220,6 @@ static void Domain_allocate(Domain* d, int range) {
   d->ivar = (int *)malloc(sizeof(int)*d->binsize);
   d->var = bddtrue;
 }
-
 
 int *fdddec2bin(int var, int val) {
   int *res;

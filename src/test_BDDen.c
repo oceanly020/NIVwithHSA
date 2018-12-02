@@ -1151,8 +1151,8 @@ main (int argc, char **argv)
   // 加载net数据
   // char *net = "stanford";
   // char *net = "stanford_32";
-  // char *net = "stanford_whole";
-  char *net = "i2";
+  char *net = "stanford_whole";
+  // char *net = "i2";
   // bool one_step = false;
   load (net);
   // struct sw *sw0 = sw_get(0);
@@ -1227,12 +1227,12 @@ main (int argc, char **argv)
   // long long int gen_CSC = diff(&stop, &start)/1000;
   // printf("gen CSC: %lld ms\n", gen_CSC);
   // print_npairsNUM_of_Matrix_CSC(matrix_CSC);
-  printf("/*=====================================================*/\n");
+  // printf("/*=====================================================*/\n");
 
 /*================================port生成的向量 对矩阵的计算======================================*/
   // test_port(matrix_CSR);
   // test_port(matrix_CSR);
-  test_1port(matrix_CSR, 100027);
+  // test_1port(matrix_CSR, 100027);
 
 
   
