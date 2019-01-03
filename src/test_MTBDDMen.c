@@ -1,8 +1,8 @@
 #define _GNU_SOURCE 1
 
 // #include "all.h"
-#include "all_MTBDD.h"
-// #include "MTBDD_merging.h"
+// #include "all_MTBDD.h"
+#include "MTBDD_merging.h"
 // #include "app.h"
 // #include "data.h"
 #include <libgen.h>
@@ -153,8 +153,6 @@ counter_init(void) {
   time_counter5 = 0;
 }
 
-
-
 int
 main (int argc, char **argv)
 {
@@ -190,30 +188,19 @@ main (int argc, char **argv)
   // struct of_rule *rule1 = rule_get(sw0, 22);
   // print_rule(rule1);
 
-  // uint32_t test_sw_idx = 0;
-  uint32_t swsnum = 9;
-  struct switch_rs *sws[swsnum];
-
-  for (int i = 0; i < swsnum; i++){
-    sws[i] = gen_sw_rules(i);
-    printf("sw %d has %d rules.\n", sws[i]->sw_idx, sws[i]->nrules);
-  }
-
+  // uint32_t test_sw_idx = 3;
+  // uint32_t test_r_idx = 174;
   // struct switch_rs *swr0 = gen_sw_rules(test_sw_idx);
-
-  // uint32_t test_r_idx = swr0->nrules;
-  // printf("sw %d has %d rules.\n", swr0->sw_idx, swr0->nrules);
-  // struct ex_rule *ex_rule1 = ex_rule_get(swr0, 22);
   
-
+  struct network_wc *nt_wc = gen_network_wc();
   printf("==============================================================\n");
-  // print_ex_rule(ex_rule1); 
+
 
   //made trie and updating rules
   /*==============================================================================*/
   struct trie_node *trie_root = crate_trie_node_init();
 
-  // trie_add_rules_for_sw_test_all(trie_root, swr0, test_r_idx);
+  // trie_add_rules_for_nt_test_all(trie_root, nt_wc);
   // trie_add_rules_for_sw_test_difflast1(trie_root, swr0, test_r_idx);
   printf("-------------------------------------------------------\n");
 
@@ -222,7 +209,7 @@ main (int argc, char **argv)
   // gettimeofday(&stop,NULL);
   // long long int T_greed_calc = diff(&stop, &start);
   // printf("Test the greedy find wildcard insc with idx %d: %lld us\n", test_r_idx,T_greed_calc);
-  printf("-------------------------------------------------------\n");
+  // printf("-------------------------------------------------------\n");
 
   // gettimeofday(&start,NULL);
   // trie_add_rules_for_sw(trie_root, swr0);
@@ -247,15 +234,19 @@ main (int argc, char **argv)
   printf("-------------------------------------------------------\n");
   
 
-  struct switch_bdd_rs *sws_bdd[swsnum];
+  // gettimeofday(&start,NULL);
+  // struct switch_bdd_rs *sw_tmp = switch_rs_to_bdd_rs(swr0);
+  // gettimeofday(&stop,NULL);
+  // long long int T_sw_to_BDD = diff(&stop, &start);
+  // printf("get BDD from switch_rs: %lld us\n", T_sw_to_BDD);
+
 
   gettimeofday(&start,NULL);
-  for (int i = 0; i < swsnum; i++)
-    sws_bdd[i] = switch_rs_to_bdd_rs(sws[i]);
-  // struct switch_bdd_rs *sw_tmp = switch_rs_to_bdd_rs(swr0);
+  struct network_bdd *nt_bdd = network_wc_to_bdd(nt_wc);
+  // struct network_bdd *nt_bdd = network_wc_to_bdd_noredun(nt_wc);
   gettimeofday(&stop,NULL);
-  long long int T_sw_to_BDD = diff(&stop, &start);
-  printf("get BDD from switch_rs: %lld us\n", T_sw_to_BDD);
+  long long int T_nt_to_BDD = diff(&stop, &start);
+  printf("get BDD from switch_rs: %lld us\n", T_nt_to_BDD);
   printf("-------------------------------------------------------\n");
 
   // gettimeofday(&start,NULL);
@@ -263,7 +254,7 @@ main (int argc, char **argv)
   // gettimeofday(&stop,NULL);
   // long long int T_getinscbdd = diff(&stop, &start);
   // printf("Test the greedy find bdd insc with idx %d: %lld us\n", test_r_idx,T_getinscbdd);
-  // switch_bddrs_getinscbdd_test_all(sw_tmp);
+  // switch_bddrs_getinscbdd_test_all(nt_bdd);
   printf("-------------------------------------------------------\n");
 
   // switch_bddrs_AP_test_lastdiff1(sw_tmp, test_r_idx);
@@ -271,12 +262,12 @@ main (int argc, char **argv)
  
   // switch_bddrs_mergeAP_count(sw_tmp);
   printf("-------------------------------------------------------\n");
-  BDD fn_mtbdd = 0;
-  for (int i = 0; i < swsnum; i++)
-    fn_mtbdd = switch_bddrs_to_mtbdd_test_difflast1(sws_bdd[i], sws_bdd[i]->nrules);
+
   // BDD *fn_mtbdd = switch_bddrs_to_mtbdd_test_difflast1(sw_tmp, test_r_idx);
   printf("-------------------------------------------------------\n");
 
+  nt_bdd_to_mtbdd_test_all(nt_bdd);
+  printf("-------------------------------------------------------\n");
 
   // gettimeofday(&start,NULL);
   // BDD *fn_mtbdd = switch_bddrs_to_mtbdd(0, sw_tmp);

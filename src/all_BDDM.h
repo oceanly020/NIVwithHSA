@@ -727,6 +727,9 @@ static int link_idx_cmp(const void *a, const void *b); //本头文件限定，bs
 bool is_mf_allx(struct mf_uint16_t *a);
 uint32_t is_insc_wc_uint16_t(struct wc_uint16_t *a, struct wc_uint16_t *b); // 1:yes, 0:no
 uint32_t is_insc_links(struct links_of_rule *a, struct links_of_rule *b); // 1:yes, 0:no
+bool is_wc_uint16_t_same(struct wc_uint16_t *a, struct wc_uint16_t *b);
+bool is_mask_uint16_t_same(struct mask_uint16_t *a, struct mask_uint16_t *b);
+bool is_links_of_rule_same(struct links_of_rule *a, struct links_of_rule *b);
 //稀疏矩阵使用
 int cmp_matrix_Tri_express(const void *a, const void *b);
 int cmp_matrix_Tri_express_CSC(const void *a, const void *b);
@@ -2646,6 +2649,44 @@ is_mf_allx(struct mf_uint16_t *a) {
   return sign;
 }
 
+bool
+is_wc_uint16_t_same(struct wc_uint16_t *a, struct wc_uint16_t *b) {
+  if (a == b) 
+    return true;
+  if (!a || !b)
+    return false;
+  if (a->v != b->v )
+    return false;
+  return true;
+}
+
+bool
+is_mask_uint16_t_same(struct mask_uint16_t *a, struct mask_uint16_t *b) {
+  if (a == b) 
+    return true;
+  if (!a || !b)
+    return false;
+  for (int i = 0; i < MF_LEN; i++)
+    if (a->v[i] != b->v[i] )
+      return false;
+  return true;
+}
+
+bool
+is_links_of_rule_same(struct links_of_rule *a, struct links_of_rule *b) {
+  if (a == b) 
+    return true;
+  if (!a || !b)
+    return false;
+  if (a->n != b->n )
+    return false;
+
+  for (int i = 0; i < a->n; i++)
+    if (!is_wc_uint16_t_same(&(a->links_wc[i]), &(b->links_wc[i])))
+      return false;
+  return true;
+}
+
 struct Tri_arr *
 gen_Tri_arr_bdd(void) {
   
@@ -3093,7 +3134,7 @@ CS_matrix_idx_v_cmp (const void *a, const void *b){
   return c;
 }
 
-struct CS_matrix_idx_v_arr *
+struct CS_matrix_idx_v_arr * //最后需要排序，row找对每个csr 的 row 每个乘 保存到数组，然后合并
 row_matrix_CSR_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSR *matrix_CSR) {
   struct CS_matrix_idx_v_arr *tmp = NULL;
   struct CS_matrix_idx_v *vs[data_allr_nums];
@@ -3317,7 +3358,7 @@ sparse_matrix_multiply_CSC(struct matrix_CSR *matrix_CSR, struct matrix_CSR *mat
   return tmp;
 }
 
-struct matrix_CSR *
+struct matrix_CSR * // n row * CSR
 sparse_matrix_multiply_otway(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_CSR1) {
   // uint32_t threshold = matrix_CSR->nrows/600;
   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+data_allr_nums*sizeof(struct CS_matrix_idx_v_arr *));

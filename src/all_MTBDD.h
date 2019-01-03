@@ -22,9 +22,10 @@
 //结构体或变量定义
 //自定义
 // #define FIELD_LEN 2 //48位bit i2
+// #define FIELD_LEN 1 //32位bit
 #define FIELD_LEN 7 //128位bit
 #define MF_LEN 8 //128位bit， 8×16 standford whole
-// #define MF_LEN 2 //32位bit standford simple
+// #define MF_LEN 2 //32位bit standf ord simple
 // #define MF_LEN 3 //48位bit i2
 #define NW_DST_H 0
 #define NW_DST_L 1
@@ -606,7 +607,14 @@ struct Tri_arr {
   struct matrix_Tri_express *arr[];
 };
 
+
+
 // new sw and trie
+struct port_arr{
+  uint32_t nports;
+  uint32_t arr[0];
+};
+
 struct ex_rule {
   uint32_t sw_idx;
   uint32_t idx;
@@ -616,6 +624,8 @@ struct ex_rule {
   struct mask_uint16_t *rewrite; 
   struct links_of_rule *lks_in;
   struct links_of_rule *lks_out;
+  // struct port_arr *port_in;
+  // struct port_arr *port_out;
 };
 
 struct ex_rules_arr {
@@ -650,6 +660,8 @@ struct bdd_rule {
   struct mask_uint16_t *rewrite; 
   struct links_of_rule *lks_in;
   struct links_of_rule *lks_out;
+  // struct port_arr *port_in;
+  // struct port_arr *port_out;
   
 };
 
@@ -800,6 +812,9 @@ static int link_idx_cmp(const void *a, const void *b); //本头文件限定，bs
 bool is_mf_allx(struct mf_uint16_t *a);
 uint32_t is_insc_wc_uint16_t(struct wc_uint16_t *a, struct wc_uint16_t *b); // 1:yes, 0:no
 uint32_t is_insc_links(struct links_of_rule *a, struct links_of_rule *b); // 1:yes, 0:no
+bool is_wc_uint16_t_same(struct wc_uint16_t *a, struct wc_uint16_t *b);
+bool is_mask_uint16_t_same(struct mask_uint16_t *a, struct mask_uint16_t *b);
+bool is_links_of_rule_same(struct links_of_rule *a, struct links_of_rule *b);
 //稀疏矩阵使用
 int cmp_matrix_Tri_express(const void *a, const void *b);
 int cmp_matrix_Tri_express_CSC(const void *a, const void *b);
@@ -1438,6 +1453,43 @@ init_mf_allx(struct mf_uint16_t *mf) {
   }
 }
 
+bool
+is_wc_uint16_t_same(struct wc_uint16_t *a, struct wc_uint16_t *b) {
+  if (a == b) 
+    return true;
+  if (!a || !b)
+    return false;
+  if (a->v != b->v )
+    return false;
+  return true;
+}
+
+bool
+is_mask_uint16_t_same(struct mask_uint16_t *a, struct mask_uint16_t *b) {
+  if (a == b) 
+    return true;
+  if (!a || !b)
+    return false;
+  for (int i = 0; i < MF_LEN; i++)
+    if (a->v[i] != b->v[i] )
+      return false;
+  return true;
+}
+
+bool
+is_links_of_rule_same(struct links_of_rule *a, struct links_of_rule *b) {
+  if (a == b) 
+    return true;
+  if (!a || !b)
+    return false;
+  if (a->n != b->n )
+    return false;
+
+  for (int i = 0; i < a->n; i++)
+    if (!is_wc_uint16_t_same(&(a->links_wc[i]), &(b->links_wc[i])))
+      return false;
+  return true;
+}
 
 uint32_t *
 matrix_idx_init(void) { //返回buf，全为0,长度为规则数
@@ -4139,16 +4191,6 @@ trie_process_ec_arule(struct trie_node *root, struct ex_rule *r) {
     uint32_t len = field_sign[field_i+1] - field_sign[field_i+1];
     // sign = field_sign[field_i]/2;
     uint32_t iscross = 0;
-    // if (field_sign[field_i]%2 != 0) {
-    //   // sign = field_sign[field_i]/2;
-    //   iscross = 1;
-    // }
-    // else{
-    //   // sign = field_sign[field_i]/2;
-    //   iscross = 0;
-    // }
-    // uint32_t l_v_arr[insc_r_count];
-    // uint32_t h_v_arr[insc_r_count];
     uint32_t v_arr[2*insc_r_count];
 
     for (int r_i = 0; r_i < insc_r_count; r_i++) {//for every r in the insect set
@@ -4224,6 +4266,37 @@ trie_add_rules_for_sw_test_difflast1(struct trie_node *root, struct switch_rs *s
   printf("Test the last one with idx %d: %lld us\n", sw->rules[order[sw->nrules - 1]]->idx, T_up_last1);
   printf("This rule insect %d rules\n", insc_r_count);
 
+
+}
+
+void
+trie_add_rules_for_sw_test_all(struct trie_node *root, struct switch_rs *sw, uint32_t idx) {
+  struct timeval start,stop;
+  uint32_t order[sw->nrules];
+  for (int i = 0; i < sw->nrules; i++)
+    order[i] = i;
+  order[idx-1] = sw->nrules - 1;
+  order[sw->nrules - 1] = idx - 1;
+
+  for (int i = 0; i < sw->nrules-1; i++) {
+    gettimeofday(&start,NULL);
+    trie_insert_rule (root, sw->rules[order[i]]);
+    uint32_t insc_r_count = trie_process_ec_arule(root, sw->rules[order[i]]);
+    gettimeofday(&stop,NULL);
+    long long int T_for_add = diff(&stop, &start);
+    printf("Test the rule idx %d: %lld us\n", i+1, T_for_add);
+  }
+
+
+
+  gettimeofday(&start,NULL);
+  trie_insert_rule (root, sw->rules[order[sw->nrules-1]]);
+  uint32_t insc_r_count = trie_process_ec_arule(root, sw->rules[order[sw->nrules-1]]);
+  gettimeofday(&stop,NULL);
+  long long int T_up_last1 = diff(&stop, &start);
+  printf("Build trie test\n");
+  printf("Test the last one with idx %d: %lld us\n", sw->rules[order[sw->nrules - 1]]->idx, T_up_last1);
+  printf("This rule insect %d rules\n", insc_r_count);
 
 }
 
@@ -4354,6 +4427,8 @@ switch_rs_to_bdd_rs(struct switch_rs *sw){
   return tmp;
 }
 
+
+
 void
 switch_bddrs_getinscbdd_test_diff1(struct switch_bdd_rs *sw, uint32_t idx) {
   BDD self_final = sw->rules[idx-1]->mf_in;
@@ -4368,6 +4443,7 @@ switch_bddrs_getinscbdd_test_diff1(struct switch_bdd_rs *sw, uint32_t idx) {
     // }
     // bdd_delref(self_final);
     self_final = bdd_apply(self_final, sw->rules[i]->mf_in, bddop_diff);
+
     // bdd_addref(self_final);
     // // check_bddfalse(sw->rules[idx-1]->mf_in, sw->rules[i]->mf_in);
     // if (sw->rules[idx-1]->mf_in == 0){
@@ -4377,12 +4453,12 @@ switch_bddrs_getinscbdd_test_diff1(struct switch_bdd_rs *sw, uint32_t idx) {
     // bdd_gbc();
     // printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum()); 
   }
-  for (int i = idx; i < sw->nrules; i++){
-    tmp = bdd_apply(self_final, sw->rules[i]->mf_in, bddop_diff);
-    if (tmp) {
-      tmp = 0;
-    }
-    tmp = 0;
+  // for (int i = idx; i < sw->nrules; i++){
+  //   tmp = bdd_apply(self_final, sw->rules[i]->mf_in, bddop_diff);
+  //   if (tmp) {
+  //     tmp = 0;
+  //   }
+  //   tmp = 0;
 
     // BDD insc = bdd_apply(sw->rules[idx-1]->mf_in, sw->rules[i]->mf_in, bddop_and);
     // if (bdd_apply(sw->rules[idx-1]->mf_in, sw->rules[i]->mf_in, bddop_and)){
@@ -4390,7 +4466,7 @@ switch_bddrs_getinscbdd_test_diff1(struct switch_bdd_rs *sw, uint32_t idx) {
       // printf("the insec idx %d\n", i);
       // printf("the last rule has %d nodes\n", bdd_nodecount(insc));
     // }
-  }
+  // }
   // printf("This rule insect %d rules\n", insc_counter);
   // if (sw->rules[idx-1]->mf_in != 0){
   //   for (int i = idx; i < sw->nrules; i++) {
@@ -4402,27 +4478,35 @@ switch_bddrs_getinscbdd_test_diff1(struct switch_bdd_rs *sw, uint32_t idx) {
   
 }
 
-// BDD
-// switch_bddrs_to_mtbdd(BDD root, struct switch_bdd_rs *sw) {
-//   // BDD root = 0;
-
-//   for (int i = 0; i < sw->nrules; i++) {
-//     bdd_delref(root);
-//     root = mtbdd_add_r(root, sw->rules[i]->mtbdd_in, 0);
-//     bdd_addref(root);
-//     // bdd_gbc();
-//     // printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum()); 
-//   }
-//   printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum()); 
-//   return root;
-// }
+void
+switch_bddrs_getinscbdd_test_all(struct switch_bdd_rs *sw) {
+  struct timeval start,stop;
+  
+  BDD tmp = 0;
+  for (int i = 0; i < sw->nrules; i++) {
+    gettimeofday(&start,NULL);
+    BDD self_final = sw->rules[i]->mf_in;
 
 
-BDD
-switch_bddrs_to_mtbdd_test_difflast1(struct switch_bdd_rs *sw, uint32_t idx) {
+    for (int j = 0; j < i; j++) {
+      self_final = bdd_apply(self_final, sw->rules[j]->mf_in, bddop_diff);
+      if(!self_final)
+        break;
+    }
+    gettimeofday(&stop,NULL);
+    long long int T_for_add = diff(&stop, &start);   
+    printf("get diff the rule idx %d: %lld us\n", i+1, T_for_add);
+  }
+  
+}
+
+
+
+void
+switch_bddrs_AP_test_lastdiff1(struct switch_bdd_rs *sw, uint32_t idx) {
   struct timeval start,stop;
   BDD root = 0;
-
+  uint32_t maxnum = 200000;
   uint32_t order[sw->nrules];
   // root = mtbdd_add_r(root, sw->rules[sw->nrules - 1]->mtbdd_in, 0);
   for (int i = 0; i < sw->nrules; i++)
@@ -4430,17 +4514,182 @@ switch_bddrs_to_mtbdd_test_difflast1(struct switch_bdd_rs *sw, uint32_t idx) {
   order[idx-1] = sw->nrules - 1;
   order[sw->nrules - 1] = idx-1;
 
+  uint32_t *AP_record = xmalloc(maxnum*sizeof(uint32_t));
+  uint32_t *AP_tmp = xmalloc(maxnum*sizeof(uint32_t));
+
+  uint32_t AP_record_count = 1;
+  uint32_t AP_tmp_count = 0;
+  AP_record[0] = 1;
   for (int i = 0; i < sw->nrules-1; i++) {
 
+    
+    AP_tmp_count = 0;
+
+    gettimeofday(&start,NULL);
+    for (int j = 0; j < AP_record_count; j++) {
+      BDD insc = bdd_apply(AP_record[j], sw->rules[order[i]]->mf_in, bddop_and);
+      if (insc) {
+        AP_tmp[AP_tmp_count] = insc;
+        AP_tmp_count ++;
+      }
+      
+      BDD n_bdd = bdd_not(sw->rules[order[i]]->mf_in);
+      insc = bdd_apply(AP_record[j], n_bdd, bddop_and);
+      if (insc) {
+        AP_tmp[AP_tmp_count] = insc;
+        AP_tmp_count ++;
+      }
+    }
+
+    AP_record_count = AP_tmp_count;
+    for (int j = 0; j < AP_tmp_count; j++) {
+      AP_record[j] = AP_tmp[j];
+    }
+    gettimeofday(&stop,NULL);
+    long long int T_for_add = diff(&stop, &start);
+    // if (i > 100 && i < 150) {
+      printf("Test the rule idx %d: %lld us\n", i+1, T_for_add);
+    // }
+    
+
+  }
+
+
+  AP_tmp_count = 0;
+
+  gettimeofday(&start,NULL);
+  for (int j = 0; j < AP_record_count; j++) {
+    BDD insc = bdd_apply(AP_record[j], sw->rules[order[sw->nrules - 1]]->mf_in, bddop_and);
+    if (insc) {
+      AP_tmp[AP_tmp_count] = insc;
+      AP_tmp_count ++;
+    }
+    BDD n_bdd = bdd_not(sw->rules[order[sw->nrules - 1]]->mf_in);
+    insc = bdd_apply(AP_record[j], n_bdd, bddop_and);
+    if (insc) {
+      AP_tmp[AP_tmp_count] = insc;
+      AP_tmp_count ++;
+    }
+  }
+  AP_record_count = AP_tmp_count;
+  for (int j = 0; j < AP_tmp_count; j++) {
+    AP_record[j] = AP_tmp[j];
+  }
+  gettimeofday(&stop,NULL);
+  long long int T_AP_last1 = diff(&stop, &start);
+  printf("Test the AP last one with idx %d: %lld us\n", sw->rules[order[sw->nrules - 1]]->idx, T_AP_last1);
+  free(AP_record);
+  free(AP_tmp);
+}
+
+struct AP_record {
+  BDD ap_bdd;
+  struct bdd_rule *r;
+};
+
+
+bool
+is_action_same(struct bdd_rule *a, struct bdd_rule *b){
+  if (!is_mask_uint16_t_same(a->mask, b->mask))
+    return false;
+  if (!is_mask_uint16_t_same(a->rewrite, b->rewrite))
+    return false;
+  if (!is_links_of_rule_same(a->lks_out, b->lks_out))
+    return false;
+  // if (!is_links_of_rule_same(a->lks_in, b->lks_in))
+  //   return false;
+  return true;
+}
+
+
+
+
+void
+switch_bddrs_mergeAP_count(struct switch_bdd_rs *sw) {
+  struct timeval start,stop;
+  uint32_t maxnum = 200000;
+  struct AP_record *AP_record_fw = xmalloc(maxnum*sizeof(struct AP_record));
+  struct AP_record *AP_record_rw = xmalloc(maxnum*sizeof(struct AP_record));
+  uint32_t AP_count_fw = 0;
+  uint32_t AP_count_rw = 0;
+
+
+  for (int i = 0; i < sw->nrules; i++) {
+    gettimeofday(&start,NULL);
+    BDD diff_bdd  = sw->rules[i]->mf_in;
+    struct AP_record *AP_record;
+    uint32_t AP_record_count = 0;
+    if (sw->rules[i]->mask){
+      AP_record = AP_record_rw;
+      AP_record_count = AP_count_rw;
+    }
+    else {
+      AP_record = AP_record_fw;
+      AP_record_count = AP_count_fw;
+    }
+
+    for (int j = 0; j < i; j++)
+      if ((sw->rules[i]->mask && sw->rules[j]->mask) || (!(sw->rules[i]->mask) && !(sw->rules[j]->mask)))
+        diff_bdd = bdd_apply(diff_bdd, sw->rules[j]->mf_in, bddop_diff);
+
+
+    if (diff_bdd) {
+      bool merge = false;
+      for (int j = 0; j < AP_record_count; j++) {
+        if (is_action_same(AP_record[j].r, sw->rules[i])) {
+          AP_record[j].ap_bdd = bdd_apply(AP_record[j].ap_bdd, diff_bdd, bddop_or);
+          merge = true;
+          break;
+        }
+      }
+      if (merge == false){
+        AP_record[AP_record_count].ap_bdd = diff_bdd;
+        AP_record[AP_record_count].r = sw->rules[i];
+        AP_record_count ++;
+      }
+    }
+    if (sw->rules[i]->mask){
+      AP_count_rw = AP_record_count;
+    }
+    else {
+      AP_count_fw = AP_record_count;
+    }
+    gettimeofday(&stop,NULL);
+    long long int T_for_add = diff(&stop, &start);
+    printf("The merging of sw %d with rule %d has %d APs, with diff %d in %dus\n", sw->sw_idx, i+1, AP_count_fw + AP_count_rw, diff_bdd, T_for_add);
+  }
+
+  free(AP_record_fw);
+  free(AP_record_rw);
+}
+
+
+BDD
+switch_bddrs_to_mtbdd_test_difflast1(struct switch_bdd_rs *sw, uint32_t idx) {
+  struct timeval start,stop;
+  BDD root = 0;
+  uint32_t arr[SW_NUM] = {29, 94, 23, 40, 34, 49, 26, 28, 68};
+  uint32_t order[sw->nrules];
+  // root = mtbdd_add_r(root, sw->rules[sw->nrules - 1]->mtbdd_in, 0);
+  for (int i = 0; i < sw->nrules; i++)
+    order[i] = i;
+  order[idx-1] = sw->nrules - 1;
+  order[sw->nrules - 1] = idx-1;
+
+  // for (int i = 0; i < sw->nrules-1; i++) {
+  for (int i = arr[sw->sw_idx]; i < sw->nrules-1; i++) {
+    mtbddvaluevaluecount = 0;
     gettimeofday(&start,NULL);
     bdd_delref(root);
     root = mtbdd_add_r(root, sw->rules[order[i]]->mtbdd_in, 0);
     bdd_addref(root);
     gettimeofday(&stop,NULL);
     long long int T_for_add = diff(&stop, &start);
-    if (i > 0 && i < 50) {
-      printf("Test the rule idx %d: %lld us\n", i+1, T_for_add);
-    }
+    // if (i > 100 && i < 150) {
+    printf("Test the rule idx %d: %lld us\n", i+1, T_for_add);
+    // printf("the root has %d nodes\n", bdd_nodecount(root));
+    // printf("the real new node time is %d nodes\n", mtbddvaluevaluecount);
+    // }
 
     // bdd_gbc();
     // printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum()); 
