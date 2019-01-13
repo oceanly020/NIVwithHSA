@@ -601,9 +601,6 @@ struct Tri_arr {
   struct matrix_Tri_express *arr[];
 };
 
-
-
-
 //函数声明
 //time
 static inline int64_t
@@ -635,7 +632,6 @@ timeval_subtract(struct timeval* result, struct timeval* x, struct timeval* y) {
   } 
   return 0; 
 }
-
 
 //array.h
 
@@ -707,7 +703,6 @@ void free_matrix_CSC_fr_CSR(struct matrix_CSC *matrix_CSC);
 
 /*矩阵操作*/
 /*========================================================================*/
-
 
 /*结构间计算*/
 /*========================================================================*/
@@ -805,10 +800,6 @@ void        res_free     (struct res *res);
 //.c中函数具体定义
 //array.c
 //tf.c
-
-
-
-
 
 struct sw *
 sw_get (const uint32_t idx) {//得到tf,从data_file第idx个得到data_raw后面的位数
@@ -989,7 +980,6 @@ print_link_file(void) {
     printf(" ports: %d -- %d\n", link_data_file->links[i].port_in, link_data_file->links[i].port_out);
   }
 }
-
 
 void
 print_u32_arrs(const struct u32_arrs *u32_arrs) {
@@ -1328,7 +1318,6 @@ init_mf_allx(struct mf_uint16_t *mf) {
   }
 }
 
-
 uint32_t *
 matrix_idx_init(void) { //返回buf，全为0,长度为规则数
   uint32_t swn = data_file->sws_num;
@@ -1532,8 +1521,6 @@ free_matrix_CSC_fr_CSR(struct matrix_CSC *matrix_CSC) {
     free(matrix_CSC);
   }
 }
-
-
 
 struct mf_uint16_t * //使用这个必须最后free掉 free(*)就可以
 calc_insc (const struct mf_uint16_t *a, const struct mf_uint16_t *b) {
@@ -2981,6 +2968,123 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
 
   return pair_tmp;
 }
+
+nf_space_connect_backup(struct nf_space_pair *a, struct nf_space_pair *b) {
+  // printf("starting nf_space_connect\n");
+  // if(!is_insc_links(a->out->lks, b->in->lks))
+  //   return NULL;
+  // struct timeval start,stop;  //计算时间差 usec
+  // BDD root_a = load_saved_bddarr(a->out->mf);
+  // BDD root_b = load_saved_bddarr(b->in->mf);
+  // gettimeofday(&start,NULL);
+  BDD insc = bdd_apply(a->out->mf, b->in->mf, bddop_and);
+  // gettimeofday(&stop,NULL);
+  // time_counter1 += diff(&stop, &start);
+
+  computation_counter ++;
+
+
+  if (!insc) 
+    return NULL;
+  // gettimeofday(&start,NULL);
+
+  for (int i = 0; i < a->r_arr->nrs - 1; i++) {
+    for (int j = 0; j < b->r_arr->nrs; j++) {
+      if ((a->r_arr->ridx[i].sw_idx == b->r_arr->ridx[j].sw_idx)&&(a->r_arr->ridx[i].r_idx == b->r_arr->ridx[j].r_idx))
+        return NULL;
+    }
+  }
+
+  compu_true_counter ++;
+  // struct bdd_saved_arr *bdd_arr_insc = bdd_save_arr(insc);
+  struct nf_space_pair *pair_tmp = xcalloc(1, sizeof *pair_tmp);
+  pair_tmp->in = xcalloc(1, sizeof *(pair_tmp->in));// 1,16(两个指针为16)
+  pair_tmp->in->lks = copy_links_of_rule(a->in->lks);
+  pair_tmp->out = xcalloc(1, sizeof *(pair_tmp->out));// 1,16(两个指针为16)
+  pair_tmp->out->lks = copy_links_of_rule(b->out->lks);
+
+  if (a->mask) {
+    if(a->out->mf== insc){
+      pair_tmp->in->mf = a->in->mf;
+      bdd_addref(pair_tmp->in->mf);
+    }
+    else{
+      pair_tmp->in->mf = bdd_rw_back_BDD(insc, a->in->mf, a->mask);
+      bdd_addref(pair_tmp->in->mf);
+    }
+
+    if (b->mask) {
+      pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
+      pair_tmp->rewrite = xcalloc(1, sizeof *(pair_tmp->rewrite));
+      for (uint32_t j = 0; j < MF_LEN; j++) {
+        pair_tmp->mask->v[j] = (a->mask->v[j])&(b->mask->v[j]);
+        pair_tmp->rewrite->v[j] = ((a->rewrite->v[j])&(b->mask->v[j])) | ((b->rewrite->v[j])&(~(b->mask->v[j])));
+      }
+    }
+    else{
+      pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
+      pair_tmp->rewrite = xcalloc(1, sizeof *(pair_tmp->rewrite));
+      for (uint32_t j = 0; j < MF_LEN; j++) {
+        pair_tmp->mask->v[j] = a->mask->v[j];
+        pair_tmp->rewrite->v[j] = a->rewrite->v[j];
+      }
+    }     
+  }
+  else{    
+    pair_tmp->in->mf = insc;
+    bdd_addref(pair_tmp->in->mf);
+    if (!(b->mask)) {
+      pair_tmp->mask = NULL;
+      pair_tmp->rewrite = NULL;
+    }
+  }
+  if (b->mask) {
+    if(b->in->mf == insc){
+      pair_tmp->out->mf = b->out->mf;
+      bdd_addref(pair_tmp->out->mf);
+    }
+    else{
+      pair_tmp->out->mf = bdd_rw_BDD(insc, b->mask, b->rewrite);
+      bdd_addref(pair_tmp->out->mf);
+    }
+    if (!(a->mask)){
+      // gettimeofday(&startin,NULL);
+      pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
+      pair_tmp->rewrite = xcalloc(1, sizeof *(pair_tmp->rewrite));
+      for (uint32_t j = 0; j < MF_LEN; j++) {
+        pair_tmp->mask->v[j] = b->mask->v[j];
+        pair_tmp->rewrite->v[j] = b->rewrite->v[j];
+      }
+    }
+  }
+  else{
+    pair_tmp->out->mf = insc;//建立copy
+    bdd_addref(pair_tmp->out->mf);
+  }
+
+  // gettimeofday(&stop,NULL);
+  // time_counter2 += diff(&stop, &start);
+  // gettimeofday(&start,NULL);
+
+  pair_tmp->r_arr = xmalloc(sizeof (uint32_t)+(a->r_arr->nrs+b->r_arr->nrs -1)*sizeof (struct r_idx));
+  // pair_tmp->r_arr = xcalloc(1,sizeof (uint32_t)+(a->r_arr->nrs+b->r_arr->nrs -1)*sizeof (struct r_idx));
+
+  pair_tmp->r_arr->nrs = a->r_arr->nrs+b->r_arr->nrs -1;
+  for (uint32_t i = 0; i < a->r_arr->nrs; i++) {
+    pair_tmp->r_arr->ridx[i].sw_idx = a->r_arr->ridx[i].sw_idx;
+    pair_tmp->r_arr->ridx[i].r_idx = a->r_arr->ridx[i].r_idx;
+  }
+  for (uint32_t i = 0; i < b->r_arr->nrs -1; i++) {
+    pair_tmp->r_arr->ridx[i+a->r_arr->nrs].sw_idx = b->r_arr->ridx[i+1].sw_idx;
+    pair_tmp->r_arr->ridx[i+a->r_arr->nrs].r_idx = b->r_arr->ridx[i+1].r_idx;
+  }
+
+  // gettimeofday(&stop,NULL);
+  // time_counter3 += diff(&stop, &start);
+
+  return pair_tmp;
+}
+
 
 struct matrix_element * //a*b,a作用b，不可交换
 elem_connect(struct matrix_element *a, struct matrix_element *b) { 

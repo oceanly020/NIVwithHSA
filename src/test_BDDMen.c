@@ -63,8 +63,6 @@ calc_set_test (void) {
   return 0;
 }
 
-
-
 void
 test(void) {
   char *buf;
