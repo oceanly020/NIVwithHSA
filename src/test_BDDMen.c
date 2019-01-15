@@ -1,7 +1,7 @@
 #define _GNU_SOURCE 1
 
 // #include "all.h"
-#include "all_BDD.h"
+#include "all_BDDM.h"
 // #include "app.h"
 // #include "data.h"
 #include <libgen.h>
@@ -1162,12 +1162,29 @@ main (int argc, char **argv)
   // struct links_of_rule *ls = rule_links_get_swidx(sw0, 2, RULE_LINK_IN);
   // print_links_wc (ls);
 
+  
+
   // 加载link数据
   char *linkdir = "../data/";
   link_data_load (linkdir);
   // gettimeofday(&start,NULL);
   // struct matrix_buf *matrix_buf = matrix_init();
   matrix_idx = matrix_idx_init ();
+  BDD_init_multiply();
+
+  gettimeofday(&start,NULL);
+  bdd_sw_load();
+  gettimeofday(&stop,NULL);
+  long long int gen_bdd_sws = diff(&stop, &start)/1000;
+  printf("gen bdd_sws_arr: %lld ms\n", gen_bdd_sws);
+
+  if (is_r_action_same(bdd_sws_arr[0]->rules[39], bdd_sws_arr[0]->rules[40])) {
+    printf("there is same\n");
+  }
+  init_r_to_merge();
+
+  printf("same number = %d\n", same_num);
+
 
 
   // struct u32_arrs *rs_idx_frport = get_outrules_idx_from_inport(100002);
@@ -1191,18 +1208,26 @@ main (int argc, char **argv)
   // long long int gen_Tri_arr = diff(&stop, &start)/1000;
   // printf("gen Tri_arr: %lld ms\n", gen_Tri_arr);
 
-  BDD_init_multiply();
 
-  gettimeofday(&start,NULL);
-  struct matrix_CSR *matrix_CSR = gen_sparse_matrix(); 
-  gettimeofday(&stop,NULL);
-  long long int gen_CSR = diff(&stop, &start)/1000;
-  printf("gen CSR: %lld ms\n", gen_CSR);
-  print_vElemsNUM_of_Matrix_CSR(matrix_CSR);
-  print_npairsNUM_of_Matrix_CSR(matrix_CSR);
-  bdd_gbc();
-  printf("--------------------------------------\n");
   
+  // gettimeofday(&start,NULL);
+  // struct matrix_CSR *matrix_CSR_old = gen_sparse_matrix(); 
+  // gettimeofday(&stop,NULL);
+  // long long int gen_CSR = diff(&stop, &start)/1000;
+  // printf("gen CSR: %lld ms\n", gen_CSR);
+  // print_vElemsNUM_of_Matrix_CSR(matrix_CSR_old);
+  // print_npairsNUM_of_Matrix_CSR(matrix_CSR_old);
+  // bdd_gbc();
+  // // data_unload();
+  // printf("--------------------------------------\n");
+  // printf("same number = %d\n", same_num);
+  // struct matrix_CSR *matrix_CSR = gen_merged_CSR(matrix_CSR_old);
+  // printf("this matrix_CSR has %d rules\n", matrix_CSR->nrows);
+  // print_vElemsNUM_of_Matrix_CSR(matrix_CSR);
+  // print_npairsNUM_of_Matrix_CSR(matrix_CSR);
+  // data_unload();
+  // printf("--------------------------------------\n");
+
   // struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
   // int count = 0;
   // for (int i = 0; i < matrix_CSR->nrows; i++)
@@ -1245,16 +1270,16 @@ main (int argc, char **argv)
 
 /*================================矩阵 对矩阵的计算======================================*/
 
-  gettimeofday(&start,NULL);
-  struct matrix_CSR *muti1_CSR = sparse_matrix_multiply(matrix_CSR, matrix_CSR);
-  gettimeofday(&stop,NULL);
-  long long int squre = diff(&stop, &start)/1000;
-  printf("matrix squre: %lld ms\n", squre);
-  print_vElemsNUM_of_Matrix_CSR(muti1_CSR);
-  print_npairsNUM_of_Matrix_CSR(muti1_CSR);
-  print_counter();
-  counter_init();
-  printf("--------------------------------------\n");
+  // gettimeofday(&start,NULL);
+  // struct matrix_CSR *muti1_CSR = sparse_matrix_multiply(matrix_CSR, matrix_CSR);
+  // gettimeofday(&stop,NULL);
+  // long long int squre = diff(&stop, &start)/1000;
+  // printf("matrix squre: %lld ms\n", squre);
+  // print_vElemsNUM_of_Matrix_CSR(muti1_CSR);
+  // print_npairsNUM_of_Matrix_CSR(muti1_CSR);
+  // print_counter();
+  // counter_init();
+  // printf("--------------------------------------\n");
 
   // gettimeofday(&start,NULL);
   // struct matrix_CSR *muti3_twice_CSR = sparse_matrix_multiply(muti1_CSR, muti1_CSR);
@@ -1720,12 +1745,13 @@ main (int argc, char **argv)
   // free_matrix_CSR(muti2_CSR);
   // average_v_matrix_forall(matrix_CSR, matrix_CSC, muti1_CSC, NULL);
   
-  free_matrix_CSR(matrix_CSR);
+  // free_matrix_CSR(matrix_CSR);
   // free_matrix_CSC_fr_CSR(matrix_CSC);
   // free_matrix_CSR(muti1_CSR);
-  data_unload();
+  // data_unload();
   bdd_done(); 
   free(matrix_idx);
+  bdd_sw_unload();
   
   return 0;
 }

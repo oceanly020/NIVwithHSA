@@ -24,6 +24,8 @@
 #define MF_LEN 8 //128位bit， 8×16
 // #define MF_LEN 2 //32位bit standford
 // #define MF_LEN 3 //48位bit i2
+#define SW_NUM 16
+
 #define NW_DST_H 0
 #define NW_DST_L 1
 #define VALID_OFS 1
@@ -455,6 +457,32 @@ static uint16_t var2sign[16] = {
 #define BDDSIZE     100000000
 #define BDDOPCHCHE  400000 
 
+struct bdd_rule {
+  uint32_t sw_idx;
+  uint32_t idx;
+  BDD mf_in;
+  BDD mf_out;
+  // BDD vtnode_in;
+  // BDD mtbdd_in;
+  struct mask_uint16_t *mask;
+  struct mask_uint16_t *rewrite; 
+  struct links_of_rule *lks_in;
+  struct links_of_rule *lks_out;
+  // struct port_arr *port_in;
+  // struct port_arr *port_out;
+};
+
+struct switch_bdd_rs {
+  uint32_t sw_idx;
+  uint32_t nrules;
+  struct bdd_rule *rules[0];
+};
+
+struct r_to_merge {
+  uint32_t nrules;
+  uint32_t rules[0];
+};
+
 struct BddNode_saved {
   int var;
   int low;
@@ -484,8 +512,6 @@ struct PACKED nf_space_pair {
 //   struct nf_space nf_s_in;
 //   struct nf_space nf_s_out; 
 // };
-
-
 
 struct PACKED of_rule {
   uint32_t sw_idx;
@@ -601,6 +627,16 @@ struct Tri_arr {
   struct matrix_Tri_express *arr[];
 };
 
+
+
+
+//BDD sw 全局数组
+struct switch_bdd_rs *bdd_sws_arr[SW_NUM];
+struct r_to_merge *r_to_merge_arr[SW_NUM]; //原来的r到新合并的r之间的映射
+struct r_to_merge *merged_arr[SW_NUM];
+uint32_t r_merge_num_arr[SW_NUM];
+
+
 //函数声明
 //time
 static inline int64_t
@@ -610,6 +646,7 @@ diff (struct timeval *a, struct timeval *b)
   int64_t y = (int64_t)b->tv_sec * 1000000 + b->tv_usec;
   return x - y;
 }
+
 int 
 timeval_subtract(struct timeval* result, struct timeval* x, struct timeval* y) {
   /** 
@@ -652,6 +689,7 @@ struct mf_uint16_t_array *get_r_in_mf_to_array(const struct of_rule *rule);//将
 uint32_t matrix_idx_get_r(struct of_rule *r);
 uint32_t matrix_idx_get_2idx(const uint32_t sw_idx, const uint32_t r_idx);
 struct of_rule *matrix_idx_to_r(const uint32_t *matrix_idx);
+struct bdd_rule *matrix_idx_to_bddr(const uint32_t *matrix_idx);
 
 /*打印结构数据*/
 /*========================================================================*/
@@ -725,6 +763,7 @@ uint32_t is_insc_links(struct links_of_rule *a, struct links_of_rule *b); // 1:y
 bool is_wc_uint16_t_same(struct wc_uint16_t *a, struct wc_uint16_t *b);
 bool is_mask_uint16_t_same(struct mask_uint16_t *a, struct mask_uint16_t *b);
 bool is_links_of_rule_same(struct links_of_rule *a, struct links_of_rule *b);
+bool issame_nf_space_pair_action(struct nf_space_pair *ns1, struct nf_space_pair *ns2);
 //稀疏矩阵使用
 int cmp_matrix_Tri_express(const void *a, const void *b);
 int cmp_matrix_Tri_express_CSC(const void *a, const void *b);
@@ -763,7 +802,7 @@ struct nf_space_pair *nf_space_connect(struct nf_space_pair *a, struct nf_space_
 
 /*稀疏矩阵处理及其计算*/
 /*========================================================================*/
-struct matrix_Tri_express *insc_to_Tri_express_rlimit(struct of_rule *r_in, struct of_rule *r_out, BDD v_and);
+struct matrix_Tri_express *insc_to_Tri_express_rlimit(struct bdd_rule *r_in, struct bdd_rule *r_out, BDD v_and);
 struct matrix_element *matrix_elem_plus(struct matrix_element *a, struct matrix_element *b);
 void matrix_elem_plus_void(struct matrix_element *a, struct matrix_element *b);
 void matrix_elem_plus_test(struct matrix_element *a);
@@ -1359,6 +1398,21 @@ matrix_idx_to_r(const uint32_t *matrix_idx) {//从0开始计算
   }
   if (*matrix_idx < data_allr_nums) {
     return rule_get_2idx(swn-1, *matrix_idx - *(uint32_t *)(sws_r_num+swn-1) +1);
+  }
+  return NULL;
+}
+
+struct bdd_rule *
+matrix_idx_to_bddr(const uint32_t *matrix_idx){
+  uint32_t swn = data_file->sws_num;
+  // if (!(*matrix_idx))
+  //   return rule_get_2idx(0, 1);
+  for (int i = 0; i < swn; i++) {
+    if (*matrix_idx < *(uint32_t *)(sws_r_num+i))
+      return bdd_sws_arr[i-1]->rules[*matrix_idx - *(uint32_t *)(sws_r_num+i-1)];
+  }
+  if (*matrix_idx < data_allr_nums) {
+    return bdd_sws_arr[swn-1]->rules[*matrix_idx - *(uint32_t *)(sws_r_num+swn-1)];
   }
   return NULL;
 }
@@ -2136,6 +2190,160 @@ load_saved_bddarr(struct bdd_saved_arr *bdd_arr) {
   return arr_tmp[bdd_arr->arr_num-1];
 }
 
+/*生成 BDD 描述的 rules*/
+/*------------------------------------------------*/
+struct bdd_rule *
+gen_bdd_rule_from_of(struct of_rule *of_r) {
+  if (!of_r)
+    return NULL;
+  int add_len = sizeof(uint16_t);
+  struct bdd_rule *tmp = xcalloc(1, sizeof *tmp);
+  tmp->sw_idx = of_r->sw_idx;
+  tmp->idx = of_r->idx;
+  struct links_of_rule *lks_out = rule_links_get(of_r, OUT_LINK);
+  struct links_of_rule *lks_in = rule_links_get(of_r, IN_LINK);
+  tmp->lks_in = copy_links_of_rule(lks_in);
+  tmp->lks_out = copy_links_of_rule(lks_out);
+  struct mf_uint16_t *mf_in = get_r_out_mf(of_r);
+  struct mf_uint16_t *mf_out = get_r_in_mf(of_r);
+  tmp->mf_in = mf2bdd(mf_in);
+  bdd_addref(tmp->mf_in);
+  tmp->mf_out = mf2bdd(mf_out);
+  bdd_addref(tmp->mf_out);
+  // tmp->mf_in = get_r_out_mf(of_r);
+  // tmp->mf_out = get_r_in_mf(of_r);
+  if (of_r->mask) {
+    tmp->mask = xcalloc(1,sizeof(struct mask_uint16_t));
+    tmp->rewrite = xcalloc(1,sizeof(struct mask_uint16_t));
+    for (uint32_t j = 0; j < MF_LEN; j++) {
+      tmp->mask->v[j] = *(uint16_t *)((uint8_t *)data_arrs+j*add_len+of_r->mask);
+      tmp->rewrite->v[j] = *(uint16_t *)((uint8_t *)data_arrs+j*add_len+of_r->rewrite);
+    }
+  }
+  else {
+    tmp->mask = NULL;
+    tmp->rewrite = NULL;
+  }
+
+  free(mf_in);
+  free(mf_out);
+  return tmp;
+}
+
+struct switch_bdd_rs *
+gen_sw_rules(uint32_t sw_idx) {
+  struct sw *sw = sw_get(sw_idx);
+  if(!sw)
+    return NULL;
+  struct switch_bdd_rs *tmp = xmalloc(2*sizeof(uint32_t)+(sw->nrules)*sizeof(struct bdd_rule *));
+  tmp->sw_idx = sw->sw_idx;
+  tmp->nrules = sw->nrules;
+  for (int i = 0; i < tmp->nrules; i++) {
+    struct of_rule *of_r = rule_get(sw, i+1);
+    tmp->rules[i] = gen_bdd_rule_from_of(of_r);
+  }
+  return tmp;
+}
+
+void
+free_bdd_rule(struct bdd_rule *r) {
+  if(r) {
+    if(r->mask) {
+      free(r->mask);
+      free(r->rewrite);
+    }
+    if(r->lks_in)
+      free(r->lks_in);
+    if(r->lks_out)
+      free(r->lks_out);
+    free(r);
+  }
+}
+
+void
+bdd_sw_load(void) {
+  for (int i = 0; i < SW_NUM; i++) {
+    bdd_sws_arr[i] = gen_sw_rules(i);
+  }
+}
+
+void
+free_switch_bdd_rs(struct switch_bdd_rs *sw) {
+  if(sw) {
+    for (int i = 0; i < sw->nrules; i++)
+      free_bdd_rule(sw->rules[i]);
+    free(sw);
+  }
+}
+
+void
+bdd_sw_unload(void) {
+  for (int i = 0; i < SW_NUM; i++) {
+    free_switch_bdd_rs(bdd_sws_arr[i]);
+  }
+}
+
+/*生成合并的规则*/
+/*------------------------------------------------*/
+
+// struct r_to_merge {
+//   uint32_t nrules;
+//   uint32_t rules[0];
+// };
+// struct r_to_merge *r_to_merge_arr[SW_NUM];
+// r_merge_num_arr
+bool
+is_r_action_same(struct bdd_rule *a, struct bdd_rule *b){
+  if (!is_mask_uint16_t_same(a->mask, b->mask))
+    return false;
+  if (!is_mask_uint16_t_same(a->rewrite, b->rewrite))
+    return false;
+  if (!is_links_of_rule_same(a->lks_out, b->lks_out))
+    return false;
+  if (!is_links_of_rule_same(a->lks_in, b->lks_in))
+    return false;
+  return true;
+}
+
+uint32_t same_num;
+void
+init_r_to_merge(void) {
+  same_num = 0;
+  for (int i = 0; i < SW_NUM; i++) {
+    r_to_merge_arr[i] = xmalloc((bdd_sws_arr[i]->nrules+1)*sizeof(uint32_t));
+    r_to_merge_arr[i]->nrules = bdd_sws_arr[i]->nrules;
+
+    uint32_t arr_tmp[bdd_sws_arr[i]->nrules];
+    arr_tmp[0] = 0;
+    uint32_t count = 1;
+
+    
+    for (int j = 0; j < bdd_sws_arr[i]->nrules; j++) {
+      bool issame = false;
+      for (int k = 0; k < count; k++) {
+        if (is_r_action_same(bdd_sws_arr[i]->rules[arr_tmp[k]], bdd_sws_arr[i]->rules[j])) {
+          r_to_merge_arr[i]->rules[j] = k;
+          issame = true;
+          same_num ++;
+          break;
+        }
+      }
+      if(!issame) {
+        arr_tmp[count] = i;
+        r_to_merge_arr[i]->rules[j] = count;
+        count++;
+      }
+    }
+    merged_arr[i] = xmalloc((count+1)*sizeof(uint32_t));
+    merged_arr[i]->nrules = count;
+    for (int j = 0; j < count; j++)
+      merged_arr[i]->rules[j] = arr_tmp[j];
+  }
+}
+
+
+
+
 /*稀疏矩阵处理with BDD*/
 /*========================================================================*/
 static int
@@ -2154,7 +2362,7 @@ wc_uint16_t_insc(struct wc_uint16_t *a, struct wc_uint16_t *b){
 
 struct links_of_rule *
 links_insc(struct links_of_rule *a, struct links_of_rule *b) {
-  if((!a )|| (!b))
+  if((!a ) || (!b))
     return NULL;
   struct wc_uint16_t arr[MAX_ARR_SIZE];
   uint32_t count = 0;
@@ -2354,34 +2562,36 @@ print_bdd_saved_arr(struct bdd_saved_arr *bdd_arr){
 }
 
 struct matrix_Tri_express * 
-insc_to_Tri_express_rlimit(struct of_rule *r_in, struct of_rule *r_out, BDD v_and) {
+insc_to_Tri_express_rlimit(struct bdd_rule *r_in, struct bdd_rule *r_out, BDD v_and) {
 
   struct nf_space_pair *pair = xcalloc(1, sizeof *pair);
-  struct links_of_rule *lks = rule_links_get(r_in, IN_LINK);
-  struct links_of_rule *lks_out = rule_links_get(r_in, OUT_LINK);
-  struct links_of_rule *lks_in = rule_links_get(r_out, IN_LINK);
-  lks_out = links_insc(lks_in, lks_out);
+  // struct links_of_rule *lks = rule_links_get(r_in, IN_LINK);
+  // struct links_of_rule *lks_out = rule_links_get(r_in, OUT_LINK);
+  // struct links_of_rule *lks_in = rule_links_get(r_out, IN_LINK);
+  // lks_out = links_insc(lks_in, lks_out);
   int add_len = sizeof(uint16_t);
   struct matrix_Tri_express *tmp = xcalloc(1, sizeof *tmp);
   tmp->elem = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+sizeof(struct nf_space_pair *));
   tmp->elem->npairs = 1;
-  tmp->row_idx = matrix_idx_get_r(r_in);
-  tmp->col_idx = matrix_idx_get_r(r_out);
-
+  // tmp->row_idx = matrix_idx_get_r(r_in);
+  // tmp->col_idx = matrix_idx_get_r(r_out);
+  tmp->row_idx = matrix_idx_get_2idx(r_in->sw_idx, r_in->idx);
+  tmp->col_idx = matrix_idx_get_2idx(r_out->sw_idx, r_out->idx);
   // struct bdd_saved_arr *bdd_arr_out = bdd_save_arr(v_and);
 
   pair->in = xcalloc(1, sizeof *(pair->in));// 1,16(两个指针为16)
-  pair->in->lks = copy_links_of_rule(lks);
+  pair->in->lks = copy_links_of_rule(r_in->lks_in);
   pair->out = xcalloc(1, sizeof *(pair->out));
-  pair->out->lks = copy_links_of_rule(lks_out);
+  pair->out->lks = copy_links_of_rule(r_in->lks_out);
 
-  pair->r_arr = xmalloc(sizeof (uint32_t)+2*sizeof (struct r_idx));
+  pair->r_arr = NULL;
+  // pair->r_arr = xmalloc(sizeof (uint32_t)+2*sizeof (struct r_idx));
+  // pair->r_arr->nrs = 2;
+  // pair->r_arr->ridx[0].sw_idx = r_in->sw_idx;
+  // pair->r_arr->ridx[0].r_idx = r_in->idx;
+  // pair->r_arr->ridx[1].sw_idx = r_out->sw_idx;
+  // pair->r_arr->ridx[1].r_idx = r_out->idx;
 
-  pair->r_arr->nrs = 2;
-  pair->r_arr->ridx[0].sw_idx = r_in->sw_idx;
-  pair->r_arr->ridx[0].r_idx = r_in->idx;
-  pair->r_arr->ridx[1].sw_idx = r_out->sw_idx;
-  pair->r_arr->ridx[1].r_idx = r_out->idx;
   pair->out->mf = v_and;
   bdd_addref(pair->out->mf);
   tmp->elem->bdd_out = pair->out->mf;
@@ -2391,11 +2601,11 @@ insc_to_Tri_express_rlimit(struct of_rule *r_in, struct of_rule *r_out, BDD v_an
     struct mask_uint16_t *mask = xcalloc(1, sizeof *mask);
     struct mask_uint16_t *rewrite = xcalloc(1, sizeof *rewrite);
     for (uint32_t j = 0; j < MF_LEN; j++) {
-      mask->v[j] = *(uint16_t *)((uint8_t *)data_arrs+j*add_len+r_in->mask);
-      rewrite->v[j] = *(uint16_t *)((uint8_t *)data_arrs+j*add_len+r_in->rewrite);
+      mask->v[j] = r_in->mask->v[j];
+      rewrite->v[j] = r_in->rewrite->v[j];
     }
-    struct mf_uint16_t *r_in_mf = get_r_out_mf(r_in);
-    BDD bdd_in = mf2bdd(r_in_mf);
+    // struct mf_uint16_t *r_in_mf = get_r_out_mf(r_in);
+    BDD bdd_in = r_in->mf_in;
     BDD bdd_arr_tmp = bdd_rw_back_BDD(v_and, bdd_in, mask);
     // BDD bdd_arr_tmp = bdd_rw_back(v_and, bdd_in, mask);
 
@@ -2445,14 +2655,83 @@ Tri_is_eq (struct matrix_Tri_express *latter, struct matrix_Tri_express *former)
   return 0;
 }
 
+// struct matrix_element *
+// matrix_elem_plus(struct matrix_element *a, struct matrix_element *b) {
+//   if (!b)
+//     return a;
+//   if (!a)
+//     return b;
+//   struct matrix_element *tmp = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+((a->npairs)+(b->npairs))*sizeof(struct nf_space_pair *));
+//   tmp->npairs = a->npairs + b->npairs;
+//   if (a->bdd_in == b->bdd_in) {
+//     tmp->bdd_in = a->bdd_in;
+//     bdd_delref(a->bdd_in);
+//   }
+//   else {
+//     tmp->bdd_in = bdd_apply(a->bdd_in, b->bdd_in, bddop_or);
+//     bdd_delref(a->bdd_in);
+//     bdd_delref(b->bdd_in);
+//     bdd_addref(tmp->bdd_in);
+//   }
+//   if (a->bdd_out == b->bdd_out) {
+//     tmp->bdd_out = a->bdd_out;
+//     bdd_delref(a->bdd_out);
+//   }
+//   else {
+//     tmp->bdd_out = bdd_apply(a->bdd_out, b->bdd_out, bddop_or);
+//     bdd_delref(a->bdd_out);
+//     bdd_delref(b->bdd_out);
+//     bdd_addref(tmp->bdd_out);
+//   }
+//   for (int i = 0; i < a->npairs; i++) {
+//     tmp->nf_pairs[i] = a->nf_pairs[i]; 
+//   }
+//   for (int i = 0; i < b->npairs; i++) {
+//     tmp->nf_pairs[i+a->npairs] = b->nf_pairs[i];
+//   }
+//   free(a);
+//   a = NULL;
+//   free(b);
+//   b = NULL;
+//   return tmp; 
+// }
+
 struct matrix_element *
 matrix_elem_plus(struct matrix_element *a, struct matrix_element *b) {
   if (!b)
     return a;
   if (!a)
     return b;
-  struct matrix_element *tmp = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+((a->npairs)+(b->npairs))*sizeof(struct nf_space_pair *));
-  tmp->npairs = a->npairs + b->npairs;
+  struct nf_space_pair *nps[100000];
+  uint32_t count = 0;
+  for (int i = 0; i < a->npairs; i++) {
+    nps[count] = a->nf_pairs[i]; 
+    count++;
+  }
+
+  for (int i = 0; i < b->npairs; i++) {
+    bool issame = false;
+    for (int j = 0; j < count; j++) {
+      if (issame_nf_space_pair_action(nps[j], b->nf_pairs[i])) {
+        bdd_delref(nps[j]->in->mf);
+        bdd_delref(nps[j]->out->mf);
+        nps[j]->in->mf = bdd_apply(nps[j]->in->mf, b->nf_pairs[i]->in->mf, bddop_or);
+        nps[j]->out->mf = bdd_apply(nps[j]->out->mf, b->nf_pairs[i]->out->mf, bddop_or);
+        bdd_addref(nps[j]->in->mf);
+        bdd_addref(nps[j]->out->mf);
+        issame = true;
+        free_nf_space_pair(b->nf_pairs[i]);
+        break;
+      } 
+    }
+    if (!issame) {
+      nps[count] = b->nf_pairs[i];
+      count++;
+    }
+  }
+
+  struct matrix_element *tmp = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+count*sizeof(struct nf_space_pair *));
+  tmp->npairs = count;
   if (a->bdd_in == b->bdd_in) {
     tmp->bdd_in = a->bdd_in;
     bdd_delref(a->bdd_in);
@@ -2473,12 +2752,9 @@ matrix_elem_plus(struct matrix_element *a, struct matrix_element *b) {
     bdd_delref(b->bdd_out);
     bdd_addref(tmp->bdd_out);
   }
-  for (int i = 0; i < a->npairs; i++) {
-    tmp->nf_pairs[i] = a->nf_pairs[i]; 
-  }
-  for (int i = 0; i < b->npairs; i++) {
-    tmp->nf_pairs[i+a->npairs] = b->nf_pairs[i];
-  }
+  for (int i = 0; i < count; i++) 
+    tmp->nf_pairs[i] = nps[i]; 
+
   free(a);
   a = NULL;
   free(b);
@@ -2696,42 +2972,29 @@ gen_Tri_arr_bdd(void) {
       uint32_t *lin_arrs = (uint32_t *)(link_in_rule_data_arrs + 2*rule_nums_in_pre);
       uint32_t rule_nums_out_pre = lout_r->rule_nums - rule_nums_out;
       for (uint32_t i_in = 0; i_in < rule_nums_in; i_in++) {  
-        struct of_rule *r_in = rule_get_2idx(*(uint32_t *)lin_arrs, *(uint32_t *)(lin_arrs+1));
 
-        BDD v_in, v_out;        
-        struct mf_uint16_t *r_in_mf = get_r_in_mf(r_in);
+
+        struct bdd_rule *r_in = bdd_sws_arr[*(uint32_t *)lin_arrs]->rules[*(uint32_t *)(lin_arrs+1) - 1];
+
+        BDD v_in, v_out;
+        v_in = r_in->mf_out;
 
         uint32_t *lout_arrs = (uint32_t *)(link_out_rule_data_arrs + 2*rule_nums_out_pre);
-        struct timeval start,stop; 
-        gettimeofday(&start,NULL);
-        v_in = mf2bdd(r_in_mf);
-        gettimeofday(&stop,NULL);
-        time_counter_elemplus+=diff(&stop, &start);
-        // if ((r_in->sw_idx == 0) && (r_in->idx == 1))
-        // {
-        //   print_rule(r_in);
-        //   print_mf_uint16_t(r_in_mf);
-        // }
-        // if ((r_in->sw_idx == 0) && (r_in->idx == 2))
-        // {
-        //   print_rule(r_in);
-        //   print_mf_uint16_t(r_in_mf);
-        // }
+        // struct timeval start,stop; 
+        // gettimeofday(&start,NULL);
+        // v_in = mf2bdd(r_in_mf);
+        // gettimeofday(&stop,NULL);
+        // time_counter_elemplus+=diff(&stop, &start);
         
-  
-        // bdd_addref(v_in);
         for (uint32_t i_out = 0; i_out < rule_nums_out; i_out++) {
-          struct of_rule *r_out = rule_get_2idx(*(uint32_t *)lout_arrs, *(uint32_t *)(lout_arrs+1));
+          struct bdd_rule *r_out = bdd_sws_arr[*(uint32_t *)lout_arrs]->rules[*(uint32_t *)(lout_arrs+1) - 1];
           // printf("%d-%d,%d-%d;", r_in->sw_idx, r_in->idx, r_out->sw_idx, r_out->idx);
-          struct mf_uint16_t *r_out_mf = get_r_out_mf(r_out); 
-          // if ((r_out->sw_idx == 14) && (r_out->idx == 1885))
-          // {
-          //   print_rule(r_out);
-          //   print_mf_uint16_t(r_out_mf);
-          // }
+          // struct mf_uint16_t *r_out_mf = get_r_out_mf(r_out); 
+          
           
           // gettimeofday(&start,NULL);
-          v_out = mf2bdd(r_out_mf);
+          // v_out = mf2bdd(r_out_mf);
+          v_out = r_out->mf_in;
           // gettimeofday(&stop,NULL);
           // time_counter_elemplus+=diff(&stop, &start);
           BDD v_and, v_diff;
@@ -2747,17 +3010,17 @@ gen_Tri_arr_bdd(void) {
           } 
           v_in = v_diff;
           if (!v_in){
-            free(r_out_mf);
+            // free(r_out_mf);
             break;
           }
 
           lout_arrs += 2;
-          free(r_out_mf);
+          // free(r_out_mf);
           
           
         }
         lin_arrs += 2;
-        free(r_in_mf);
+        // free(r_in_mf);
         // bdd_delref(v_in); 
       }  
     }
@@ -2851,6 +3114,161 @@ gen_CSC_from_CSR(struct matrix_CSR *matrix) {
   return tmp;
 }
 
+/*根据 r_to_merge 来合并规则生成新的矩阵*/
+/*------------------------------------------------*/
+
+
+// struct r_to_merge {
+//   uint32_t nrules;
+//   uint32_t rules[0];
+// };
+// struct r_to_merge *r_to_merge_arr[SW_NUM];
+// r_merge_num_arr
+
+// struct switch_bdd_rs *bdd_sws_arr[SW_NUM];
+// struct r_to_merge *r_to_merge_arr[SW_NUM]; //原来的r到新合并的r之间的映射
+// struct r_to_merge *merged_arr[SW_NUM];
+// uint32_t r_merge_num_arr[SW_NUM];
+
+// struct matrix_element {
+//   uint32_t npairs;
+//   BDD bdd_in;
+//   BDD bdd_out;
+//   struct nf_space_pair *nf_pairs[0];
+// };
+// struct CS_matrix_idx_v {
+//   uint32_t idx;
+//   struct matrix_element *elem;
+// };
+
+// struct CS_matrix_idx_v_arr {
+//   uint32_t nidx_vs;
+//   struct CS_matrix_idx_v *idx_vs[0];
+// };
+
+struct matrix_element *
+copy_matrix_element(struct matrix_element *a) {
+  if(!a)
+    return NULL;
+  struct matrix_element *tmp = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+(a->npairs)*sizeof(struct nf_space_pair *));
+  tmp->npairs = a->npairs;
+  tmp->bdd_in = a->bdd_in;
+  tmp->bdd_out = a->bdd_out;
+  for (int i = 0; i < a->npairs; i++)
+    tmp->nf_pairs[i] = a->nf_pairs[i];
+  return tmp;
+}
+
+
+struct CS_matrix_idx_v_arr *
+two_CS_matrix_idx_v_arr_plus(struct CS_matrix_idx_v_arr *row1, struct CS_matrix_idx_v_arr *row2, uint32_t num) {
+
+  if(!row1)
+    return row2;
+  if(!row2)
+    return row1;
+
+  struct matrix_element *elems_arr[num];
+  for (int i = 0; i < num; i++)
+    elems_arr[i] = NULL;
+
+  for (int i = 0; i < row1->nidx_vs; i++){
+    elems_arr[row1->idx_vs[i]->idx] = matrix_elem_plus(elems_arr[row1->idx_vs[i]->idx], row1->idx_vs[i]->elem);
+    free(row1->idx_vs[i]);
+  }
+  for (int i = 0; i < row2->nidx_vs; i++){
+    elems_arr[row2->idx_vs[i]->idx] = matrix_elem_plus(elems_arr[row2->idx_vs[i]->idx], row2->idx_vs[i]->elem);
+    free(row2->idx_vs[i]);
+  }
+
+  struct CS_matrix_idx_v *idx_vs_arr[num];
+  uint32_t count = 0;
+  for (int i = 0; i < num; i++) {
+    if (elems_arr[i]) {
+      idx_vs_arr[count] = xmalloc(sizeof(struct CS_matrix_idx_v));
+      idx_vs_arr[count]->idx = i;
+      idx_vs_arr[count]->elem = elems_arr[i];
+      count++;
+    }
+  }
+
+  struct CS_matrix_idx_v_arr *tmp = xmalloc(sizeof(uint32_t) + count*sizeof(struct CS_matrix_idx_v *));
+  tmp->nidx_vs = count;
+  for (int i = 0; i < count; i++)
+    tmp->idx_vs[i] = idx_vs_arr[i];
+  free(row1);
+  free(row2);
+  return tmp;
+}
+
+uint32_t
+get_merged_matrix_idx_fr_idx(uint32_t idx) {
+  struct bdd_rule *r = matrix_idx_to_bddr(&idx);
+  uint32_t merged_rown = 0;
+  for (int i = 0; i < r->sw_idx; i++)
+    merged_rown += r_to_merge_arr[i]->nrules;
+
+  merged_rown += r_to_merge_arr[r->sw_idx]->rules[r->idx - 1];
+
+  return merged_rown;
+
+}
+
+struct CS_matrix_idx_v_arr *
+merge_matrix_idx_v_arr(struct CS_matrix_idx_v_arr *row, uint32_t num) {
+  if(!row)
+    return NULL;
+  struct matrix_element *elems_arr[num];
+  for (int i = 0; i < num; i++)
+    elems_arr[i] = NULL;
+
+  for (int i = 0; i < row->nidx_vs; i++){
+    uint32_t merged_rown = get_merged_matrix_idx_fr_idx(row->idx_vs[i]->idx);
+    elems_arr[merged_rown] = matrix_elem_plus(elems_arr[merged_rown], row->idx_vs[i]->elem);
+    free(row->idx_vs[i]);
+  }
+
+  struct CS_matrix_idx_v *idx_vs_arr[num];
+  uint32_t count = 0;
+  for (int i = 0; i < num; i++) {
+    if (elems_arr[i]) {
+      idx_vs_arr[count] = xmalloc(sizeof(struct CS_matrix_idx_v));
+      idx_vs_arr[count]->idx = i;
+      idx_vs_arr[count]->elem = elems_arr[i];
+      count++;
+    }
+  }
+  struct CS_matrix_idx_v_arr *tmp = xmalloc(sizeof(uint32_t) + count*sizeof(struct CS_matrix_idx_v *));
+  tmp->nidx_vs = count;
+  for (int i = 0; i < count; i++)
+    tmp->idx_vs[i] = idx_vs_arr[i];
+  free(row);
+  return tmp;
+}
+
+struct matrix_CSR *
+gen_merged_CSR(struct matrix_CSR *matrix) {
+  uint32_t all_merged_nrs = 0;
+  for (int i = 0; i < SW_NUM; i++)
+    all_merged_nrs += r_to_merge_arr[i]->nrules;
+
+  struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+all_merged_nrs*sizeof(struct CS_matrix_idx_v_arr *));
+  tmp->nrows = all_merged_nrs;
+  for (uint32_t i = 0; i < all_merged_nrs; i++)
+    tmp->rows[i] = NULL;
+  for (uint32_t i = 0; i < matrix->nrows; i++) {
+    // struct bdd_rule *r = matrix_idx_to_bddr(&i);
+    uint32_t merged_rown = get_merged_matrix_idx_fr_idx(i);
+    tmp->rows[merged_rown] = two_CS_matrix_idx_v_arr_plus(tmp->rows[merged_rown], matrix->rows[i], matrix->nrows);
+  }
+  for (uint32_t i = 0; i < all_merged_nrs; i++)
+    tmp->rows[i] = merge_matrix_idx_v_arr(tmp->rows[i], all_merged_nrs);
+
+  return tmp;
+}
+
+/*各个元素的连通*/
+/*------------------------------------------------*/
 
 struct nf_space_pair *
 nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
@@ -2872,12 +3290,12 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
     return NULL;
   // gettimeofday(&start,NULL);
 
-  for (int i = 0; i < a->r_arr->nrs - 1; i++) {
-    for (int j = 0; j < b->r_arr->nrs; j++) {
-      if ((a->r_arr->ridx[i].sw_idx == b->r_arr->ridx[j].sw_idx)&&(a->r_arr->ridx[i].r_idx == b->r_arr->ridx[j].r_idx))
-        return NULL;
-    }
-  }
+  // for (int i = 0; i < a->r_arr->nrs - 1; i++) {
+  //   for (int j = 0; j < b->r_arr->nrs; j++) {
+  //     if ((a->r_arr->ridx[i].sw_idx == b->r_arr->ridx[j].sw_idx)&&(a->r_arr->ridx[i].r_idx == b->r_arr->ridx[j].r_idx))
+  //       return NULL;
+  //   }
+  // }
 
   compu_true_counter ++;
   // struct bdd_saved_arr *bdd_arr_insc = bdd_save_arr(insc);
@@ -2950,18 +3368,19 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   // time_counter2 += diff(&stop, &start);
   // gettimeofday(&start,NULL);
 
-  pair_tmp->r_arr = xmalloc(sizeof (uint32_t)+(a->r_arr->nrs+b->r_arr->nrs -1)*sizeof (struct r_idx));
+  pair_tmp->r_arr = NULL;
+  // pair_tmp->r_arr = xmalloc(sizeof (uint32_t)+(a->r_arr->nrs+b->r_arr->nrs -1)*sizeof (struct r_idx));
   // pair_tmp->r_arr = xcalloc(1,sizeof (uint32_t)+(a->r_arr->nrs+b->r_arr->nrs -1)*sizeof (struct r_idx));
 
-  pair_tmp->r_arr->nrs = a->r_arr->nrs+b->r_arr->nrs -1;
-  for (uint32_t i = 0; i < a->r_arr->nrs; i++) {
-    pair_tmp->r_arr->ridx[i].sw_idx = a->r_arr->ridx[i].sw_idx;
-    pair_tmp->r_arr->ridx[i].r_idx = a->r_arr->ridx[i].r_idx;
-  }
-  for (uint32_t i = 0; i < b->r_arr->nrs -1; i++) {
-    pair_tmp->r_arr->ridx[i+a->r_arr->nrs].sw_idx = b->r_arr->ridx[i+1].sw_idx;
-    pair_tmp->r_arr->ridx[i+a->r_arr->nrs].r_idx = b->r_arr->ridx[i+1].r_idx;
-  }
+  // pair_tmp->r_arr->nrs = a->r_arr->nrs+b->r_arr->nrs -1;
+  // for (uint32_t i = 0; i < a->r_arr->nrs; i++) {
+  //   pair_tmp->r_arr->ridx[i].sw_idx = a->r_arr->ridx[i].sw_idx;
+  //   pair_tmp->r_arr->ridx[i].r_idx = a->r_arr->ridx[i].r_idx;
+  // }
+  // for (uint32_t i = 0; i < b->r_arr->nrs -1; i++) {
+  //   pair_tmp->r_arr->ridx[i+a->r_arr->nrs].sw_idx = b->r_arr->ridx[i+1].sw_idx;
+  //   pair_tmp->r_arr->ridx[i+a->r_arr->nrs].r_idx = b->r_arr->ridx[i+1].r_idx;
+  // }
 
   // gettimeofday(&stop,NULL);
   // time_counter3 += diff(&stop, &start);
@@ -2969,6 +3388,7 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   return pair_tmp;
 }
 
+struct nf_space_pair *
 nf_space_connect_backup(struct nf_space_pair *a, struct nf_space_pair *b) {
   // printf("starting nf_space_connect\n");
   // if(!is_insc_links(a->out->lks, b->in->lks))
@@ -3085,6 +3505,14 @@ nf_space_connect_backup(struct nf_space_pair *a, struct nf_space_pair *b) {
   return pair_tmp;
 }
 
+bool
+issame_nf_space_pair_action(struct nf_space_pair *ns1, struct nf_space_pair *ns2) {
+  if(!ns1 || !ns2)
+    return false;
+  if (is_mask_uint16_t_same(ns1->mask, ns2->mask) && is_mask_uint16_t_same(ns1->rewrite, ns2->rewrite))
+    return true;
+  return false;
+}
 
 struct matrix_element * //a*b,a作用b，不可交换
 elem_connect(struct matrix_element *a, struct matrix_element *b) { 
@@ -3106,16 +3534,40 @@ elem_connect(struct matrix_element *a, struct matrix_element *b) {
       }
     }
   }
+
   // gettimeofday(&stop,NULL);
   // time_counter_nf_space_connect += diff(&stop, &start);
   struct matrix_element *tmp = NULL;
   // gettimeofday(&start,NULL);
-  if (count) {
-    tmp = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+count*sizeof(struct nf_space_pair *));
+  if (count) { 
+    uint32_t count_ot = 1;
+    for (int i = 1; i < count; i++) {
+      bool issame = false;
+      for (int j = 0; j < count_ot; j++) {
+        if (issame_nf_space_pair_action(nps[j], nps[i])) {
+          bdd_delref(nps[j]->in->mf);
+          bdd_delref(nps[j]->out->mf);
+          nps[j]->in->mf = bdd_apply(nps[j]->in->mf, nps[i]->in->mf, bddop_or);
+          nps[j]->out->mf = bdd_apply(nps[j]->out->mf, nps[i]->out->mf, bddop_or);
+          issame = true;
+          bdd_addref(nps[j]->in->mf);
+          bdd_addref(nps[j]->out->mf);
+          free_nf_space_pair(nps[i]);
+          break;
+        }
+      }
+      if (!issame) {
+        nps[count_ot] = nps[i];
+        count_ot++;
+      }
+    }
+
+
+    tmp = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+count_ot*sizeof(struct nf_space_pair *));
     tmp->bdd_in = 0;
     tmp->bdd_out = 0;
-    tmp->npairs = count;
-    for (int i = 0; i < count; i++) {
+    tmp->npairs = count_ot;
+    for (int i = 0; i < count_ot; i++) {
       tmp->bdd_in = bdd_apply(tmp->bdd_in, nps[i]->in->mf, bddop_or);
       tmp->bdd_out = bdd_apply(tmp->bdd_out, nps[i]->out->mf,bddop_or);
       tmp->nf_pairs[i] = nps[i];
@@ -3127,6 +3579,48 @@ elem_connect(struct matrix_element *a, struct matrix_element *b) {
   // time_counter_elembdd_withpair += diff(&stop, &start);
   return tmp;
 }
+
+// struct matrix_element * //a*b,a作用b，不可交换
+// elem_connect(struct matrix_element *a, struct matrix_element *b) { 
+  
+//   // struct timeval start,stop; 
+//   struct nf_space_pair *nps[100000];
+//   // printf("%d\n", a->npairs*b->npairs);
+//   uint32_t count = 0;
+
+//   // gettimeofday(&start,NULL);
+//   for (uint32_t i = 0; i < a->npairs; i++) {
+//     struct nf_space_pair *np_a = a->nf_pairs[i];
+//     for (uint32_t j = 0; j < b->npairs; j++) {
+
+//       struct nf_space_pair *result = nf_space_connect(np_a, b->nf_pairs[j]);
+//       if (result) {
+//         nps[count] = result;
+//         count++;
+//       }
+//     }
+//   }
+//   // gettimeofday(&stop,NULL);
+//   // time_counter_nf_space_connect += diff(&stop, &start);
+//   struct matrix_element *tmp = NULL;
+//   // gettimeofday(&start,NULL);
+//   if (count) {
+//     tmp = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+count*sizeof(struct nf_space_pair *));
+//     tmp->bdd_in = 0;
+//     tmp->bdd_out = 0;
+//     tmp->npairs = count;
+//     for (int i = 0; i < count; i++) {
+//       tmp->bdd_in = bdd_apply(tmp->bdd_in, nps[i]->in->mf, bddop_or);
+//       tmp->bdd_out = bdd_apply(tmp->bdd_out, nps[i]->out->mf,bddop_or);
+//       tmp->nf_pairs[i] = nps[i];
+//     }
+//     bdd_addref(tmp->bdd_in);
+//     bdd_addref(tmp->bdd_out);
+//   } 
+//   // gettimeofday(&stop,NULL);
+//   // time_counter_elembdd_withpair += diff(&stop, &start);
+//   return tmp;
+// }
 
 struct matrix_element *
 row_col_multiply(struct CS_matrix_idx_v_arr *row, struct CS_matrix_idx_v_arr *col) {
@@ -3771,7 +4265,6 @@ print_CS_matrix_v_arr(struct CS_matrix_idx_v_arr *v_arr) {
 
 void
 BDD_init_multiply(void) {
-
   bdd_init(BDDSIZE, BDDOPCHCHE);
   bdd_setvarnum(16*MF_LEN);
 }
