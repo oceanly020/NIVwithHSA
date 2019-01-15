@@ -2318,10 +2318,12 @@ init_r_to_merge(void) {
     uint32_t count = 1;
 
     
-    for (int j = 0; j < bdd_sws_arr[i]->nrules; j++) {
+    for (int j = 1; j < bdd_sws_arr[i]->nrules; j++) {
       bool issame = false;
       for (int k = 0; k < count; k++) {
+        
         if (is_r_action_same(bdd_sws_arr[i]->rules[arr_tmp[k]], bdd_sws_arr[i]->rules[j])) {
+          // printf("the same rules %d - %d and %d - %d\n", bdd_sws_arr[i]->rules[arr_tmp[k]]->sw_idx, bdd_sws_arr[i]->rules[arr_tmp[k]]->idx, bdd_sws_arr[i]->rules[j]->sw_idx, bdd_sws_arr[i]->rules[j]->idx);
           r_to_merge_arr[i]->rules[j] = k;
           issame = true;
           same_num ++;
@@ -2329,7 +2331,7 @@ init_r_to_merge(void) {
         }
       }
       if(!issame) {
-        arr_tmp[count] = i;
+        arr_tmp[count] = j;
         r_to_merge_arr[i]->rules[j] = count;
         count++;
       }
@@ -3174,11 +3176,15 @@ two_CS_matrix_idx_v_arr_plus(struct CS_matrix_idx_v_arr *row1, struct CS_matrix_
 
   for (int i = 0; i < row1->nidx_vs; i++){
     elems_arr[row1->idx_vs[i]->idx] = matrix_elem_plus(elems_arr[row1->idx_vs[i]->idx], row1->idx_vs[i]->elem);
-    free(row1->idx_vs[i]);
+    if(row1->idx_vs[i])
+      free(row1->idx_vs[i]);
+    row1->idx_vs[i] = NULL;
   }
   for (int i = 0; i < row2->nidx_vs; i++){
     elems_arr[row2->idx_vs[i]->idx] = matrix_elem_plus(elems_arr[row2->idx_vs[i]->idx], row2->idx_vs[i]->elem);
-    free(row2->idx_vs[i]);
+    if(row2->idx_vs[i])
+      free(row2->idx_vs[i]);
+    row2->idx_vs[i] = NULL;
   }
 
   struct CS_matrix_idx_v *idx_vs_arr[num];
@@ -3196,8 +3202,12 @@ two_CS_matrix_idx_v_arr_plus(struct CS_matrix_idx_v_arr *row1, struct CS_matrix_
   tmp->nidx_vs = count;
   for (int i = 0; i < count; i++)
     tmp->idx_vs[i] = idx_vs_arr[i];
-  free(row1);
-  free(row2);
+  if(row1)
+    free(row1);
+  row1 = NULL;
+  if(row2)
+    free(row2);
+  row2 = NULL;
   return tmp;
 }
 
@@ -3206,12 +3216,11 @@ get_merged_matrix_idx_fr_idx(uint32_t idx) {
   struct bdd_rule *r = matrix_idx_to_bddr(&idx);
   uint32_t merged_rown = 0;
   for (int i = 0; i < r->sw_idx; i++)
-    merged_rown += r_to_merge_arr[i]->nrules;
+    merged_rown += merged_arr[i]->nrules;
 
   merged_rown += r_to_merge_arr[r->sw_idx]->rules[r->idx - 1];
 
   return merged_rown;
-
 }
 
 struct CS_matrix_idx_v_arr *
@@ -3225,7 +3234,9 @@ merge_matrix_idx_v_arr(struct CS_matrix_idx_v_arr *row, uint32_t num) {
   for (int i = 0; i < row->nidx_vs; i++){
     uint32_t merged_rown = get_merged_matrix_idx_fr_idx(row->idx_vs[i]->idx);
     elems_arr[merged_rown] = matrix_elem_plus(elems_arr[merged_rown], row->idx_vs[i]->elem);
-    free(row->idx_vs[i]);
+    if(row->idx_vs[i])
+      free(row->idx_vs[i]);
+    row->idx_vs[i] = NULL;
   }
 
   struct CS_matrix_idx_v *idx_vs_arr[num];
@@ -3242,7 +3253,9 @@ merge_matrix_idx_v_arr(struct CS_matrix_idx_v_arr *row, uint32_t num) {
   tmp->nidx_vs = count;
   for (int i = 0; i < count; i++)
     tmp->idx_vs[i] = idx_vs_arr[i];
-  free(row);
+  if(row)
+    free(row);
+  row = NULL;
   return tmp;
 }
 
@@ -3250,7 +3263,8 @@ struct matrix_CSR *
 gen_merged_CSR(struct matrix_CSR *matrix) {
   uint32_t all_merged_nrs = 0;
   for (int i = 0; i < SW_NUM; i++)
-    all_merged_nrs += r_to_merge_arr[i]->nrules;
+    all_merged_nrs += merged_arr[i]->nrules;
+    // all_merged_nrs += bdd_sws_arr[i]->nrules;
 
   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+all_merged_nrs*sizeof(struct CS_matrix_idx_v_arr *));
   tmp->nrows = all_merged_nrs;
@@ -3258,12 +3272,11 @@ gen_merged_CSR(struct matrix_CSR *matrix) {
     tmp->rows[i] = NULL;
   for (uint32_t i = 0; i < matrix->nrows; i++) {
     // struct bdd_rule *r = matrix_idx_to_bddr(&i);
-    uint32_t merged_rown = get_merged_matrix_idx_fr_idx(i);
+    uint32_t merged_rown = get_merged_matrix_idx_fr_idx(i);   
     tmp->rows[merged_rown] = two_CS_matrix_idx_v_arr_plus(tmp->rows[merged_rown], matrix->rows[i], matrix->nrows);
   }
   for (uint32_t i = 0; i < all_merged_nrs; i++)
     tmp->rows[i] = merge_matrix_idx_v_arr(tmp->rows[i], all_merged_nrs);
-
   return tmp;
 }
 
