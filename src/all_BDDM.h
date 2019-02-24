@@ -4832,8 +4832,8 @@ bool
 average_updating_r_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *orin_matrix_CSR) {
   struct timeval start,stop;
   // long long int average = 0;
-  for (int r_i = 0; r_i < 990; r_i++) {
-    struct bdd_rule *r = bdd_sws_arr[0]->rules[r_i];
+  for (int r_i = 0; r_i < 891; r_i++) {
+    struct bdd_rule *r = bdd_sws_arr[1]->rules[r_i];
     
     // counter_init();
     struct matrix_CSR *delta_CSR = get_delta_merged_from_a_rule(orin_matrix_CSR, r, matrix_CSR->nrows);
