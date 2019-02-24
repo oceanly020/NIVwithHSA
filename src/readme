@@ -1,2 +1,2 @@
-gcc -std=c99 -Wall -pthread test.c -fexec-charset=gbk -lm -o test
-./test
+gcc -std=c99 -Wall -lpthread test_BDDMen.c -fexec-charset=gbk -lm -o test_BDDMen
+./test_BDDMen

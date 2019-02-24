@@ -4675,6 +4675,40 @@ BDD_init_multiply(void) {
 /*for test*/
 /*========================================================================*/
 
+void
+counter_init(void) {
+  computation_counter = 0;
+  elemconnet_counter = 0;
+  compu_true_counter = 0;
+  elem_true_counter = 0;
+  time_counter_elembdd_withpair = 0;
+  time_counter_elemplus = 0;
+  time_counter_nf_space_connect = 0;
+  time_counter_eleminsc = 0;
+  global_sign = 0;
+  time_counter1 = 0;
+  time_counter2 = 0;
+  time_counter3 = 0;
+  time_counter4 = 0;
+  time_counter5 = 0;
+}
+
+void
+print_counter(void){
+  printf("computation_counter = %d\n", computation_counter);
+  printf("compu_true_counter = %d\n", compu_true_counter);
+  printf("elemconnet_counter = %d\n", elemconnet_counter);
+  printf("elem_true_counter = %d\n", elem_true_counter);
+  printf("time_counter1 = %ld us\n", time_counter1);
+  printf("time_counter2 = %ld us\n", time_counter2);
+  printf("time_counter3 = %ld us\n", time_counter3);
+  printf("time_counter4 = %ld us\n", time_counter4);
+  printf("time_counter5 = %ld us\n", time_counter5);
+  printf("time_counter_elembdd_withpair = %ld us\n", time_counter_elembdd_withpair);
+  printf("time_counter_elemplus = %ld us\n", time_counter_elemplus);
+  printf("time_counter_nf_space_connect = %ld us\n", time_counter_nf_space_connect);
+  printf("time_counter_eleminsc = %ld us\n", time_counter_eleminsc);
+}
 
 
 // struct CS_matrix_idx_v {
