@@ -982,7 +982,7 @@ main (int argc, char **argv)
   //   printf("%d\n", matrix_CSR_old->rows[16]->idx_vs[i]->idx);
   //   print_matrix_element(matrix_CSR_old->rows[16]->idx_vs[i]->elem);
   // }
-  // average_updating_r_merged(matrix_CSR, matrix_CSR_old);
+  average_updating_r_merged(matrix_CSR, matrix_CSR_old);
   // average_updating_r_ord(matrix_CSR_old);
 
 
@@ -1033,16 +1033,16 @@ main (int argc, char **argv)
   // data_unload();
 
 
-  gettimeofday(&start,NULL);
-  struct matrix_CSR *muti1_CSR = sparse_matrix_multiply(matrix_CSR, matrix_CSR);
-  gettimeofday(&stop,NULL);
-  long long int squre = diff(&stop, &start)/1000;
-  printf("matrix squre: %lld ms\n", squre);
-  print_vElemsNUM_of_Matrix_CSR(muti1_CSR);
-  print_npairsNUM_of_Matrix_CSR(muti1_CSR);
-  print_counter();
-  counter_init();
-  printf("--------------------------------------\n");
+  // gettimeofday(&start,NULL);
+  // struct matrix_CSR *muti1_CSR = sparse_matrix_multiply(matrix_CSR, matrix_CSR);
+  // gettimeofday(&stop,NULL);
+  // long long int squre = diff(&stop, &start)/1000;
+  // printf("matrix squre: %lld ms\n", squre);
+  // print_vElemsNUM_of_Matrix_CSR(muti1_CSR);
+  // print_npairsNUM_of_Matrix_CSR(muti1_CSR);
+  // print_counter();
+  // counter_init();
+  // printf("--------------------------------------\n");
 
   // gettimeofday(&start,NULL);
   // struct matrix_CSR *muti1_CSR_old = sparse_matrix_multiply(matrix_CSR_old, matrix_CSR_old);
