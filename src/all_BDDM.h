@@ -4849,7 +4849,7 @@ average_updating_r_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *orin
     struct matrix_CSC *delta_CSC_bk = gen_CSC_from_CSR(delta_CSR);
     struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 5; i++) {
       gettimeofday(&start,NULL);
       delta_CSR_fw = sparse_matrix_multiply_CSC(delta_CSR_fw, matrix_CSR, matrix_CSC);
       gettimeofday(&stop,NULL);
