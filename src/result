@@ -1,0 +1,147 @@
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx0000011001001100
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx101010110100001111100000000100xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+without the elem in/out
+--------------------------------------
+the updating merging of rule 2 - 1 start!!
+fw: 3094 us; NULL bk: 2211 us; fw: 1786 us; NULL bk: 0 us; fw: 7584 us; NULL bk: 0 us; 
+the updating merging of rule 2 - 2 start!!
+fw: 2778 us; NULL bk: 3555 us; fw: 339 us; NULL bk: 0 us; fw: 3151 us; NULL bk: 0 us; 
+--------------------------------------
+the updating of rule 2 - 1 start!!
+fw: 39079 us; NULL bk: 156990 us; fw: 25791 us; NULL bk: 1 us; fw: 40972 us; NULL bk: 0 us; 
+the updating of rule 2 - 2 start!!
+fw: 36977 us; NULL bk: 160224 us; fw: 1981 us; NULL bk: 0 us; fw: 16701 us; NULL bk: 0 us; 
+--------------------------------------
+gen CSC: 9 ms
+matrix squre: 1566 ms
+This Matrix_CSR has 6370 valid elements
+This Matrix_CSR has 30219 valid npairs
+computation_counter = 48772
+compu_true_counter = 36883
+elemconnet_counter = 45612
+elem_true_counter = 36855
+time_counter1 = 0 us
+time_counter2 = 0 us
+time_counter3 = 0 us
+time_counter4 = 0 us
+time_counter5 = 0 us
+time_counter_elembdd_withpair = 0 us
+time_counter_elemplus = 0 us
+time_counter_nf_space_connect = 0 us
+time_counter_eleminsc = 0 us
+--------------------------------------
+gen CSC: 10 ms
+matrix squre2: 674 ms
+This Matrix_CSR has 4444 valid elements
+This Matrix_CSR has 13011 valid npairs
+computation_counter = 45017
+compu_true_counter = 13753
+elemconnet_counter = 24792
+elem_true_counter = 10516
+time_counter1 = 0 us
+time_counter2 = 0 us
+time_counter3 = 0 us
+time_counter4 = 0 us
+time_counter5 = 0 us
+time_counter_elembdd_withpair = 0 us
+time_counter_elemplus = 0 us
+time_counter_nf_space_connect = 0 us
+time_counter_eleminsc = 0 us
+/*=====================================================*/
+
+with the elem in/out
+--------------------------------------
+the updating merging of rule 2 - 1 start!!
+fw: 30177 us; NULL bk: 7215 us; fw: 6443 us; NULL bk: 0 us; fw: 137774 us; NULL bk: 1 us; 
+the updating merging of rule 2 - 2 start!!
+fw: 2918 us; NULL bk: 2344 us; fw: 574 us; NULL bk: 0 us; fw: 3021 us; NULL bk: 0 us; 
+--------------------------------------
+the updating of rule 2 - 1 start!!
+fw: 35767 us; NULL bk: 85177 us; fw: 13370 us; NULL bk: 0 us; fw: 103096 us; NULL bk: 0 us; 
+the updating of rule 2 - 2 start!!
+fw: 32200 us; NULL bk: 141605 us; fw: 1766 us; NULL bk: 0 us; fw: 16791 us; NULL bk: 0 us; 
+--------------------------------------
+gen CSC: 10 ms
+matrix squre: 2257 ms
+This Matrix_CSR has 6370 valid elements
+This Matrix_CSR has 30219 valid npairs
+computation_counter = 37857
+compu_true_counter = 36883
+elemconnet_counter = 45612
+elem_true_counter = 36855
+time_counter1 = 0 us
+time_counter2 = 0 us
+time_counter3 = 0 us
+time_counter4 = 0 us
+time_counter5 = 0 us
+time_counter_elembdd_withpair = 0 us
+time_counter_elemplus = 0 us
+time_counter_nf_space_connect = 0 us
+time_counter_eleminsc = 0 us
+--------------------------------------
+gen CSC: 10 ms
+matrix squre2: 900 ms
+This Matrix_CSR has 4444 valid elements
+This Matrix_CSR has 13011 valid npairs
+computation_counter = 24219
+compu_true_counter = 13753
+elemconnet_counter = 24792
+elem_true_counter = 10516
+time_counter1 = 0 us
+time_counter2 = 0 us
+time_counter3 = 0 us
+time_counter4 = 0 us
+time_counter5 = 0 us
+time_counter_elembdd_withpair = 0 us
+time_counter_elemplus = 0 us
+time_counter_nf_space_connect = 0 us
+time_counter_eleminsc = 0 us
+/*=====================================================*/
+
+
+this matrix_CSR has 474 rules
+This Matrix_CSR has 5374 valid elements
+This Matrix_CSR has 5374 valid npairs
+--------------------------------------
+the updating merging of rule 2 - 1 start!!
+fw: 110030 us; bk: 4544 us; fw: 19878 us; bk: 23503 us; fw: 16606 us; bk: 14669 us; 
+the updating merging of rule 2 - 2 start!!
+fw: 2446 us; NULL bk: 2147 us; fw: 3024 us; NULL bk: 0 us; fw: 2020 us; NULL bk: 1 us; 
+--------------------------------------
+gen CSC: 6 ms
+matrix squre: 561 ms
+This Matrix_CSR has 1408 valid elements
+This Matrix_CSR has 1429 valid npairs
+computation_counter = 5623
+compu_true_counter = 3478
+elemconnet_counter = 5623
+elem_true_counter = 3478
+time_counter1 = 0 us
+time_counter2 = 0 us
+time_counter3 = 0 us
+time_counter4 = 0 us
+time_counter5 = 0 us
+time_counter_elembdd_withpair = 0 us
+time_counter_elemplus = 0 us
+time_counter_nf_space_connect = 0 us
+time_counter_eleminsc = 0 us
+--------------------------------------
+gen CSC: 6 ms
+matrix squre2: 871 ms
+This Matrix_CSR has 13253 valid elements
+This Matrix_CSR has 13284 valid npairs
+computation_counter = 21774
+compu_true_counter = 13314
+elemconnet_counter = 20976
+elem_true_counter = 13314
+time_counter1 = 0 us
+time_counter2 = 0 us
+time_counter3 = 0 us
+time_counter4 = 0 us
+time_counter5 = 0 us
+time_counter_elembdd_withpair = 0 us
+time_counter_elemplus = 0 us
+time_counter_nf_space_connect = 0 us
+time_counter_eleminsc = 0 us
+/*=====================================================*/
