@@ -5275,7 +5275,7 @@ void
 test_someport_forall_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *orin_matrix_CSR){
   // struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
 
-  uint32_t num = 16;
+  uint32_t num = 1;
   struct timeval start,stop;
   uint32_t port[16] = {100021,200010,300003,400002,500003,600002,700003,800002,900003,1000003,1100003,1200002,1300002,1400002,1500004,1600003};
 
