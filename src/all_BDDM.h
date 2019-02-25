@@ -4962,7 +4962,7 @@ average_updating_r_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *orin
   struct timeval start,stop;
   // long long int average = 0;
   // uint32_t sw_idx = 6;
-  for (int sw_idx = 0; sw_idx < 16; sw_idx++){
+  for (int sw_idx = 15; sw_idx < 16; sw_idx++){
  
     for (int r_i = 0; r_i < bdd_sws_arr[sw_idx]->nrules; r_i++) {
       struct bdd_rule *r = bdd_sws_arr[sw_idx]->rules[r_i];
@@ -4974,11 +4974,12 @@ average_updating_r_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *orin
       // print_matrix_CSR_simple(matrix_CSR);
       struct matrix_CSC *delta_CSC = gen_CSC_from_CSR(delta_CSR);
       if (!delta_CSR){
-        printf("the %d - %d rule is NULL in orin_matrix_CSR!!\n", r->sw_idx, r->idx);
+        // printf("the %d - %d rule is NULL in orin_matrix_CSR!!\n", r->sw_idx, r->idx);
+        printf("the %d - %d : 0; 0; 0; 0; 0; 0; 0; 0; 0; 0;\n", r->sw_idx, r->idx);
         continue;
       }
       else
-        printf("the updating merging of rule %d - %d start!!\n", r->sw_idx, r->idx);
+        printf("the %d - %d : ", r->sw_idx, r->idx);
 
       // struct matrix_CSR *delta_CSR_fw = delta_CSR;
       // struct matrix_CSC *delta_CSC_bk = gen_CSC_from_CSR(delta_CSR);
@@ -5005,7 +5006,7 @@ average_updating_r_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *orin
         //   print_vElemsNUM_of_Matrix_CSR(delta_CSR_fw);
         //   print_npairsNUM_of_Matrix_CSR(delta_CSR_fw);
         // }
-        printf("fw: %ld us; ", diff(&stop, &start));
+        printf("%ld us; ", diff(&stop, &start));
         gettimeofday(&start,NULL);
         delta_y = all_row_col_multiply_noloop(matrix_CSR, delta_y);
         // delta_CSC_bk = sparse_matrix_multiply_CSC_allrowcol(matrix_CSR, delta_CSC_bk);
@@ -5016,7 +5017,7 @@ average_updating_r_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *orin
         //   print_vElemsNUM_of_Matrix_CSC(delta_CSC_bk);
         //   print_npairsNUM_of_Matrix_CSC(delta_CSC_bk); 
         // }
-        printf("bk: %ld us; ", diff(&stop, &start)); 
+        printf("%ld us; ", diff(&stop, &start)); 
           
       }
       // gettimeofday(&stop,NULL);
