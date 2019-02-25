@@ -1176,6 +1176,10 @@ print_mf_uint16_t_array (const struct mf_uint16_t_array *arr) {
 
 void
 print_mask_uint16_t (const struct mask_uint16_t *a){
+  if(!a){
+    printf("NULL;\n");
+    return;
+  }
   for (int i = 0; i < MF_LEN; i++) {
     print_mask(&(a->v[i]));
   }
@@ -3137,9 +3141,9 @@ gen_CSC_from_CSR(struct matrix_CSR *matrix) {
   }
   assert(!(valid_n - count));
   qsort(Tri_arr, valid_n,sizeof (struct matrix_Tri_express *), cmp_matrix_Tri_express_CSC);
-  struct matrix_CSC *tmp = xmalloc(sizeof(uint32_t)+data_allr_nums*sizeof(struct CS_matrix_idx_v_arr *));
-  tmp->ncols = data_allr_nums;
-  for (int i = 0; i < data_allr_nums; i++)
+  struct matrix_CSC *tmp = xmalloc(sizeof(uint32_t)+(matrix->nrows)*sizeof(struct CS_matrix_idx_v_arr *));
+  tmp->ncols = matrix->nrows;
+  for (int i = 0; i < tmp->ncols; i++)
     tmp->cols[i] = NULL;
 
   uint32_t begin = 0, count_col = 1;
@@ -3435,13 +3439,14 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   // BDD root_a = load_saved_bddarr(a->out->mf);
   // BDD root_b = load_saved_bddarr(b->in->mf);
   // gettimeofday(&start,NULL);
+  // return NULL;
   BDD insc = bdd_apply(a->out->mf, b->in->mf, bddop_and);
   // gettimeofday(&stop,NULL);
   // time_counter1 += diff(&stop, &start);
 
   computation_counter ++;
 
-
+  // return NULL;
   if (!insc) 
     return NULL;
   // gettimeofday(&start,NULL);
@@ -3457,9 +3462,12 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   // struct bdd_saved_arr *bdd_arr_insc = bdd_save_arr(insc);
   struct nf_space_pair *pair_tmp = xcalloc(1, sizeof *pair_tmp);
   pair_tmp->in = xcalloc(1, sizeof *(pair_tmp->in));// 1,16(两个指针为16)
-  pair_tmp->in->lks = copy_links_of_rule(a->in->lks);
+  // pair_tmp->in->lks = copy_links_of_rule(a->in->lks);
+  pair_tmp->in->lks = NULL;
+
   pair_tmp->out = xcalloc(1, sizeof *(pair_tmp->out));// 1,16(两个指针为16)
-  pair_tmp->out->lks = copy_links_of_rule(b->out->lks);
+  // pair_tmp->out->lks = copy_links_of_rule(b->out->lks);
+  pair_tmp->out->lks = NULL;
 
   if (a->mask) {
     if(a->out->mf== insc){
@@ -3672,7 +3680,6 @@ issame_nf_space_pair_action(struct nf_space_pair *ns1, struct nf_space_pair *ns2
 
 struct matrix_element * //a*b,a作用b，不可交换
 elem_connect(struct matrix_element *a, struct matrix_element *b) { 
-  
   // struct timeval start,stop; 
   struct nf_space_pair *nps[100000];
   // printf("%d\n", a->npairs*b->npairs);
@@ -3711,27 +3718,28 @@ elem_connect(struct matrix_element *a, struct matrix_element *b) {
   struct matrix_element *tmp = NULL;
   // gettimeofday(&start,NULL);
   if (count) { 
-    uint32_t count_ot = 1;
-    for (int i = 1; i < count; i++) {
-      bool issame = false;
-      for (int j = 0; j < count_ot; j++) {
-        if (issame_nf_space_pair_action(nps[j], nps[i])) {
-          bdd_delref(nps[j]->in->mf);
-          bdd_delref(nps[j]->out->mf);
-          nps[j]->in->mf = bdd_apply(nps[j]->in->mf, nps[i]->in->mf, bddop_or);
-          nps[j]->out->mf = bdd_apply(nps[j]->out->mf, nps[i]->out->mf, bddop_or);
-          issame = true;
-          bdd_addref(nps[j]->in->mf);
-          bdd_addref(nps[j]->out->mf);
-          free_nf_space_pair(nps[i]);
-          break;
-        }
-      }
-      if (!issame) {
-        nps[count_ot] = nps[i];
-        count_ot++;
-      }
-    }
+    // uint32_t count_ot = 1;
+    uint32_t count_ot = count;
+    // for (int i = 1; i < count; i++) {
+    //   bool issame = false;
+    //   for (int j = 0; j < count_ot; j++) {
+    //     if (issame_nf_space_pair_action(nps[j], nps[i])) {
+    //       bdd_delref(nps[j]->in->mf);
+    //       bdd_delref(nps[j]->out->mf);
+    //       nps[j]->in->mf = bdd_apply(nps[j]->in->mf, nps[i]->in->mf, bddop_or);
+    //       nps[j]->out->mf = bdd_apply(nps[j]->out->mf, nps[i]->out->mf, bddop_or);
+    //       issame = true;
+    //       bdd_addref(nps[j]->in->mf);
+    //       bdd_addref(nps[j]->out->mf);
+    //       free_nf_space_pair(nps[i]);
+    //       break;
+    //     }
+    //   }
+    //   if (!issame) {
+    //     nps[count_ot] = nps[i];
+    //     count_ot++;
+    //   }
+    // }
 
 
     tmp = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+count_ot*sizeof(struct nf_space_pair *));
@@ -3885,6 +3893,8 @@ all_row_col_multiply(struct matrix_CSR *matrix_CSR, struct CS_matrix_idx_v_arr *
 
 struct CS_matrix_idx_v_arr *
 all_row_col_multiply_noloop(struct matrix_CSR *matrix_CSR, struct CS_matrix_idx_v_arr *col) {
+  if(!col)
+    return NULL;
   struct CS_matrix_idx_v_arr *tmp = NULL;
   struct CS_matrix_idx_v *vs[data_allr_nums];
   uint32_t vs_count = 0;
@@ -3915,6 +3925,8 @@ all_row_col_multiply_noloop(struct matrix_CSR *matrix_CSR, struct CS_matrix_idx_
 }
 struct CS_matrix_idx_v_arr *
 row_all_col_multiply_noloop(struct CS_matrix_idx_v_arr *row, struct matrix_CSC *matrix_CSC) {
+  if(!row)
+    return NULL;
   struct CS_matrix_idx_v_arr *tmp = NULL;
   struct CS_matrix_idx_v *vs[data_allr_nums];
   uint32_t vs_count = 0;
@@ -4214,7 +4226,7 @@ sparse_matrix_multiply_2diff(struct matrix_CSR *matrix_CSR, struct matrix_CSR *m
       //   gettimeofday(&start,NULL);
 
       //   // tmp->rows[i] = row_matrix_CSR_multiply_bysort(matrix_CSR->rows[i], matrix_CSR1);
-        tmp->rows[i] = sparse_matrix_multiply(matrix_CSR->rows[i], matrix_CSR1);
+        tmp->rows[i] = row_matrix_CSR_multiply(matrix_CSR->rows[i], matrix_CSR1);
         // tmp->rows[i] = row_matrix_CSR_multiply_noloop(matrix_CSR->rows[i], matrix_CSR1);
       //   gettimeofday(&stop,NULL);
       //   time_counter4+= diff(&stop, &start);
@@ -4274,7 +4286,7 @@ sparse_matrix_multiply_CSC(struct matrix_CSR *matrix_CSR, struct matrix_CSR *mat
   if((!matrix_CSR)||(!matrix_CSR1))
     return NULL;
   bool hasvalue = false;
-  uint32_t threshold = 0;
+  uint32_t threshold = 2;
   // struct timeval start,stop; 
   // gettimeofday(&start,NULL);
   // gettimeofday(&stop,NULL);
@@ -4499,7 +4511,7 @@ gen_matrix_row_CSR_fr_Tris(struct Tri_arr *Tri_arr) {
 
 
 struct matrix_Tri_express * 
-insc_to_Tri_express_rlimit_simple(uint32_t lk, struct of_rule *r_out, BDD v_and) {
+insc_to_Tri_express_rlimit_simple(uint32_t lk, struct bdd_rule *r_out, BDD v_and) {
   struct nf_space_pair *pair = xcalloc(1, sizeof *pair);
 
   struct links_of_rule *lks_out_tmp = xmalloc(sizeof(uint32_t)+sizeof (lks_out_tmp->links_wc[0]));
@@ -4518,7 +4530,7 @@ insc_to_Tri_express_rlimit_simple(uint32_t lk, struct of_rule *r_out, BDD v_and)
   tmp->elem = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+sizeof(struct nf_space_pair *));
   tmp->elem->npairs = 1;
   tmp->row_idx = 0;
-  tmp->col_idx = matrix_idx_get_r(r_out);
+  tmp->col_idx = matrix_idx_get_2idx(r_out->sw_idx, r_out->idx);
 
   // struct bdd_saved_arr *bdd_arr_out = bdd_save_arr(v_and);
   // bdd_printtable(v_and);
@@ -4828,16 +4840,137 @@ average_updating_r_ord(struct matrix_CSR *matrix_CSR){
   return 1;
 }
 
+// struct matrix_element {
+//   uint32_t npairs;
+//   BDD bdd_in;
+//   BDD bdd_out;
+//   struct nf_space_pair *nf_pairs[0];
+// };
+// struct PACKED nf_space {//匹配域和位置
+//   BDD mf;
+//   // uint32_t nw_src, dl_src, dl_dst, dl_dst, dl_vlan, dl_vlan_pcp, tp_src , dl_type, nw_tos
+//   struct links_of_rule *lks;
+// };
+
+// struct PACKED nf_space_pair {
+//   struct nf_space *in;
+//   struct nf_space *out;
+//   struct mask_uint16_t *mask;
+//   struct mask_uint16_t *rewrite;
+//   struct r_idxs *r_arr;
+// };
+void
+print_matrix_element_simple(struct matrix_element *elem) {
+  if(!elem){
+    printf("This element is NULL!!!\n");
+    return;
+  }
+  printf("all num %d; ", elem->npairs);
+  for (int i = 0; i < elem->npairs; i++){
+    printf("%d - %d; ", elem->nf_pairs[i]->in->mf, elem->nf_pairs[i]->out->mf);
+    // print_mask_uint16_t(elem->nf_pairs[i]->mask);
+    // print_mask_uint16_t(elem->nf_pairs[i]->rewrite);
+  }
+  printf("\n");
+}
+
+void
+print_matrix_CSR_simple(struct matrix_CSR *matrix_CSR){
+  if(!matrix_CSR){
+    printf("This matrix_CSR is NULL!!!\n");
+    return;
+  }
+  printf("matrix has %d rules\n", matrix_CSR->nrows);
+  for (int i = 0; i < matrix_CSR->nrows; i++) {
+    if (matrix_CSR->rows[i]) {
+      for (int j = 0; j < matrix_CSR->rows[i]->nidx_vs; j++) {
+        printf("elem %d = %d - %d :", i, matrix_CSR->rows[i]->idx, matrix_CSR->rows[i]->idx_vs[j]->idx);
+        print_matrix_element_simple(matrix_CSR->rows[i]->idx_vs[j]->elem);
+      }
+    }
+  }
+}
+
+void
+print_matrix_CSC_simple(struct matrix_CSC *matrix_CSC){
+  if(!matrix_CSC){
+    printf("This matrix_CSC is NULL!!!\n");
+    return;
+  }
+  printf("matrix has %d rules\n", matrix_CSC->ncols);
+  for (int i = 0; i < matrix_CSC->ncols; i++) {
+    if (matrix_CSC->cols[i]) {
+      for (int j = 0; j < matrix_CSC->cols[i]->nidx_vs; j++) {
+        printf("elem %d = %d - %d :", i, matrix_CSC->cols[i]->idx, matrix_CSC->cols[i]->idx_vs[j]->idx);
+        print_matrix_element_simple(matrix_CSC->cols[i]->idx_vs[j]->elem);
+      }
+    }
+  }
+}
+
+void
+print_vElemsNUM_of_Matrix_CSR(struct matrix_CSR *matrix_CSR) {
+  uint32_t sum = 0;
+  for (int i = 0; i < matrix_CSR->nrows; i++) {
+    if (matrix_CSR->rows[i]) {
+      sum += matrix_CSR->rows[i]->nidx_vs;
+    }
+  }
+  printf("This Matrix_CSR has %d valid elements\n", sum);
+}
+
+void
+print_npairsNUM_of_Matrix_CSR(struct matrix_CSR *matrix_CSR) {
+  uint32_t sum = 0;
+  for (int i = 0; i < matrix_CSR->nrows; i++) {
+    if (matrix_CSR->rows[i]) {
+      for (int j = 0; j < matrix_CSR->rows[i]->nidx_vs; j++) {
+        sum += matrix_CSR->rows[i]->idx_vs[j]->elem->npairs;
+      }
+    }
+  }
+  printf("This Matrix_CSR has %d valid npairs\n", sum);
+}
+
+void
+print_vElemsNUM_of_Matrix_CSC(struct matrix_CSC *matrix_CSC) {
+  uint32_t sum = 0;
+  for (int i = 0; i < matrix_CSC->ncols; i++) {
+    if (matrix_CSC->cols[i]) {
+      sum += matrix_CSC->cols[i]->nidx_vs;
+    }
+  }
+  printf("This Matrix_CSC has %d valid elements\n", sum);
+}
+
+void
+print_npairsNUM_of_Matrix_CSC(struct matrix_CSC *matrix_CSC) {
+  uint32_t sum = 0;
+  for (int i = 0; i < matrix_CSC->ncols; i++) {
+    if (matrix_CSC->cols[i]) {
+      for (int j = 0; j < matrix_CSC->cols[i]->nidx_vs; j++) {
+        sum += matrix_CSC->cols[i]->idx_vs[j]->elem->npairs;
+      }
+    }
+  }
+  printf("This Matrix_CSC has %d valid npairs\n", sum);
+}
+
+
 bool
 average_updating_r_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *orin_matrix_CSR) {
   struct timeval start,stop;
   // long long int average = 0;
-  for (int r_i = 0; r_i < 293; r_i++) {
-    struct bdd_rule *r = bdd_sws_arr[9]->rules[r_i];
-    
+  uint32_t sw_idx = 0;
+  for (int r_i = 0; r_i < 990; r_i++) {
+    struct bdd_rule *r = bdd_sws_arr[sw_idx]->rules[r_i];
+
+    uint32_t merged_idx = get_merged_matrix_idx_fr_2idx(sw_idx, r_i+1);
     // counter_init();
     struct matrix_CSR *delta_CSR = get_delta_merged_from_a_rule(orin_matrix_CSR, r, matrix_CSR->nrows);
-
+    // print_matrix_CSR_simple(delta_CSR);
+    // print_matrix_CSR_simple(matrix_CSR);
+    struct matrix_CSC *delta_CSC = gen_CSC_from_CSR(delta_CSR);
     if (!delta_CSR){
       printf("the %d - %d rule is NULL in orin_matrix_CSR!!\n", r->sw_idx, r->idx);
       continue;
@@ -4845,24 +4978,47 @@ average_updating_r_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *orin
     else
       printf("the updating merging of rule %d - %d start!!\n", r->sw_idx, r->idx);
 
-    struct matrix_CSR *delta_CSR_fw = delta_CSR;
-    struct matrix_CSC *delta_CSC_bk = gen_CSC_from_CSR(delta_CSR);
+    // struct matrix_CSR *delta_CSR_fw = delta_CSR;
+    // struct matrix_CSC *delta_CSC_bk = gen_CSC_from_CSR(delta_CSR);
     struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
+    // print_matrix_CSC_simple(delta_CSC_bk);
 
+    struct CS_matrix_idx_v_arr *delta_x =  delta_CSR->rows[merged_idx];
+    struct CS_matrix_idx_v_arr *delta_y =  delta_CSC->cols[merged_idx];
+
+
+    // print_matrix_CSC_simple(matrix_CSC);
+    // delta_CSR_fw = sparse_matrix_multiply_CSC(delta_CSR_fw, matrix_CSR, matrix_CSC);
+    // print_matrix_CSR_simple(delta_CSR_fw);
+    // delta_CSR_fw = delta_CSR;
+    // gettimeofday(&start,NULL);
     for (int i = 0; i < 5; i++) {
       gettimeofday(&start,NULL);
-      delta_CSR_fw = sparse_matrix_multiply_CSC(delta_CSR_fw, matrix_CSR, matrix_CSC);
+      delta_x = row_all_col_multiply_noloop(delta_x, matrix_CSC);
+      // delta_CSR_fw = sparse_matrix_multiply_CSC(delta_CSR_fw, matrix_CSR, matrix_CSC);
       gettimeofday(&stop,NULL);
-      if(!delta_CSR_fw)
-        printf("NULL ");
+      // if(!delta_CSR_fw)
+      //   printf("NULL ");
+      // else{
+      //   print_vElemsNUM_of_Matrix_CSR(delta_CSR_fw);
+      //   print_npairsNUM_of_Matrix_CSR(delta_CSR_fw);
+      // }
       printf("fw: %ld us; ", diff(&stop, &start));
       gettimeofday(&start,NULL);
-      delta_CSC_bk = sparse_matrix_multiply_CSC_allrowcol(matrix_CSR, delta_CSC_bk);
+      delta_y = all_row_col_multiply_noloop(matrix_CSR, delta_y);
+      // delta_CSC_bk = sparse_matrix_multiply_CSC_allrowcol(matrix_CSR, delta_CSC_bk);
       gettimeofday(&stop,NULL);
-      if(!delta_CSC_bk)
-        printf("NULL ");
-      printf("bk: %ld us; ", diff(&stop, &start));    
+      // if(!delta_CSC_bk)
+      //   printf("NULL ");
+      // else{
+      //   print_vElemsNUM_of_Matrix_CSC(delta_CSC_bk);
+      //   print_npairsNUM_of_Matrix_CSC(delta_CSC_bk); 
+      // }
+      printf("bk: %ld us; ", diff(&stop, &start)); 
+        
     }
+    // gettimeofday(&stop,NULL);
+    // printf("bk: %ld us; ", diff(&stop, &start)); 
     printf("\n");
     // print_counter();
     // printf("--------------------------------------\n");
@@ -4937,53 +5093,6 @@ correct_verifination(struct matrix_CSR *matrix_CSR) {
 }
 
 
-void
-print_vElemsNUM_of_Matrix_CSR(struct matrix_CSR *matrix_CSR) {
-  uint32_t sum = 0;
-  for (int i = 0; i < matrix_CSR->nrows; i++) {
-    if (matrix_CSR->rows[i]) {
-      sum += matrix_CSR->rows[i]->nidx_vs;
-    }
-  }
-  printf("This Matrix_CSR has %d valid elements\n", sum);
-}
-
-void
-print_npairsNUM_of_Matrix_CSR(struct matrix_CSR *matrix_CSR) {
-  uint32_t sum = 0;
-  for (int i = 0; i < matrix_CSR->nrows; i++) {
-    if (matrix_CSR->rows[i]) {
-      for (int j = 0; j < matrix_CSR->rows[i]->nidx_vs; j++) {
-        sum += matrix_CSR->rows[i]->idx_vs[j]->elem->npairs;
-      }
-    }
-  }
-  printf("This Matrix_CSR has %d valid npairs\n", sum);
-}
-
-void
-print_vElemsNUM_of_Matrix_CSC(struct matrix_CSC *matrix_CSC) {
-  uint32_t sum = 0;
-  for (int i = 0; i < matrix_CSC->ncols; i++) {
-    if (matrix_CSC->cols[i]) {
-      sum += matrix_CSC->cols[i]->nidx_vs;
-    }
-  }
-  printf("This Matrix_CSC has %d valid elements\n", sum);
-}
-
-void
-print_npairsNUM_of_Matrix_CSC(struct matrix_CSC *matrix_CSC) {
-  uint32_t sum = 0;
-  for (int i = 0; i < matrix_CSC->ncols; i++) {
-    if (matrix_CSC->cols[i]) {
-      for (int j = 0; j < matrix_CSC->cols[i]->nidx_vs; j++) {
-        sum += matrix_CSC->cols[i]->idx_vs[j]->elem->npairs;
-      }
-    }
-  }
-  printf("This Matrix_CSC has %d valid npairs\n", sum);
-}
 
 void
 test_someport_forallsquare(struct matrix_CSR *matrix_CSR){
