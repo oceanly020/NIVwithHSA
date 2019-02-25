@@ -3428,6 +3428,15 @@ gen_merged_CSR(struct matrix_CSR *matrix) {
 /*各个元素的连通*/
 /*------------------------------------------------*/
 
+bool
+issame_nf_space_pair_action(struct nf_space_pair *ns1, struct nf_space_pair *ns2) {
+  if(!ns1 || !ns2)
+    return false;
+  if (is_mask_uint16_t_same(ns1->mask, ns2->mask) && is_mask_uint16_t_same(ns1->rewrite, ns2->rewrite))
+    return true;
+  return false;
+}
+
 struct nf_space_pair *
 nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
   // printf("starting nf_space_connect\n");
@@ -3508,8 +3517,21 @@ nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
       bdd_addref(pair_tmp->out->mf);
     }
     else{
-      pair_tmp->out->mf = bdd_rw_BDD(insc, b->mask, b->rewrite);
-      bdd_addref(pair_tmp->out->mf);
+      // if(a->mask){
+      //   if(issame_nf_space_pair_action(a,pair_tmp)){
+      //     pair_tmp->out->mf = insc;
+      //     bdd_addref(pair_tmp->out->mf);
+      //   }
+      //   else{
+      //     pair_tmp->out->mf = bdd_rw_BDD(insc, b->mask, b->rewrite);
+      //     bdd_addref(pair_tmp->out->mf);
+      //   }
+      // }
+      // else{
+        pair_tmp->out->mf = bdd_rw_BDD(insc, b->mask, b->rewrite);
+        bdd_addref(pair_tmp->out->mf);
+      // }
+        
     }
     if (!(a->mask)){
       // gettimeofday(&startin,NULL);
@@ -3667,14 +3689,6 @@ nf_space_connect_backup(struct nf_space_pair *a, struct nf_space_pair *b) {
   return pair_tmp;
 }
 
-bool
-issame_nf_space_pair_action(struct nf_space_pair *ns1, struct nf_space_pair *ns2) {
-  if(!ns1 || !ns2)
-    return false;
-  if (is_mask_uint16_t_same(ns1->mask, ns2->mask) && is_mask_uint16_t_same(ns1->rewrite, ns2->rewrite))
-    return true;
-  return false;
-}
 
 struct matrix_element * //a*b,a作用b，不可交换
 elem_connect(struct matrix_element *a, struct matrix_element *b) { 
@@ -4960,7 +4974,7 @@ average_updating_r_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *orin
   struct timeval start,stop;
   // long long int average = 0;
   // uint32_t sw_idx = 6;
-  for (int sw_idx = 6; sw_idx < 7; sw_idx++){
+  for (int sw_idx = 8; sw_idx < 9; sw_idx++){
  
     for (int r_i = 0; r_i < bdd_sws_arr[sw_idx]->nrules; r_i++) {
       struct bdd_rule *r = bdd_sws_arr[sw_idx]->rules[r_i];
