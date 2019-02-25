@@ -4961,8 +4961,8 @@ bool
 average_updating_r_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *orin_matrix_CSR) {
   struct timeval start,stop;
   // long long int average = 0;
-  uint32_t sw_idx = 1;
-  for (int r_i = 0; r_i < 891; r_i++) {
+  uint32_t sw_idx = 2;
+  for (int r_i = 0; r_i < 378; r_i++) {
     struct bdd_rule *r = bdd_sws_arr[sw_idx]->rules[r_i];
 
     uint32_t merged_idx = get_merged_matrix_idx_fr_2idx(sw_idx, r_i+1);
