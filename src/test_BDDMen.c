@@ -963,26 +963,14 @@ main (int argc, char **argv)
   // matrix_CSR_old = gen_sparse_matrix();
   bdd_gbc();
   printf("--------------------------------------\n");
-  // test_someport_forallsquare_merged(matrix_CSR, matrix_CSR_old);
-  data_unload();
-  // uint32_t maidx = 0;
-  // for (int i = 0; i < matrix_CSR->nrows; i++){
-  //   if (matrix_CSR->rows[i])
-  //   {
-  //     maidx = i;
-  //     break;
-  //   }
-  // }
-  // for (int i = 0; i < matrix_CSR->rows[maidx]->nidx_vs; i++){
-  //   printf("%d\n", matrix_CSR->rows[maidx]->idx_vs[i]->idx);
-  //   print_matrix_element(matrix_CSR->rows[maidx]->idx_vs[i]->elem);
-  // }
 
-  // for (int i = 0; i < matrix_CSR_old->rows[16]->nidx_vs; i++){
-  //   printf("%d\n", matrix_CSR_old->rows[16]->idx_vs[i]->idx);
-  //   print_matrix_element(matrix_CSR_old->rows[16]->idx_vs[i]->elem);
-  // }
-  average_updating_r_merged(matrix_CSR, matrix_CSR_old);
+  
+  test_someport_forall_merged(matrix_CSR, matrix_CSR_old);
+  data_unload();
+
+
+  /* test updating rules */
+  // average_updating_r_merged(matrix_CSR, matrix_CSR_old);
   // average_updating_r_ord(matrix_CSR_old);
 
 
@@ -1027,10 +1015,6 @@ main (int argc, char **argv)
 
 
 /*================================矩阵 对矩阵的计算======================================*/
-
-  // average_updating_r(matrix_CSR, matrix_CSR_old);
-  // printf("--------------------------------------\n");
-  // data_unload();
 
 
   // gettimeofday(&start,NULL);
