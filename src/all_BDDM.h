@@ -3077,9 +3077,7 @@ gen_Tri_arr_bdd(void) {
           }
 
           lout_arrs += 2;
-          // free(r_out_mf);
-          
-          
+          // free(r_out_mf);  
         }
         lin_arrs += 2;
         // free(r_in_mf);
@@ -5275,10 +5273,10 @@ void
 test_someport_forall_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *orin_matrix_CSR){
   // struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
 
-  uint32_t num = 1;
+  uint32_t num = 9;
   struct timeval start,stop;
-  uint32_t port[16] = {100021,200010,300003,400002,500003,600002,700003,800002,900003,1000003,1100003,1200002,1300002,1400002,1500004,1600003};
-
+  // uint32_t port[16] = {100021,200010,300003,400002,500003,600002,700003,800002,900003,1000003,1100003,1200002,1300002,1400002,1500004,1600003};
+  uint32_t port[9] = {100007,200008,300003,400002,500003,600002,700003,800002,900003};
   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+num*sizeof(struct CS_matrix_idx_v_arr *));
   tmp->nrows = num;
   for (int i = 0; i < num; i++) {
