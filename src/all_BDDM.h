@@ -5485,7 +5485,7 @@ gen_sparse_matrix_row_fr_inport_lk(uint32_t inport, struct matrix_CSR *matrix_CS
   uint32_t rule_nums_in = 0;
   struct link_to_rule *lin_r = get_link_rules(link_in_rule_file, &rule_nums_in, links->arrs[0]);
 
-  if (lout_r){ 
+  if (lout_r&&lin_r){ 
     uint32_t *lin_arrs = (uint32_t *)(link_in_rule_data_arrs + 2*(lin_r->rule_nums - rule_nums_in));
 
     for (uint32_t i_in = 0; i_in < rule_nums_in; i_in++){
