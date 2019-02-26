@@ -5551,39 +5551,39 @@ average_updating_link_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *o
     else
       printf("the %d : ", port[link_idx]);
 
-    // struct matrix_CSR *delta_CSR_fw = delta_CSR;
-    // struct matrix_CSC *delta_CSC_bk = gen_CSC_from_CSR(delta_CSR);
-    // struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
-    // // print_matrix_CSC_simple(delta_CSC_bk);
+    struct matrix_CSR *delta_CSR_fw = delta_CSR;
+    struct matrix_CSC *delta_CSC_bk = gen_CSC_from_CSR(delta_CSR);
+    struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
+    // print_matrix_CSC_simple(delta_CSC_bk);
 
-    // for (int i = 0; i < 5; i++) {
-    //   gettimeofday(&start,NULL);
-    //   delta_CSR_fw = sparse_matrix_multiply_CSC(delta_CSR_fw, matrix_CSR, matrix_CSC);
-    //   gettimeofday(&stop,NULL);
-    //   // if(!delta_CSR_fw)
-    //   //   printf("NULL ");
-    //   // else{
-    //   //   print_vElemsNUM_of_Matrix_CSR(delta_CSR_fw);
-    //   //   print_npairsNUM_of_Matrix_CSR(delta_CSR_fw);
-    //   // }
-    //   printf("%ld ; ", diff(&stop, &start));
-    //   gettimeofday(&start,NULL);
-    //   delta_CSC_bk = sparse_matrix_multiply_CSC_allrowcol(matrix_CSR, delta_CSC_bk);
-    //   gettimeofday(&stop,NULL);
-    //   // if(!delta_CSC_bk)
-    //   //   printf("NULL ");
-    //   // else{
-    //   //   print_vElemsNUM_of_Matrix_CSC(delta_CSC_bk);
-    //   //   print_npairsNUM_of_Matrix_CSC(delta_CSC_bk); 
-    //   // }
-    //   printf("%ld ; ", diff(&stop, &start)); 
+    for (int i = 0; i < 5; i++) {
+      gettimeofday(&start,NULL);
+      delta_CSR_fw = sparse_matrix_multiply_CSC(delta_CSR_fw, matrix_CSR, matrix_CSC);
+      gettimeofday(&stop,NULL);
+      // if(!delta_CSR_fw)
+      //   printf("NULL ");
+      // else{
+      //   print_vElemsNUM_of_Matrix_CSR(delta_CSR_fw);
+      //   print_npairsNUM_of_Matrix_CSR(delta_CSR_fw);
+      // }
+      printf("%ld ; ", diff(&stop, &start));
+      gettimeofday(&start,NULL);
+      delta_CSC_bk = sparse_matrix_multiply_CSC_allrowcol(matrix_CSR, delta_CSC_bk);
+      gettimeofday(&stop,NULL);
+      // if(!delta_CSC_bk)
+      //   printf("NULL ");
+      // else{
+      //   print_vElemsNUM_of_Matrix_CSC(delta_CSC_bk);
+      //   print_npairsNUM_of_Matrix_CSC(delta_CSC_bk); 
+      // }
+      printf("%ld ; ", diff(&stop, &start)); 
         
-    // }
-    //   // gettimeofday(&stop,NULL);
-    //   // printf("bk: %ld us; ", diff(&stop, &start)); 
-    // printf("\n");
-    //   // print_counter();
-    //   // printf("--------------------------------------\n");
+    }
+      // gettimeofday(&stop,NULL);
+      // printf("bk: %ld us; ", diff(&stop, &start)); 
+    printf("\n");
+      // print_counter();
+      // printf("--------------------------------------\n");
   }
 
   printf("--------------------------------------\n");
