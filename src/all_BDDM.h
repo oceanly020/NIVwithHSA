@@ -25,8 +25,8 @@
 // #define MF_LEN 8 //128位bit， 8×16
 // #define MF_LEN 2 //32位bit standford
 #define MF_LEN 3 //48位bit i2
-// #define SW_NUM 9
-#define SW_NUM 16
+#define SW_NUM 9
+// #define SW_NUM 16
 
 #define NW_DST_H 0
 #define NW_DST_L 1
@@ -5542,8 +5542,6 @@ average_updating_link_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *o
   for (int link_idx = 0; link_idx < num; link_idx++){
     struct matrix_CSR *delta_CSR = gen_sparse_matrix_row_fr_inport_lk(port[link_idx],orin_matrix_CSR);
     delta_CSR = gen_merged_CSR(delta_CSR);
-    struct matrix_CSC *delta_CSC = gen_CSC_from_CSR(delta_CSR);
-
     if (!delta_CSR){
         // printf("the %d - %d rule is NULL in orin_matrix_CSR!!\n", r->sw_idx, r->idx);
         printf("the %d : 0; 0; 0; 0; 0; 0; 0; 0; 0; 0;\n", port[link_idx]);
