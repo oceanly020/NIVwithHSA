@@ -15,8 +15,8 @@ main (int argc, char **argv)
 	// char *s = "1000000000001100000000000001000x";
 	// parse_dir ("data", "tfs", "stanford_32");
 	// parse_dir ("data", "tfs", "stanford");
-	parse_dir ("data", "tfs", "stanford_whole");
-	// parse_dir ("data", "tfs", "i2");
+	// parse_dir ("data", "tfs", "stanford_whole");
+	parse_dir ("data", "tfs", "i2");
 
 	// generate_connect_link ("data", "tfs", "stanford_whole");
 
