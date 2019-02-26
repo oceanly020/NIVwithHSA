@@ -844,8 +844,8 @@ main (int argc, char **argv)
   // 加载net数据
   // char *net = "stanford";
   // char *net = "stanford_32";
-  // char *net = "stanford_whole";
-  char *net = "i2";
+  char *net = "stanford_whole";
+  // char *net = "i2";
   // bool one_step = false;
   load (net);
   // struct sw *sw0 = sw_get(0);
@@ -928,13 +928,13 @@ main (int argc, char **argv)
   bdd_gbc();
   printf("--------------------------------------\n");
 
-
+  average_updating_link_merged(matrix_CSR, matrix_CSR_old);
   // test_someport_forall_merged(matrix_CSR, matrix_CSR_old);
   data_unload();
 
 
   /* test updating rules */
-  average_updating_r_merged(matrix_CSR, matrix_CSR_old);
+  // average_updating_r_merged(matrix_CSR, matrix_CSR_old);
   // average_updating_r_ord(matrix_CSR_old);
 
 

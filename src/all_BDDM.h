@@ -21,12 +21,12 @@
 
 //结构体或变量定义
 //自定义
-#define STANDFORD_W 0
-// #define MF_LEN 8 //128位bit， 8×16
+#define STANDFORD_W 1
+#define MF_LEN 8 //128位bit， 8×16
 // #define MF_LEN 2 //32位bit standford
-#define MF_LEN 3 //48位bit i2
-#define SW_NUM 9
-// #define SW_NUM 16
+// #define MF_LEN 3 //48位bit i2
+// #define SW_NUM 9
+#define SW_NUM 16
 
 #define NW_DST_H 0
 #define NW_DST_L 1
@@ -973,7 +973,7 @@ get_outrules_idx_from_inport (const uint32_t inport) {
   uint32_t rule_nums_out = 0;
   printf("%d\n", link_idx->arrs[0]);
   for (uint32_t i = 0; i < link_idx->ns; i++) {
-    struct link_to_rule *lout_r = get_inoutlink_rules(link_out_rule_file, &rule_nums_out, link_idx->arrs[i]);
+    struct link_to_rule *lout_r = get_link_rules(link_out_rule_file, &rule_nums_out, link_idx->arrs[i]);
     printf("idx: %d; \n", lout_r->link_idx);
     if (lout_r){
       printf("idx: %d; \n", lout_r->link_idx);
@@ -2878,7 +2878,7 @@ gen_matrix_CSR_from_Tris(struct Tri_arr *Tri_arr) {
   if (Tri_arr->nTris==0){
     return NULL;
   }
-  printf("matrix_CSR\n");
+  // printf("matrix_CSR\n");
   // printf("there is wrong: %d - %d\n", data_allr_nums, Tri_arr->nTris);
   qsort(Tri_arr->arr, Tri_arr->nTris,sizeof (struct matrix_Tri_express *), cmp_matrix_Tri_express);
   
@@ -2887,7 +2887,7 @@ gen_matrix_CSR_from_Tris(struct Tri_arr *Tri_arr) {
   for (int i = 0; i < data_allr_nums; i++){
     tmp->rows[i] = NULL;
   }
-  printf("matrix_CSR\n");
+  // printf("matrix_CSR\n");
   // printf("matrix_CSR\n");
   // struct matrix_Tri_express *Tri_arr_tmp[Tri_arr->nTris];
   struct matrix_Tri_express **Tri_arr_tmp = xcalloc(Tri_arr->nTris,sizeof(struct matrix_Tri_express *));
@@ -2958,7 +2958,7 @@ gen_matrix_CSR_from_Tris(struct Tri_arr *Tri_arr) {
     free(Tri_arr_tmp[i]);
   }
   free(Tri_arr_tmp);
-  printf("all num = %d\n", count);
+  // printf("all num = %d\n", count);
   return tmp;
 }
 
@@ -4598,7 +4598,7 @@ gen_Tri_arr_bdd_fr_port(uint32_t inport) {
 
   if (links) {
     // printf("gen_Tri_arr_bdd_fr_port\n");
-    struct link_to_rule *lout_r = get_inoutlink_rules(link_out_rule_file, &rule_nums_out, links->arrs[0]);
+    struct link_to_rule *lout_r = get_link_rules(link_out_rule_file, &rule_nums_out, links->arrs[0]);
      if (lout_r){
       uint32_t *lout_arrs = (uint32_t *)(link_out_rule_data_arrs + 2*(lout_r->rule_nums - rule_nums_out));
 
@@ -5382,7 +5382,7 @@ test_someport_forall_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *or
   struct matrix_CSR *port_CSR7 = sparse_matrix_multiply_CSC_2diff(port_CSR6, matrix_CSR, matrix_CSC);
   gettimeofday(&stop,NULL);
   long long int T_port_CSR7 = diff(&stop, &start);
-  printf("port_CSR multi matrix 7t: %lld us", T_port_CSR6);
+  printf("port_CSR multi matrix 7t: %lld us", T_port_CSR7);
   // print_vElemsNUM_of_Matrix_CSR(port_CSR7);
   // print_npairsNUM_of_Matrix_CSR(port_CSR7);
   // print_counter();
@@ -5464,6 +5464,127 @@ test_someport_forall_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *or
   // counter_init();
   free_matrix_CSR(port_CSR12);
   bdd_gbc();
+  free_matrix_CSR(port_CSR13);
   printf("/*=====================================================*/\n");
 }
 
+struct matrix_CSR *
+gen_sparse_matrix_row_fr_inport_lk(uint32_t inport, struct matrix_CSR *matrix_CSR){
+  // uint32_t max_CSR = matrix_CSR->nrows;
+  // struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
+  // struct matrix_CSR *tmp_CSR = struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+(matrix_CSR->nrows)*sizeof(struct CS_matrix_idx_v_arr *));
+  uint32_t max_CSR = MAX_VAL_RATE*data_allr_nums*data_allr_nums;
+  // struct matrix_Tri_express *Tri_arr[max_CSR];
+  struct matrix_Tri_express **Tri_arr = xmalloc(max_CSR*sizeof(struct matrix_Tri_express *));
+  uint32_t nTris = 0;
+  
+
+  struct u32_arrs *links = get_link_idx_from_inport(inport);
+  uint32_t rule_nums_out = 0;
+  struct link_to_rule *lout_r = get_link_rules(link_out_rule_file, &rule_nums_out, links->arrs[0]);
+  uint32_t rule_nums_in = 0;
+  struct link_to_rule *lin_r = get_link_rules(link_in_rule_file, &rule_nums_in, links->arrs[0]);
+
+  if (lout_r){ 
+    uint32_t *lin_arrs = (uint32_t *)(link_in_rule_data_arrs + 2*(lin_r->rule_nums - rule_nums_in));
+
+    for (uint32_t i_in = 0; i_in < rule_nums_in; i_in++){
+      struct bdd_rule *r_in = bdd_sws_arr[*(uint32_t *)lin_arrs]->rules[*(uint32_t *)(lin_arrs+1) - 1];
+      BDD v_in, v_out;
+      v_in = r_in->mf_out;
+      uint32_t *lout_arrs = (uint32_t *)(link_out_rule_data_arrs + 2*(lout_r->rule_nums - rule_nums_out));
+      for (uint32_t i_out = 0; i_out < rule_nums_out; i_out++) {
+        struct bdd_rule *r_out = bdd_sws_arr[*(uint32_t *)lout_arrs]->rules[*(uint32_t *)(lout_arrs+1) - 1];
+        v_out = r_out->mf_in;
+        BDD v_and, v_diff;
+        v_and = bdd_apply(v_in, v_out, bddop_and);
+        if (v_and){
+          Tri_arr[nTris] = insc_to_Tri_express_rlimit(r_in, r_out, v_and);
+          nTris++;
+          v_diff = bdd_apply(v_in, v_and, bddop_diff);
+        }
+        else {
+          v_diff = v_in;
+        } 
+        v_in = v_diff;
+        if (!v_in){
+          break;
+        }
+
+        lout_arrs += 2;
+      }
+      lin_arrs += 2; 
+    }  
+  }
+
+  // if(!nTris)
+  //   return NULL;
+  struct Tri_arr *tmp = xmalloc(sizeof(uint32_t)+nTris*sizeof(struct matrix_Tri_express *));
+  tmp->nTris = nTris;
+  // printf("nTris %d\n", nTris);
+  for (uint32_t i = 0; i < nTris; i++){
+    tmp->arr[i] = Tri_arr[i];
+  }
+  struct matrix_CSR *csr_tmp = gen_matrix_CSR_from_Tris(tmp);
+  free(Tri_arr);
+  return csr_tmp;
+}
+
+
+bool
+average_updating_link_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *orin_matrix_CSR) {
+  struct timeval start,stop;
+  uint32_t num = 58;
+  uint32_t port[58] = {700006,100025,1000002,400001,100003,1600009,1100006,300006,100001,1200001,800001,600001,900007,100012,1300008,500010,100024,1400001,1500006,100015,200012,100023,1500036,200010,700001,200005,1000007,400006,200009,1100001,1600008,300001,200004,1200007,800006,200013,600008,900001,1300001,500001,200019,1400008,400007,300007,600010,500012,800007,700007,1000008,900008,1200008,1100008,1400010,1300010,1600006,1500007,1600005,1500005};
+  // tmp->nrows = num;
+  for (int link_idx = 0; link_idx < num; link_idx++){
+    struct matrix_CSR *delta_CSR = gen_sparse_matrix_row_fr_inport_lk(port[link_idx],orin_matrix_CSR);
+    delta_CSR = gen_merged_CSR(delta_CSR);
+    struct matrix_CSC *delta_CSC = gen_CSC_from_CSR(delta_CSR);
+
+    if (!delta_CSR){
+        // printf("the %d - %d rule is NULL in orin_matrix_CSR!!\n", r->sw_idx, r->idx);
+        printf("the %d : 0; 0; 0; 0; 0; 0; 0; 0; 0; 0;\n", port[link_idx]);
+        continue;
+      }
+    else
+      printf("the %d : ", port[link_idx]);
+
+    struct matrix_CSR *delta_CSR_fw = delta_CSR;
+    struct matrix_CSC *delta_CSC_bk = gen_CSC_from_CSR(delta_CSR);
+    struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
+    // print_matrix_CSC_simple(delta_CSC_bk);
+
+    for (int i = 0; i < 5; i++) {
+      gettimeofday(&start,NULL);
+      delta_CSR_fw = sparse_matrix_multiply_CSC(delta_CSR_fw, matrix_CSR, matrix_CSC);
+      gettimeofday(&stop,NULL);
+      // if(!delta_CSR_fw)
+      //   printf("NULL ");
+      // else{
+      //   print_vElemsNUM_of_Matrix_CSR(delta_CSR_fw);
+      //   print_npairsNUM_of_Matrix_CSR(delta_CSR_fw);
+      // }
+      printf("%ld ; ", diff(&stop, &start));
+      gettimeofday(&start,NULL);
+      delta_CSC_bk = sparse_matrix_multiply_CSC_allrowcol(matrix_CSR, delta_CSC_bk);
+      gettimeofday(&stop,NULL);
+      // if(!delta_CSC_bk)
+      //   printf("NULL ");
+      // else{
+      //   print_vElemsNUM_of_Matrix_CSC(delta_CSC_bk);
+      //   print_npairsNUM_of_Matrix_CSC(delta_CSC_bk); 
+      // }
+      printf("%ld ; ", diff(&stop, &start)); 
+        
+    }
+      // gettimeofday(&stop,NULL);
+      // printf("bk: %ld us; ", diff(&stop, &start)); 
+    printf("\n");
+      // print_counter();
+      // printf("--------------------------------------\n");
+  }
+
+  printf("--------------------------------------\n");
+  return 1;
+}
