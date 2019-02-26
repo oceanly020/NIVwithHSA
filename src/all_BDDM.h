@@ -3403,6 +3403,8 @@ merge_matrix_idx_v_arr_newone(struct CS_matrix_idx_v_arr *row, uint32_t num) {
 
 struct matrix_CSR *
 gen_merged_CSR(struct matrix_CSR *matrix) {
+  if(!matrix)
+    return NULL;
   uint32_t all_merged_nrs = 0;
   for (int i = 0; i < SW_NUM; i++)
     all_merged_nrs += merged_arr[i]->nrules;
@@ -4594,9 +4596,9 @@ gen_Tri_arr_bdd_fr_port(uint32_t inport) {
   uint32_t nTris = 0;
   uint32_t rule_nums_out = 0;
   struct u32_arrs *links = get_link_idx_from_inport(inport);
-  print_u32_arrs(links);
+  // print_u32_arrs(links);
 
-  if (links) {
+  if (links->ns) {
     // printf("gen_Tri_arr_bdd_fr_port\n");
     struct link_to_rule *lout_r = get_link_rules(link_out_rule_file, &rule_nums_out, links->arrs[0]);
      if (lout_r){
@@ -5542,7 +5544,7 @@ average_updating_link_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *o
   // tmp->nrows = num;
   for (int link_idx = 0; link_idx < num; link_idx++){
     struct matrix_CSR *delta_CSR = gen_sparse_matrix_row_fr_inport_lk(port[link_idx],orin_matrix_CSR);
-    // delta_CSR = gen_merged_CSR(delta_CSR);
+    delta_CSR = gen_merged_CSR(delta_CSR);
     if (!delta_CSR){
         // printf("the %d - %d rule is NULL in orin_matrix_CSR!!\n", r->sw_idx, r->idx);
         printf("the %d : 0; 0; 0; 0; 0; 0; 0; 0; 0; 0;\n", port[link_idx]);
