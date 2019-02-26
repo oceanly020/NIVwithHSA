@@ -924,7 +924,7 @@ main (int argc, char **argv)
   printf("this matrix_CSR has %d rules\n", matrix_CSR->nrows);
   print_vElemsNUM_of_Matrix_CSR(matrix_CSR);
   print_npairsNUM_of_Matrix_CSR(matrix_CSR);
-  // matrix_CSR_old = gen_sparse_matrix();
+  matrix_CSR_old = gen_sparse_matrix();
   bdd_gbc();
   printf("--------------------------------------\n");
 

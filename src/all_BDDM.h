@@ -5480,43 +5480,44 @@ gen_sparse_matrix_row_fr_inport_lk(uint32_t inport, struct matrix_CSR *matrix_CS
   
 
   struct u32_arrs *links = get_link_idx_from_inport(inport);
-  uint32_t rule_nums_out = 0;
-  struct link_to_rule *lout_r = get_link_rules(link_out_rule_file, &rule_nums_out, links->arrs[0]);
-  uint32_t rule_nums_in = 0;
-  struct link_to_rule *lin_r = get_link_rules(link_in_rule_file, &rule_nums_in, links->arrs[0]);
+  if(links){
+    uint32_t rule_nums_out = 0;
+    struct link_to_rule *lout_r = get_link_rules(link_out_rule_file, &rule_nums_out, links->arrs[0]);
+    uint32_t rule_nums_in = 0;
+    struct link_to_rule *lin_r = get_link_rules(link_in_rule_file, &rule_nums_in, links->arrs[0]);
 
-  if (lout_r&&lin_r){ 
-    uint32_t *lin_arrs = (uint32_t *)(link_in_rule_data_arrs + 2*(lin_r->rule_nums - rule_nums_in));
+    if (lout_r&&lin_r){ 
+      uint32_t *lin_arrs = (uint32_t *)(link_in_rule_data_arrs + 2*(lin_r->rule_nums - rule_nums_in));
 
-    for (uint32_t i_in = 0; i_in < rule_nums_in; i_in++){
-      struct bdd_rule *r_in = bdd_sws_arr[*(uint32_t *)lin_arrs]->rules[*(uint32_t *)(lin_arrs+1) - 1];
-      BDD v_in, v_out;
-      v_in = r_in->mf_out;
-      uint32_t *lout_arrs = (uint32_t *)(link_out_rule_data_arrs + 2*(lout_r->rule_nums - rule_nums_out));
-      for (uint32_t i_out = 0; i_out < rule_nums_out; i_out++) {
-        struct bdd_rule *r_out = bdd_sws_arr[*(uint32_t *)lout_arrs]->rules[*(uint32_t *)(lout_arrs+1) - 1];
-        v_out = r_out->mf_in;
-        BDD v_and, v_diff;
-        v_and = bdd_apply(v_in, v_out, bddop_and);
-        if (v_and){
-          Tri_arr[nTris] = insc_to_Tri_express_rlimit(r_in, r_out, v_and);
-          nTris++;
-          v_diff = bdd_apply(v_in, v_and, bddop_diff);
+      for (uint32_t i_in = 0; i_in < rule_nums_in; i_in++){
+        struct bdd_rule *r_in = bdd_sws_arr[*(uint32_t *)lin_arrs]->rules[*(uint32_t *)(lin_arrs+1) - 1];
+        BDD v_in, v_out;
+        v_in = r_in->mf_out;
+        uint32_t *lout_arrs = (uint32_t *)(link_out_rule_data_arrs + 2*(lout_r->rule_nums - rule_nums_out));
+        for (uint32_t i_out = 0; i_out < rule_nums_out; i_out++) {
+          struct bdd_rule *r_out = bdd_sws_arr[*(uint32_t *)lout_arrs]->rules[*(uint32_t *)(lout_arrs+1) - 1];
+          v_out = r_out->mf_in;
+          BDD v_and, v_diff;
+          v_and = bdd_apply(v_in, v_out, bddop_and);
+          if (v_and){
+            Tri_arr[nTris] = insc_to_Tri_express_rlimit(r_in, r_out, v_and);
+            nTris++;
+            v_diff = bdd_apply(v_in, v_and, bddop_diff);
+          }
+          else {
+            v_diff = v_in;
+          } 
+          v_in = v_diff;
+          if (!v_in){
+            break;
+          }
+
+          lout_arrs += 2;
         }
-        else {
-          v_diff = v_in;
-        } 
-        v_in = v_diff;
-        if (!v_in){
-          break;
-        }
-
-        lout_arrs += 2;
-      }
-      lin_arrs += 2; 
-    }  
+        lin_arrs += 2; 
+      }  
+    }
   }
-
   // if(!nTris)
   //   return NULL;
   struct Tri_arr *tmp = xmalloc(sizeof(uint32_t)+nTris*sizeof(struct matrix_Tri_express *));
@@ -5541,7 +5542,7 @@ average_updating_link_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *o
   // tmp->nrows = num;
   for (int link_idx = 0; link_idx < num; link_idx++){
     struct matrix_CSR *delta_CSR = gen_sparse_matrix_row_fr_inport_lk(port[link_idx],orin_matrix_CSR);
-    delta_CSR = gen_merged_CSR(delta_CSR);
+    // delta_CSR = gen_merged_CSR(delta_CSR);
     if (!delta_CSR){
         // printf("the %d - %d rule is NULL in orin_matrix_CSR!!\n", r->sw_idx, r->idx);
         printf("the %d : 0; 0; 0; 0; 0; 0; 0; 0; 0; 0;\n", port[link_idx]);
@@ -5550,39 +5551,39 @@ average_updating_link_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *o
     else
       printf("the %d : ", port[link_idx]);
 
-    struct matrix_CSR *delta_CSR_fw = delta_CSR;
-    struct matrix_CSC *delta_CSC_bk = gen_CSC_from_CSR(delta_CSR);
-    struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
-    // print_matrix_CSC_simple(delta_CSC_bk);
+    // struct matrix_CSR *delta_CSR_fw = delta_CSR;
+    // struct matrix_CSC *delta_CSC_bk = gen_CSC_from_CSR(delta_CSR);
+    // struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
+    // // print_matrix_CSC_simple(delta_CSC_bk);
 
-    for (int i = 0; i < 5; i++) {
-      gettimeofday(&start,NULL);
-      delta_CSR_fw = sparse_matrix_multiply_CSC(delta_CSR_fw, matrix_CSR, matrix_CSC);
-      gettimeofday(&stop,NULL);
-      // if(!delta_CSR_fw)
-      //   printf("NULL ");
-      // else{
-      //   print_vElemsNUM_of_Matrix_CSR(delta_CSR_fw);
-      //   print_npairsNUM_of_Matrix_CSR(delta_CSR_fw);
-      // }
-      printf("%ld ; ", diff(&stop, &start));
-      gettimeofday(&start,NULL);
-      delta_CSC_bk = sparse_matrix_multiply_CSC_allrowcol(matrix_CSR, delta_CSC_bk);
-      gettimeofday(&stop,NULL);
-      // if(!delta_CSC_bk)
-      //   printf("NULL ");
-      // else{
-      //   print_vElemsNUM_of_Matrix_CSC(delta_CSC_bk);
-      //   print_npairsNUM_of_Matrix_CSC(delta_CSC_bk); 
-      // }
-      printf("%ld ; ", diff(&stop, &start)); 
+    // for (int i = 0; i < 5; i++) {
+    //   gettimeofday(&start,NULL);
+    //   delta_CSR_fw = sparse_matrix_multiply_CSC(delta_CSR_fw, matrix_CSR, matrix_CSC);
+    //   gettimeofday(&stop,NULL);
+    //   // if(!delta_CSR_fw)
+    //   //   printf("NULL ");
+    //   // else{
+    //   //   print_vElemsNUM_of_Matrix_CSR(delta_CSR_fw);
+    //   //   print_npairsNUM_of_Matrix_CSR(delta_CSR_fw);
+    //   // }
+    //   printf("%ld ; ", diff(&stop, &start));
+    //   gettimeofday(&start,NULL);
+    //   delta_CSC_bk = sparse_matrix_multiply_CSC_allrowcol(matrix_CSR, delta_CSC_bk);
+    //   gettimeofday(&stop,NULL);
+    //   // if(!delta_CSC_bk)
+    //   //   printf("NULL ");
+    //   // else{
+    //   //   print_vElemsNUM_of_Matrix_CSC(delta_CSC_bk);
+    //   //   print_npairsNUM_of_Matrix_CSC(delta_CSC_bk); 
+    //   // }
+    //   printf("%ld ; ", diff(&stop, &start)); 
         
-    }
-      // gettimeofday(&stop,NULL);
-      // printf("bk: %ld us; ", diff(&stop, &start)); 
-    printf("\n");
-      // print_counter();
-      // printf("--------------------------------------\n");
+    // }
+    //   // gettimeofday(&stop,NULL);
+    //   // printf("bk: %ld us; ", diff(&stop, &start)); 
+    // printf("\n");
+    //   // print_counter();
+    //   // printf("--------------------------------------\n");
   }
 
   printf("--------------------------------------\n");
