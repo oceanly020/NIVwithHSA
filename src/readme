@@ -3,12 +3,25 @@ sudo apt-get install g++
 sudo apt-get install python
 sudo apt-get install make
 
-
-
-gcc -std=c99 -Wall -lpthread test_BDDMen.c -fexec-charset=gbk -lm -o test_BDDMen
-./test_BDDMen
+//generate the data base of diff net
 gcc -std=c99 -Wall -lpthread test_base.c -fexec-charset=gbk -lm -o test_base
 ./test_base
+
+//test_BDDMen
+gcc -std=c99 -Wall -lpthread test_BDDMen.c -fexec-charset=gbk -lm -o test_BDDMen
+./test_BDDMen
+
+//test_MTBDDMen
+gcc -std=c99 -Wall -lpthread test_MTBDDMen.c -fexec-charset=gbk -lm -o test_MTBDDMen
+./test_MTBDDMen
+
+//test_MTBDDen
+gcc -std=c99 -Wall -lpthread test_MTBDDen.c -fexec-charset=gbk -lm -o test_MTBDDen
+./test_MTBDDen
+
+
+
+
 
 git clone https://github.com/oceanly020/NIVwithHSA.git
 git clone https://github.com/oceanly020/hassel-public.git

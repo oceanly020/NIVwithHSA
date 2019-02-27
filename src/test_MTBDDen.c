@@ -165,10 +165,10 @@ main (int argc, char **argv)
   // test();
   
   // 加载net数据
-  // char *net = "stanford";
+  char *net = "stanford";
   // char *net = "stanford_32";
   // char *net = "stanford_whole";
-  char *net = "i2";
+  // char *net = "i2";
   // bool one_step = false;
   load (net);
   // struct sw *sw0 = sw_get(0);

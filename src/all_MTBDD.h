@@ -22,10 +22,10 @@
 //结构体或变量定义
 //自定义
 // #define FIELD_LEN 2 //48位bit i2
-// #define FIELD_LEN 1 //32位bit
-#define FIELD_LEN 7 //128位bit
-#define MF_LEN 8 //128位bit， 8×16 standford whole
-// #define MF_LEN 2 //32位bit standf ord simple
+#define FIELD_LEN 1 //32位bit
+// #define FIELD_LEN 7 //128位bit
+// #define MF_LEN 8 //128位bit， 8×16 standford whole
+#define MF_LEN 2 //32位bit standf ord simple
 // #define MF_LEN 3 //48位bit i2
 #define NW_DST_H 0
 #define NW_DST_L 1
