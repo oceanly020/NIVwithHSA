@@ -23,10 +23,10 @@
 //自定义
 #define STANDFORD_W 0
 // #define MF_LEN 8 //128位bit， 8×16
-// #define MF_LEN 2 //32位bit standford
-#define MF_LEN 3 //48位bit i2
-#define SW_NUM 9
-// #define SW_NUM 16
+#define MF_LEN 2 //32位bit standford
+// #define MF_LEN 3 //48位bit i2
+// #define SW_NUM 9
+#define SW_NUM 16
 
 #define NW_DST_H 0
 #define NW_DST_L 1
@@ -4976,7 +4976,7 @@ average_updating_r_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *orin
   struct timeval start,stop;
   // long long int average = 0;
   // uint32_t sw_idx = 6;
-  for (int sw_idx = 8; sw_idx < 9; sw_idx++){
+  for (int sw_idx = 0; sw_idx < 16; sw_idx++){
  
     for (int r_i = 0; r_i < bdd_sws_arr[sw_idx]->nrules; r_i++) {
       struct bdd_rule *r = bdd_sws_arr[sw_idx]->rules[r_i];
