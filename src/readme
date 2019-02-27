@@ -1,4 +1,14 @@
+sudo apt-get install gcc
+sudo apt-get install g++
+sudo apt-get install python
+sudo apt-get install make
+
+
+
 gcc -std=c99 -Wall -lpthread test_BDDMen.c -fexec-charset=gbk -lm -o test_BDDMen
 ./test_BDDMen
 gcc -std=c99 -Wall -lpthread test_base.c -fexec-charset=gbk -lm -o test_base
 ./test_base
+
+git clone https://github.com/oceanly020/NIVwithHSA.git
+git clone https://github.com/oceanly020/hassel-public.git

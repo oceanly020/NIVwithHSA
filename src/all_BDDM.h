@@ -23,10 +23,10 @@
 //自定义
 #define STANDFORD_W 0
 // #define MF_LEN 8 //128位bit， 8×16
-#define MF_LEN 2 //32位bit standford
-// #define MF_LEN 3 //48位bit i2
-// #define SW_NUM 9
-#define SW_NUM 16
+// #define MF_LEN 2 //32位bit standford
+#define MF_LEN 3 //48位bit i2
+#define SW_NUM 9
+// #define SW_NUM 16
 
 #define NW_DST_H 0
 #define NW_DST_L 1
