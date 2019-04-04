@@ -4087,7 +4087,7 @@ greed_calc_arule_insc_sw(struct switch_rs *sw, uint32_t idx) {
       free(a);
     }
   }
-  printf("This rule insect %d rules\n", insc_counter);
+  printf("This rule %d insect %d rules\n", idx, insc_counter);
 }
 
 
@@ -4265,8 +4265,6 @@ trie_add_rules_for_sw_test_difflast1(struct trie_node *root, struct switch_rs *s
   printf("Build trie test\n");
   printf("Test the last one with idx %d: %lld us\n", sw->rules[order[sw->nrules - 1]]->idx, T_up_last1);
   printf("This rule insect %d rules\n", insc_r_count);
-
-
 }
 
 void
@@ -4297,10 +4295,10 @@ trie_add_rules_for_sw_test_all(struct trie_node *root, struct switch_rs *sw, uin
   printf("Build trie test\n");
   printf("Test the last one with idx %d: %lld us\n", sw->rules[order[sw->nrules - 1]]->idx, T_up_last1);
   printf("This rule insect %d rules\n", insc_r_count);
-
 }
 
 // switch_bddrs_to_mtbdd_test_difflast1
+
 
 
 struct trie_node *
@@ -4481,23 +4479,30 @@ switch_bddrs_getinscbdd_test_diff1(struct switch_bdd_rs *sw, uint32_t idx) {
 void
 switch_bddrs_getinscbdd_test_all(struct switch_bdd_rs *sw) {
   struct timeval start,stop;
-  
+  uint32_t arr[SW_NUM] = {29, 94, 23, 40, 34, 49, 26, 28, 68};
   BDD tmp = 0;
+  
+  // for (int i = arr[sw->sw_idx]; i < sw->nrules; i++) {
   for (int i = 0; i < sw->nrules; i++) {
-    gettimeofday(&start,NULL);
     BDD self_final = sw->rules[i]->mf_in;
-
-
+    // gettimeofday(&start,NULL);
+    // for (int j = arr[sw->sw_idx]; j < i; j++) {
     for (int j = 0; j < i; j++) {
+      gettimeofday(&start,NULL);
       self_final = bdd_apply(self_final, sw->rules[j]->mf_in, bddop_diff);
       if(!self_final)
         break;
+      
+      // BDD self_final = bdd_apply(self_final, sw->rules[j]->mf_in, bddop_and);
+      gettimeofday(&stop,NULL);
+      long long int T_for_add = diff(&stop, &start);   
+      printf("get diff the rule idx %d - %d - ifinsc %d: %lld us\n", i+1, j, self_final, T_for_add);
+
     }
-    gettimeofday(&stop,NULL);
-    long long int T_for_add = diff(&stop, &start);   
-    printf("get diff the rule idx %d: %lld us\n", i+1, T_for_add);
+    // gettimeofday(&stop,NULL);
+    // long long int T_for_add = diff(&stop, &start);   
+    // printf("get diff the rule idx %d: %lld us\n", i+1, T_for_add);
   }
-  
 }
 
 
@@ -4508,6 +4513,7 @@ switch_bddrs_AP_test_lastdiff1(struct switch_bdd_rs *sw, uint32_t idx) {
   BDD root = 0;
   uint32_t maxnum = 200000;
   uint32_t order[sw->nrules];
+  uint32_t arr[SW_NUM] = {29, 94, 23, 40, 34, 49, 26, 28, 68};
   // root = mtbdd_add_r(root, sw->rules[sw->nrules - 1]->mtbdd_in, 0);
   for (int i = 0; i < sw->nrules; i++)
     order[i] = i;
@@ -4520,7 +4526,7 @@ switch_bddrs_AP_test_lastdiff1(struct switch_bdd_rs *sw, uint32_t idx) {
   uint32_t AP_record_count = 1;
   uint32_t AP_tmp_count = 0;
   AP_record[0] = 1;
-  for (int i = 0; i < sw->nrules-1; i++) {
+  for (int i = arr[sw->sw_idx]; i < sw->nrules-1; i++) {
 
     
     AP_tmp_count = 0;
@@ -4668,16 +4674,78 @@ BDD
 switch_bddrs_to_mtbdd_test_difflast1(struct switch_bdd_rs *sw, uint32_t idx) {
   struct timeval start,stop;
   BDD root = 0;
-  uint32_t arr[SW_NUM] = {29, 94, 23, 40, 34, 49, 26, 28, 68};
+  // uint32_t arr[SW_NUM] = {29, 94, 23, 40, 34, 49, 26, 28, 68};
+  // uint32_t arr[SW_NUM] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
   uint32_t order[sw->nrules];
   // root = mtbdd_add_r(root, sw->rules[sw->nrules - 1]->mtbdd_in, 0);
-  for (int i = 0; i < sw->nrules; i++)
-    order[i] = i;
-  order[idx-1] = sw->nrules - 1;
-  order[sw->nrules - 1] = idx-1;
+  for (int i = 0; i < sw->nrules; i++){
+    // if (i<45)
+    //   order[i] = i+45;
+    // else if(i<90)
+    //   order[i] = i-45;
+    // else
+      order[i] = i;
+  }
+    
+  // order[idx-1] = sw->nrules - 1;
+  // order[sw->nrules - 1] = idx-1;
 
-  // for (int i = 0; i < sw->nrules-1; i++) {
-  for (int i = arr[sw->sw_idx]; i < sw->nrules-1; i++) {
+  for (int i = 0; i < sw->nrules-1; i++) {
+  // for (int i = arr[sw->sw_idx]; i < sw->nrules-1; i++) {
+    mtbddvaluevaluecount = 0;
+    gettimeofday(&start,NULL);
+    bdd_delref(root);
+    root = mtbdd_add_r(root, sw->rules[order[i]]->mtbdd_in, 0);
+    bdd_addref(root);
+    gettimeofday(&stop,NULL);
+    long long int T_for_add = diff(&stop, &start);
+    // if (i > 100 && i < 150) {
+    printf("Test the rule idx %d: %lld us\n", i+1, T_for_add);
+    // printf("the root has %d nodes\n", bdd_nodecount(root));
+    // printf("the real new node time is %d nodes\n", mtbddvaluevaluecount);
+    // }
+
+    // bdd_gbc();
+    // printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum()); 
+  }
+  // printf("the root has %d nodes\n", bdd_nodecount(root));
+  gettimeofday(&start,NULL);
+  bdd_delref(root);
+  root = mtbdd_add_r(root, sw->rules[order[sw->nrules - 1]]->mtbdd_in, 0);
+  bdd_addref(root);
+  gettimeofday(&stop,NULL);
+  long long int T_up_last1 = diff(&stop, &start);
+  // printf("the last rule has %d nodes\n", bdd_nodecount(sw->rules[order[sw->nrules - 1]]->mtbdd_in));
+  // printf("the root has %d nodes\n", bdd_nodecount(root));
+  printf("Test the rule idx %d: %lld us\n", sw->rules[order[sw->nrules - 1]]->idx, T_up_last1);
+  // printf("This rule insect %d rules\n", mtbddvalues[(bddnodes[sw->rules[order[sw->nrules - 1]]->vtnode_in].high)].test_count);
+  // printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum()); 
+  return root;
+}
+
+
+BDD
+switch_bddrs_to_mtbdd_test_alltogether(struct switch_bdd_rs *sw, BDD root) {
+  struct timeval start,stop;
+  // BDD root = 0;
+  // uint32_t arr[SW_NUM] = {29, 94, 23, 40, 34, 49, 26, 28, 68};
+  // uint32_t arr[SW_NUM] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+  uint32_t order[sw->nrules];
+  // root = mtbdd_add_r(root, sw->rules[sw->nrules - 1]->mtbdd_in, 0);
+  for (int i = 0; i < sw->nrules; i++){
+    // if (i<45)
+    //   order[i] = i+45;
+    // else if(i<90)
+    //   order[i] = i-45;
+    // else
+      order[i] = i;
+  }
+    
+  // order[idx-1] = sw->nrules - 1;
+  // order[sw->nrules - 1] = idx-1;
+
+  for (int i = 0; i < sw->nrules-1; i++) {
+  // for (int i = arr[sw->sw_idx]; i < sw->nrules-1; i++) {
     mtbddvaluevaluecount = 0;
     gettimeofday(&start,NULL);
     bdd_delref(root);
@@ -4708,6 +4776,5 @@ switch_bddrs_to_mtbdd_test_difflast1(struct switch_bdd_rs *sw, uint32_t idx) {
   printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum()); 
   return root;
 }
-
 
 //end

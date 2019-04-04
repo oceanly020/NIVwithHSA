@@ -24,13 +24,20 @@
 
 //结构体或变量定义
 //自定义
-#define FIELD_LEN 2 //48位bit i2
-// #define FIELD_LEN 1 
+
+
+// #define SW_NUM 16
+
 // #define FIELD_LEN 7 //128位bit
 // #define MF_LEN 8 //128位bit， 8×16 standford whole
+
+// #define FIELD_LEN 1 
 // #define MF_LEN 2 //32位bit standford simple
-#define MF_LEN 3 //48位bit i2
+
 #define SW_NUM 9
+#define FIELD_LEN 2 //48位bit i2
+#define MF_LEN 3 //48位bit i2
+
 
 #define NW_DST_H 0
 #define NW_DST_L 1
@@ -1024,6 +1031,39 @@ typedef struct s_MTBddValue {/* Node table entry */
   struct rule_records_arr *rule_records;
 } MTBddValue;
 
+//veriflow
+struct ecs {
+  uint32_t necs;
+  struct ec *ecs[0];
+};
+
+
+
+struct trie_node_arr{
+  uint32_t nnodes;
+  struct trie_node *nodes[0];
+};
+
+struct ec_1f {
+  uint32_t l_b;
+  uint32_t h_b;
+};
+
+struct ec {
+  struct ec_1f ec_vs[FIELD_LEN];
+};
+
+struct ec_1f_node {
+  uint32_t idx;
+  uint32_t l_b;
+  uint32_t h_b;
+  struct trie_node *node;
+};
+
+struct bound {
+  uint32_t bound;
+  uint32_t idx;
+};
 
 
 //函数声明
@@ -12243,12 +12283,47 @@ greed_calc_arule_insc_sw(struct switch_rs *sw, uint32_t idx) {
 
 
 
-uint32_t field_sign[8] = {0, 2, 6, 10, 11, 13, 15, 16};
+// uint32_t field_sign[8] = {0, 2, 6, 10, 11, 13, 15, 16};
+// uint32_t field_bit[7] = {16, 32, 32, 8, 16, 16, 8};
+// uint32_t field_sign[2] = {0, 4};
+// uint32_t field_bit[1] = {32};
+uint32_t field_sign[3] = {0, 2, 6};
+uint32_t field_bit[2] = {16, 32};
 
-struct ec {
-  uint32_t l_b;
-  uint32_t h_b;
-};
+// struct ecs {
+//   uint32_t necs;
+//   struct ec *ecs[0];
+// };
+
+
+
+// struct trie_node_arr{
+//   uint32_t nnodes;
+//   struct trie_node *nodes[0];
+// };
+
+// struct ec_1f {
+//   uint32_t l_b;
+//   uint32_t h_b;
+// };
+
+// struct ec {
+//   struct ec_1f ec_vs[FIELD_LEN];
+// };
+
+// struct ec_1f_node {
+//   uint32_t idx;
+//   uint32_t l_b;
+//   uint32_t h_b;
+//   struct trie_node *node;
+// };
+
+// struct bound {
+//   uint32_t bound;
+//   uint32_t idx;
+// };
+
+
 
 uint32_t
 trie_process_ec_arule(struct trie_node *root, struct ex_rule *r) {
@@ -12257,7 +12332,14 @@ trie_process_ec_arule(struct trie_node *root, struct ex_rule *r) {
   struct trie_node *arr[data_allr_nums];
   arr[0] = root;
 
-  uint32_t node_tr_counter = 0;
+  struct timeval start,stop;
+ 
+  uint32_t field_sign[1] = {0};
+  uint32_t field_len[1] = {32};
+
+
+  // gettimeofday(&start,NULL);
+  // uint32_t node_tr_counter = 0;
   // printf("this is right\n");
 
   //find all the inscrules
@@ -12324,7 +12406,11 @@ trie_process_ec_arule(struct trie_node *root, struct ex_rule *r) {
     }  
   }
 
+  // gettimeofday(&stop,NULL);
+  // long long int T_for_add = diff(&stop, &start);
+  // printf("Trie test rule with %d - %d: %lld us with searching\n", r->sw_idx, r->idx, T_for_add);
   // printf("node_tr_counter is %d\n", node_tr_counter);
+  // gettimeofday(&start,NULL);
 
   struct ex_rule *r_arr[data_allr_nums];
   uint32_t insc_r_count = 0;
@@ -12333,6 +12419,772 @@ trie_process_ec_arule(struct trie_node *root, struct ex_rule *r) {
       r_arr[insc_r_count] = arr[i]->local_rules->rules[j];
       insc_r_count++;
     }
+    r_arr[insc_r_count] = arr[i]->local_rules->rules[0];
+    insc_r_count++;
+  }
+
+  // for (int field_i = 0; field_i < FIELD_LEN; field_i++) {//standford data has 7fields
+  //   uint32_t sign = 0;
+  //   // uint16_t upmask = 0x8000;
+  //   // uint16_t downmask = 0x0080;
+  //   uint32_t len = field_sign[field_i+1] - field_sign[field_i];
+  //   // sign = field_sign[field_i]/2;
+  //   uint32_t iscross = 0;
+  //   // if (field_sign[field_i]%2 != 0) {
+  //   //   // sign = field_sign[field_i]/2;
+  //   //   iscross = 1;
+  //   // }
+  //   // else{
+  //   //   // sign = field_sign[field_i]/2;
+  //   //   iscross = 0;
+  //   // }
+  //   // uint32_t l_v_arr[insc_r_count];
+  //   // uint32_t h_v_arr[insc_r_count];
+  //   uint32_t v_arr[2*insc_r_count];
+
+  //   for (int r_i = 0; r_i < insc_r_count; r_i++) {//for every r in the insect set
+  //     uint32_t h_v = 0;
+  //     uint32_t l_v = 0;
+  //     for (int len_i = 0; len_i < len; len_i++) {
+  //       uint16_t masksign = 0;
+  //       uint32_t mf_sign = (field_sign[field_i] + len_i)/2;
+  //       if ((field_sign[field_i] + len_i)%2)
+  //         masksign = 0x0080;
+  //       else
+  //         masksign = 0x8000;
+  //       for (int c_i = 0; c_i < 8; c_i++) {
+  //         if (masksign & r_arr[r_i]->mf_in->mf_w[mf_sign]) {//wildcard 
+  //           h_v |= 1;
+  //         }
+  //         else if (masksign & r_arr[r_i]->mf_in->mf_v[mf_sign]) {//1
+  //           l_v |= 1;
+  //           h_v |= 1;
+  //         }
+  //         // else {
+  //         //   l_v <<= 1;
+  //         //   h_v <<= 1;
+  //         // }
+  //         if ((len_i == (len-1))&&(c_i == 7))
+  //           break;
+  //         l_v <<= 1;
+  //         h_v <<= 1;
+  //         masksign >>=1;
+  //       }
+  //     }
+  //     v_arr[r_i*2] = l_v;
+  //     v_arr[r_i*2+1] = h_v;
+  //   }
+
+  //   uint32_t h_end = 0;
+  //   uint32_t l_last = 0;
+  //   for (int len_i = 0; len_i < len; len_i++) {
+  //     uint16_t masksign = 0;
+  //     uint32_t mf_sign = (field_sign[field_i] + len_i)/2;
+  //     if ((field_sign[field_i] + len_i)%2)
+  //       masksign = 0x0080;
+  //     else
+  //       masksign = 0x8000;
+  //     for (int c_i = 0; c_i < 8; c_i++) {
+  //       if (masksign & r->mf_in->mf_w[mf_sign]) {//wildcard 
+  //         h_end |= 1;
+  //       }
+  //       else if (masksign & r->mf_in->mf_v[mf_sign]) {//1
+  //         l_last |= 1;
+  //         h_end |= 1;
+  //       }
+  //       // else {
+  //       //   l_last <<= 1;
+  //       //   h_v <<= 1;
+  //       // }
+  //       if ((len_i == (len-1))&&(c_i == 7))
+  //         break;
+  //       l_last <<= 1;
+  //       h_end <<= 1;
+  //       masksign >>=1;
+  //     }
+  //   }
+
+
+  //   qsort(v_arr, 2*insc_r_count,sizeof(uint32_t), uint32_t_cmp);
+
+  //   uint32_t last = v_arr[0];
+
+  //   for (int i = 0; i < 2*insc_r_count; i++) {
+
+  //     if(v_arr[i] > last){
+  //       struct ec_1f *tmp = xmalloc(sizeof *tmp);
+  //       tmp->l_b = last;
+  //       tmp->h_b = v_arr[i];
+  //       free(tmp);
+  //       last = v_arr[i];
+  //     }
+  //   }
+  // }
+  // gettimeofday(&stop,NULL);
+  // T_for_add = diff(&stop, &start);
+  // printf("Trie test rule with %d - %d: %lld us with computing EC\n", r->sw_idx, r->idx, T_for_add);
+  // printf("This rule insect %d rules\n", insc_r_count);
+    // arr[i]->relevent_rules = add_rule_to_ex_rules_arr(arr[i]->relevent_rules, r);
+
+  return insc_r_count;
+}
+
+static uint32_t
+bound_cmp (const void *a, const void *b){
+  uint32_t a32 = *(uint32_t *)a;
+  uint32_t b32 = *(uint32_t *)b;
+  if (a32 > b32)
+    return 5;
+  else if (a32 == b32)
+    return 0;
+  return -5;
+  // return *(uint32_t *)a - *(uint32_t *)b; 
+}
+
+struct ecs *
+get_ecs_rec(struct trie_node_arr *tn_arr, struct ec *r_ec, uint32_t field_i){
+  // printf("%d\n", tn_arr->nnodes);
+  // uint32_t sign 
+  
+  struct ec *ecs_arr[5000];
+  uint32_t count = 0;
+  struct ec_1f_node e1ns[5000];
+  uint32_t count_e1ns = 0;
+  // printf("there is true\n");
+  for (int i = 0; i < tn_arr->nnodes; i++) {
+    // printf("tn_arr->nnodes %d,%d\n", tn_arr->nnodes, tn_arr->nodes[i]);
+    struct trie_node *ctn = tn_arr->nodes[i];
+    bool matchFound = true;
+    uint32_t rlb = 0;
+    uint32_t rhb = 0;
+    uint32_t last = 0;
+
+    // printf("%x - %x\n", r_ec->ec_vs[field_i].l_b, r_ec->ec_vs[field_i].h_b);
+    // printf("%d-%d-%d\n", ctn->branchs[0], ctn->branchs[1], ctn->branchs[2]);
+    for (int j = 0; j < field_bit[field_i]; j++) {
+      // printf("this is true\n");
+      last = j+1;
+      uint32_t maskBit = (uint32_t)1 << ((field_bit[field_i] - 1) - j);
+      
+      // printf("%x\n", maskBit);
+      
+
+      if ((r_ec->ec_vs[field_i].l_b & maskBit) != (r_ec->ec_vs[field_i].h_b & maskBit)){
+        // if(j == 0)
+        last = j;
+        // last = j;
+        matchFound = true;
+        break;
+      }
+      else if((r_ec->ec_vs[field_i].l_b & maskBit) == 0){
+        if (ctn->branchs[0]){
+          rlb <<= 1;
+          rhb <<= 1; 
+          ctn = ctn->branchs[0];
+        }
+        else{
+          matchFound = false;
+          break;
+        }
+      }
+      else{
+        if (ctn->branchs[1]){
+          rlb <<= 1;
+          rhb <<= 1; 
+          rlb |= 1;
+          rhb |= 1;
+          ctn = ctn->branchs[1];
+        }
+        else{
+          matchFound = false;
+          break;
+        }
+      }
+      // if(last!=field_bit[field_i]){
+      //   rlb <<= 1;
+      //   rhb <<= 1; 
+      // }  
+    }
+    if(matchFound == false)
+      continue;
+    if (last == field_bit[field_i]) {
+      e1ns[count_e1ns].idx = count_e1ns;
+      e1ns[count_e1ns].l_b = rlb;
+      e1ns[count_e1ns].h_b = rhb;
+      e1ns[count_e1ns].node = ctn;
+      count_e1ns++;
+      continue;
+    }
+    // printf("there is true\n");
+    struct ec_1f_node tmp1[5000];
+    uint32_t counttmp1=0;
+    uint32_t counttmp2=0;
+    struct ec_1f_node tmp2[5000];
+    if (last%2) {
+      tmp1[0].node = ctn;
+      tmp1[0].l_b = rlb;
+      tmp1[0].h_b = rhb;
+      counttmp1 = 1;
+      
+      // printf("%d-%d-%d\n", ctn->branchs[0], ctn->branchs[1], ctn->branchs[2]);
+    }
+    else{
+      tmp2[0].node = ctn;
+      tmp2[0].l_b = rlb;
+      tmp2[0].h_b = rhb;
+      counttmp2 = 1;
+      // printf("%x - %x\n", r_ec->ec_vs[field_i].l_b, r_ec->ec_vs[field_i].h_b);
+      // printf("%d-%d-%d\n", ctn->branchs[0], ctn->branchs[1], ctn->branchs[2]);
+    }
+    // printf("this is true %d run\n", i);
+    for (int j = last; j < field_bit[field_i]; j++) {
+      // printf("j %d\n", j);
+      // bool arrsign = false;
+      if (j%2) {
+        counttmp2 = 0; 
+        for (int node_i = 0; node_i < counttmp1; node_i++) {
+          // printf("this is true %d\n", tmp1[node_i].node);
+          // printf("this is true %d - %d - %d\n", tmp1[node_i].node->branchs[0], tmp1[node_i].node->branchs[1], tmp1[node_i].node->branchs[2]);
+          if (tmp1[node_i].node->branchs[0]){
+
+            tmp2[counttmp2].node = tmp1[node_i].node->branchs[0];
+            tmp2[counttmp2].l_b = tmp1[node_i].l_b;
+            tmp2[counttmp2].h_b = tmp1[node_i].h_b;
+            tmp2[counttmp2].l_b <<= 1;
+            tmp2[counttmp2].h_b <<= 1;
+            counttmp2++;
+          }
+          if (tmp1[node_i].node->branchs[1]){
+            tmp2[counttmp2].node = tmp1[node_i].node->branchs[1];
+            tmp2[counttmp2].l_b = tmp1[node_i].l_b;
+            tmp2[counttmp2].h_b = tmp1[node_i].h_b;
+            tmp2[counttmp2].l_b <<= 1;
+            tmp2[counttmp2].h_b <<= 1;
+            tmp2[counttmp2].l_b |= 1;
+            tmp2[counttmp2].h_b |= 1;
+            counttmp2++;
+          }
+          if (tmp1[node_i].node->branchs[2]){
+            tmp2[counttmp2].node = tmp1[node_i].node->branchs[2];
+            tmp2[counttmp2].l_b = tmp1[node_i].l_b;
+            tmp2[counttmp2].h_b = tmp1[node_i].h_b;
+            tmp2[counttmp2].l_b <<= 1;
+            tmp2[counttmp2].h_b <<= 1;
+            tmp2[counttmp2].h_b |= 1;
+            counttmp2++;
+          }
+        }
+      }
+      else{
+        counttmp1 = 0; 
+        for (int node_i = 0; node_i < counttmp2; node_i++) {
+          // printf("this is true %d\n", tmp2[node_i].node);
+          // printf("this is true %d - %d - %d\n", tmp2[node_i].node->branchs[0], tmp2[node_i].node->branchs[1], tmp2[node_i].node->branchs[2]);
+          if (tmp2[node_i].node->branchs[0]){
+            tmp1[counttmp1].node = tmp2[node_i].node->branchs[0];
+            tmp1[counttmp1].l_b = tmp2[node_i].l_b;
+            tmp1[counttmp1].h_b = tmp2[node_i].h_b;
+            tmp1[counttmp1].l_b <<= 1;
+            tmp1[counttmp1].h_b <<= 1;
+            counttmp1++;
+          }
+          if (tmp2[node_i].node->branchs[1]){
+            tmp1[counttmp1].node = tmp2[node_i].node->branchs[1];
+            tmp1[counttmp1].l_b = tmp2[node_i].l_b;
+            tmp1[counttmp1].h_b = tmp2[node_i].h_b;
+            tmp1[counttmp1].l_b <<= 1;
+            tmp1[counttmp1].h_b <<= 1;
+            tmp1[counttmp1].l_b |= 1;
+            tmp1[counttmp1].h_b |= 1;
+            counttmp1++;
+          }
+          if (tmp2[node_i].node->branchs[2]){
+            tmp1[counttmp1].node = tmp2[node_i].node->branchs[2];
+            tmp1[counttmp1].l_b = tmp2[node_i].l_b;
+            tmp1[counttmp1].h_b = tmp2[node_i].h_b;
+            tmp1[counttmp1].l_b <<= 1;
+            tmp1[counttmp1].h_b <<= 1;
+            tmp1[counttmp1].h_b |= 1;
+            counttmp1++;
+          }
+        }
+      }     
+    }
+    // printf("this is true %d\n", count_e1ns);
+    if (counttmp2) {
+      for (int tmp2_i = 0; tmp2_i < counttmp2; tmp2_i++) {
+        e1ns[count_e1ns].idx = count_e1ns;
+        e1ns[count_e1ns].l_b = tmp2[tmp2_i].l_b;
+        e1ns[count_e1ns].h_b = tmp2[tmp2_i].h_b;
+        e1ns[count_e1ns].node = tmp2[tmp2_i].node;
+        // printf("%x-%x\n", e1ns[count_e1ns].l_b, e1ns[count_e1ns].h_b);
+        count_e1ns++;
+        // printf("%x-%x\n", tmp2[tmp2_i].l_b, tmp2[tmp2_i].h_b);
+        // printf("%d-%d-%d\n", tmp2[tmp2_i].node->branchs[0], tmp2[tmp2_i].node->branchs[1], tmp2[tmp2_i].node->branchs[2]);
+        // printf("%d-%d-%d\n", e1ns[count_e1ns-1].node->branchs[0], e1ns[count_e1ns-1].node->branchs[1], e1ns[count_e1ns-1].node->branchs[2]);
+
+      }
+    }
+  }
+  // printf("this point\n");
+  // printf("%d - %d\n", field_i, FIELD_LEN);
+  // printf("this is true\n");
+  // bool eqsign = false;
+
+  // printf("this is true %d\n", count_e1ns);
+
+
+  if (count_e1ns) {
+    struct bound bounds[2*count_e1ns];
+    for (int i = 0; i < count_e1ns; i++){
+      bounds[2*i].bound =  e1ns[i].l_b;
+      bounds[2*i].idx = e1ns[i].idx;
+      bounds[2*i+1].bound =  e1ns[i].h_b;
+      bounds[2*i+1].idx = e1ns[i].idx;
+      // printf("-%x-%x\n",e1ns[i].l_b,e1ns[i].h_b);
+      // printf("-%x-%x\n",bounds[2*i].bound,bounds[2*i+1].bound);
+    }
+    // printf("-%x-%x\n",bounds[0].bound,bounds[1].bound);
+    qsort(bounds, 2*count_e1ns,2*sizeof(uint32_t), bound_cmp);
+    uint32_t last = r_ec->ec_vs[field_i].l_b;
+
+    uint32_t arr[50000];
+    arr[0] = bounds[0].idx;
+    uint32_t count_tn_arr = 1;
+    uint32_t eq_arr[50000];
+    uint32_t count_eq_arr = 0;
+    for (int i = 1; i < 2*count_e1ns; i++) {
+      bool in = false;
+      // bool delect_sign = false;
+      uint32_t delect = 0;
+      for (int j = 0; j < count_tn_arr; j++) {
+        if(bounds[i].idx == arr[j]){
+          in = true;
+          delect = j;
+          // arr[j] = arr[count_tn_arr-1];
+          // count_tn_arr--;
+          break;
+        }
+      }
+      // printf("%d ---- count_tn_arr %d -------%d-%d-----last %x-%x-%x\n",in,  count_tn_arr, bounds[0].idx, bounds[1].idx, last,bounds[0].bound,bounds[1].bound);
+
+      if (last < bounds[i].bound) {    
+        if (count_eq_arr)  {
+          if (field_i == FIELD_LEN-1) {
+            ecs_arr[count] = xmalloc(sizeof(struct ec));
+            ecs_arr[count]->ec_vs[field_i].l_b = last;
+            ecs_arr[count]->ec_vs[field_i].h_b = last; 
+            count++;
+          }
+          else{
+            if(count_tn_arr+count_eq_arr){
+              struct trie_node_arr *tmp = xmalloc(sizeof(uint32_t)+(count_tn_arr+count_eq_arr)*sizeof(struct trie_node *));
+              tmp->nnodes = count_tn_arr+count_eq_arr;
+              for (int tn_i = 0; tn_i < count_tn_arr; tn_i++) {
+                tmp->nodes[tn_i] = e1ns[arr[tn_i]].node;
+                // printf("%d-%d-%d-%d\n", tmp->nodes[i], tmp->nodes[i]->branchs[0], tmp->nodes[i]->branchs[1], tmp->nodes[i]->branchs[2]);
+              }
+              for (int tn_i = 0; tn_i < count_eq_arr; tn_i++) {
+                tmp->nodes[tn_i+count_tn_arr] = e1ns[eq_arr[tn_i]].node;
+                // printf("%d-%d-%d-%d\n", tmp->nodes[i+count_tn_arr], tmp->nodes[i+count_tn_arr]->branchs[0], tmp->nodes[i+count_tn_arr]->branchs[1], tmp->nodes[i+count_tn_arr]->branchs[2]);
+              }
+              struct ecs *ecsget = get_ecs_rec(tmp, r_ec, field_i+1);
+              if(ecsget){
+                // printf("get_ecs_rec\n");
+                for (int j = 0; j < ecsget->necs; j++) {
+                  // for (int field = field_i+1; field < FIELD_LEN; field++){
+                  //   // ecs[count]->ec_vs[field].h_b = ecsget->ecs[j]->ec_vs[field].h_b;
+                  //   // ecs[count]->ec_vs[field].h_b = ecsget->ecs[j]->ec_vs[field].h_b;
+                    
+                  // }
+                  ecs_arr[count] = ecsget->ecs[j];
+                  ecs_arr[count]->ec_vs[field_i].l_b = last;
+                  ecs_arr[count]->ec_vs[field_i].h_b = last;
+                  count++;
+                }
+                // printf("%d\n", ecsget->necs);
+                free(ecsget);
+                // printf("free this\n");
+                ecsget = NULL;
+              }
+              // printf("%d\n", tmp);
+              free(tmp);
+              tmp = NULL;
+            }
+          }
+          // eqsign = false;
+          last = last+1;
+          count_eq_arr = 0;
+        }
+
+        if (in) {
+          // printf("%x----%x\n", last , bounds[i].bound);
+          // printf(" in there\n");
+          if (last < bounds[i].bound){
+            if (field_i == FIELD_LEN-1) {
+              // printf(" in there\n");
+              ecs_arr[count] = xmalloc(sizeof(struct ec));
+              ecs_arr[count]->ec_vs[field_i].l_b = last;
+              ecs_arr[count]->ec_vs[field_i].h_b = bounds[i].bound; 
+              count++;
+            }
+            else{
+              if (count_tn_arr){
+                struct trie_node_arr *tmp = xmalloc(sizeof(uint32_t)+count_tn_arr*sizeof(struct trie_node *));
+                tmp->nnodes = count_tn_arr;
+                for (int tn_i = 0; tn_i < count_tn_arr; tn_i++) {
+                  tmp->nodes[tn_i] = e1ns[arr[tn_i]].node;
+                  // printf("%d-%d-%d-%d\n", tmp->nodes[i], tmp->nodes[i]->branchs[0], tmp->nodes[i]->branchs[1], tmp->nodes[i]->branchs[2]);
+                }
+
+                struct ecs *ecsget = get_ecs_rec(tmp, r_ec, field_i+1);
+                if(ecsget){
+                  // printf("get_ecs_rec\n");
+                  // printf("1\n");
+                  for (int j = 0; j < ecsget->necs; j++) {
+                    // for (int field = field_i+1; field < FIELD_LEN; field++){
+                    //   // ecs[count]->ec_vs[field].h_b = ecsget->ecs[j]->ec_vs[field].h_b;
+                    //   // ecs[count]->ec_vs[field].h_b = ecsget->ecs[j]->ec_vs[field].h_b;
+                      
+                    // }
+                    ecs_arr[count] = ecsget->ecs[j];
+                    ecs_arr[count]->ec_vs[field_i].l_b = last;
+                    ecs_arr[count]->ec_vs[field_i].h_b = bounds[i].bound;
+                    count++;
+                  }
+                  // printf("ecsget->necs%d\n", ecsget->necs);
+                  free(ecsget);
+                  // printf("free this\n");
+                  ecsget = NULL;
+                }
+                // eqsign = false;
+                // printf("%d\n", tmp);
+                free(tmp);
+                tmp = NULL;
+              }
+            }
+            last = bounds[i].bound+1;
+          }
+          else if (last == bounds[i].bound) {
+            eq_arr[count_eq_arr] = bounds[i].idx;
+            // eqsign = true;
+            count_eq_arr ++;
+          }
+        }
+        else{
+          if (last < bounds[i].bound){
+            if (field_i == FIELD_LEN-1) {
+              ecs_arr[count] = xmalloc(sizeof(struct ec));
+              ecs_arr[count]->ec_vs[field_i].l_b = last;
+              ecs_arr[count]->ec_vs[field_i].h_b = bounds[i].bound-1; 
+              count++;
+            }
+            else{
+              if(count_tn_arr){
+                struct trie_node_arr *tmp = xmalloc(sizeof(uint32_t)+count_tn_arr*sizeof(struct trie_node *));
+                tmp->nnodes = count_tn_arr;
+                for (int tn_i = 0; tn_i < count_tn_arr; tn_i++) {
+                  tmp->nodes[tn_i] = e1ns[arr[tn_i]].node;
+                  // printf("%d-%d-%d-%d\n", tmp->nodes[i], tmp->nodes[i]->branchs[0], tmp->nodes[i]->branchs[1], tmp->nodes[i]->branchs[2]);
+                }
+                // printf("%d-%d-%d-%d\n", tmp->nodes[0], tmp->nodes[0]->branchs[0], tmp->nodes[0]->branchs[1], tmp->nodes[0]->branchs[2]);
+                struct ecs *ecsget = get_ecs_rec(tmp, r_ec, field_i+1);
+                if(ecsget){
+                  // printf("get_ecs_rec\n");
+                  // printf("1\n");
+                  for (int j = 0; j < ecsget->necs; j++) {
+                    // for (int field = field_i+1; field < FIELD_LEN; field++){
+                    //   // ecs[count]->ec_vs[field].hb = ecsget->ecs[j]->ec_vs[field].hb;
+                    //   // ecs[count]->ec_vs[field].hb = ecsget->ecs[j]->ec_vs[field].hb;
+                    // }
+                    ecs_arr[count] = ecsget->ecs[j];
+                    ecs_arr[count]->ec_vs[field_i].l_b = last;
+                    ecs_arr[count]->ec_vs[field_i].h_b = bounds[i].bound-1;
+                    // printf("%x-%x\n", ecs_arr[count]->ec_vs[field_i].l_b, ecs_arr[count]->ec_vs[field_i].h_b);
+                    count++;
+                  }
+                  // printf("%d\n", ecsget->necs);
+                  free(ecsget);
+                  // printf("free this\n");
+                  ecsget = NULL;
+                }
+                // eqsign = false;
+                // printf("%d\n", tmp);
+                free(tmp);
+                tmp = NULL;
+              }
+            }
+            last = bounds[i].bound;
+          }
+        }
+      }
+      else if (last == bounds[i].bound) {
+        if (in){
+          eq_arr[count_eq_arr] = bounds[i].idx;
+          count_eq_arr ++;
+        }
+      }
+
+      if (!in) {
+        arr[count_tn_arr] = bounds[i].idx;
+        count_tn_arr++;
+      }
+      else{
+        arr[delect] = arr[count_tn_arr-1];
+        count_tn_arr--;
+      }
+
+      if(last >r_ec->ec_vs[field_i].h_b)
+        break;
+      else if((last == r_ec->ec_vs[field_i].h_b) && (i==2*count_e1ns-1)){
+        // printf("there is in\n");
+        if (field_i == FIELD_LEN-1) {
+          ecs_arr[count] = xmalloc(sizeof(struct ec));
+          ecs_arr[count]->ec_vs[field_i].l_b = last;
+          ecs_arr[count]->ec_vs[field_i].h_b = last; 
+          count++;
+        }
+        else{
+          if(count_tn_arr+count_eq_arr){
+            struct trie_node_arr *tmp = xmalloc(sizeof(uint32_t)+(count_tn_arr+count_eq_arr)*sizeof(struct trie_node *));
+            tmp->nnodes = count_tn_arr+count_eq_arr;
+            // printf("there is in %d\n", count_tn_arr+count_eq_arr);
+            for (int tn_i = 0; tn_i < count_tn_arr; tn_i++) {
+              tmp->nodes[tn_i] = e1ns[arr[tn_i]].node;
+              // printf("%d-%d-%d-%d\n", tmp->nodes[tn_i], tmp->nodes[tn_i]->branchs[0], tmp->nodes[tn_i]->branchs[1], tmp->nodes[tn_i]->branchs[2]);
+            }
+            for (int tn_i = 0; tn_i < count_eq_arr; tn_i++) {
+              tmp->nodes[tn_i+count_tn_arr] = e1ns[eq_arr[tn_i]].node;
+              // printf("%d-%d-%d-%d\n", tmp->nodes[tn_i+count_tn_arr], tmp->nodes[tn_i+count_tn_arr]->branchs[0], tmp->nodes[tn_i+count_tn_arr]->branchs[1], tmp->nodes[tn_i+count_tn_arr]->branchs[2]);
+            }
+
+            struct ecs *ecsget = get_ecs_rec(tmp, r_ec, field_i+1);
+            if(ecsget){
+              // printf("get_ecs_rec\n");
+              for (int j = 0; j < ecsget->necs; j++) {
+                // for (int field = field_i+1; field < FIELD_LEN; field++){
+                //   // ecs[count]->ec_vs[field].hb = ecsget->ecs[j]->ec_vs[field].hb;
+                //   // ecs[count]->ec_vs[field].hb = ecsget->ecs[j]->ec_vs[field].hb;
+                  
+                // }
+                ecs_arr[count] = ecsget->ecs[j];
+                ecs_arr[count]->ec_vs[field_i].l_b = last;
+                ecs_arr[count]->ec_vs[field_i].h_b = last;
+                count++;
+              }
+              // printf("%d\n", ecsget->necs);
+              free(ecsget);
+              // printf("free this\n");
+              ecsget = NULL;
+            }
+            free(tmp);
+            // printf("%d\n", tmp);
+            tmp = NULL;
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  struct ecs *ecs_tmp = NULL;
+  // printf("has ecs %d\n", count);
+  if (count) {
+    ecs_tmp = xmalloc(sizeof(uint32_t)+count*sizeof(struct ec *));
+    // printf("%d-%d\n", sizeof(struct ec *), count);
+    // uint32_t *a = xmalloc(25*sizeof(uint32_t));
+    // struct ec_1f *a = xmalloc(2*sizeof(uint32_t));
+    ecs_tmp->necs = count;
+    // if (a!=NULL)
+    // {
+    //   free(a);
+    // }
+    // a = NULL;
+    for (int i = 0; i < count; i++) {
+      // printf("%d_%d-%d\n",sizeof(ecs_tmp->ecs[i]),sizeof(ecs[i]));
+      ecs_tmp->ecs[i] = ecs_arr[i];
+      // printf("%x-%x\n", ecs_arr[i]->ec_vs[0].l_b, ecs_arr[i]->ec_vs[0].h_b);
+    }
+  }
+  // printf("this is true1 %d\n", ecs_tmp);
+  
+  // printf("this is true2 \n");
+  // ecs_tmp = NULL;
+  return ecs_tmp;
+}
+
+void
+free_ecs(struct ecs *a){
+  if(a){
+    for (int i = 0; i < a->necs; i++){
+      if (a->ecs[i])
+        free(a->ecs[i]);
+    }
+    free(a);
+  }
+}
+
+uint32_t
+trie_process_ec_arule_veriflow(struct trie_node *root, struct ex_rule *r){
+
+  struct trie_node_arr *tn_arr = xmalloc(sizeof(uint32_t)+sizeof(struct trie_node *));
+  tn_arr->nnodes = 1;
+  tn_arr->nodes[0] = root;
+  struct ec *ec_r = xmalloc(sizeof(*ec_r));
+
+
+  for (int field_i = 0; field_i < FIELD_LEN; field_i++) {//standford data has 7fields
+    uint32_t sign = 0;
+    // uint16_t upmask = 0x8000;
+    // uint16_t downmask = 0x0080;
+    uint32_t len = field_sign[field_i+1] - field_sign[field_i];
+    uint32_t h_v = 0;
+    uint32_t l_v = 0;
+    for (int len_i = 0; len_i < len; len_i++) {
+      uint16_t masksign = 0;
+      uint32_t mf_sign = (field_sign[field_i] + len_i)/2;
+      if ((field_sign[field_i] + len_i)%2){
+        masksign = 0x0080;
+      }
+      else{
+        masksign = 0x8000;
+      }
+      for (int c_i = 0; c_i < 8; c_i++) {
+        if (masksign & r->mf_in->mf_w[mf_sign]) {//wildcard 
+          h_v |= 1;
+        }
+        else if (masksign & r->mf_in->mf_v[mf_sign]) {//1
+          l_v |= 1;
+          h_v |= 1;
+        }
+        // else {
+        //   l_v <<= 1;
+        //   h_v <<= 1;
+        // }
+        if ((len_i == (len-1))&&(c_i == 7))
+          break;
+        l_v <<= 1;
+        h_v <<= 1;
+        masksign >>=1;
+      }
+    }
+    ec_r->ec_vs[field_i].l_b = l_v;
+    // printf("%x\n", ec_r->ec_vs[field_i].l_b);
+    ec_r->ec_vs[field_i].h_b = h_v;
+    // printf(" rule %x-%x\n", ec_r->ec_vs[field_i].l_b, ec_r->ec_vs[field_i].h_b);
+
+  }
+
+  // printf("rule %d - %d\n", r);
+  struct ecs *ecsget = get_ecs_rec(tn_arr, ec_r, 0);
+
+  trie_process_ec_arule(root,r);
+  uint32_t necs = 0;
+  if (ecsget){
+    necs =  ecsget->necs;
+    // printf("the affected ecs num is %d\n", ecsget->necs);
+  }
+  // printf("ecsget\n" );
+  free_ecs(ecsget);
+  // printf("ecsget\n" );
+  return necs;
+
+}
+
+
+uint32_t
+trie_process_ec_arule_intrie(struct trie_node *root, struct ex_rule *r) {
+  struct mf_uint16_t *mf = r->mf_in;
+  uint32_t count = 1;
+  struct trie_node *arr[data_allr_nums];
+  arr[0] = root;
+
+  struct timeval start,stop;
+ 
+
+  // gettimeofday(&start,NULL);
+  uint32_t node_tr_counter = 0;
+  // printf("this is right\n");
+
+  //find all the inscrules
+  for (int i = 0; i < MF_LEN; i++) {
+    uint16_t sign = 0x8000;
+    for (int j = 0; j < 16; j++) {
+      uint32_t count_tmp = 0;
+      struct trie_node *tmp[data_allr_nums];
+      if (sign & mf->mf_w[i]) {
+        for (int k = 0; k < count; k++) {
+          if (arr[k]->branchs[0]){
+            tmp[count_tmp] = arr[k]->branchs[0];
+            count_tmp++;
+            // node_tr_counter++;
+
+          }
+          if (arr[k]->branchs[1]){
+            tmp[count_tmp] = arr[k]->branchs[1];
+            count_tmp++;
+            // node_tr_counter++;
+          }
+          if (arr[k]->branchs[2]){
+            tmp[count_tmp] = arr[k]->branchs[2];
+            count_tmp++;
+            // node_tr_counter++;
+          }   
+        }
+      }
+      else {
+        if (sign & mf->mf_v[i]) {
+          for (int k = 0; k < count; k++) {
+            if (arr[k]->branchs[1]){
+              tmp[count_tmp] = arr[k]->branchs[1];
+              count_tmp++;
+              // node_tr_counter++;
+            }
+            // if (arr[k]->branchs[2]){
+            //   tmp[count_tmp] = arr[k]->branchs[2];
+            //   count_tmp++;
+            //   // node_tr_counter++;
+            // }   
+          }
+        }
+        else {
+          for (int k = 0; k < count; k++) {
+            if (arr[k]->branchs[0]){
+              tmp[count_tmp] = arr[k]->branchs[0];
+              count_tmp++;
+              // node_tr_counter++;
+            }
+            // if (arr[k]->branchs[2]){
+            //   tmp[count_tmp] = arr[k]->branchs[2];
+            //   count_tmp++;
+            //   // node_tr_counter++;
+            // }   
+          }
+        }
+      }
+      sign >>= 1;
+      for (int k = 0; k < count_tmp; k++) {
+        arr[k] = tmp[k];
+      }
+      count = count_tmp;
+    }  
+  }
+
+  // gettimeofday(&stop,NULL);
+  // long long int T_for_add = diff(&stop, &start);
+  // printf("Trie test rule with %d - %d: %lld us with searching\n", r->sw_idx, r->idx, T_for_add);
+  // printf("node_tr_counter is %d\n", node_tr_counter);
+  // gettimeofday(&start,NULL);
+
+  struct ex_rule *r_arr[data_allr_nums];
+  uint32_t insc_r_count = 0;
+  for (int i = 0; i < count; i++){
+    // for (int j = 0; j < arr[i]->local_rules->nrules; j++) {
+    //   r_arr[insc_r_count] = arr[i]->local_rules->rules[j];
+    //   insc_r_count++;
+    // }
+    r_arr[insc_r_count] = arr[i]->local_rules->rules[0];
+    insc_r_count++;
   }
 
   for (int field_i = 0; field_i < FIELD_LEN; field_i++) {//standford data has 7fields
@@ -12386,12 +13238,45 @@ trie_process_ec_arule(struct trie_node *root, struct ex_rule *r) {
       v_arr[r_i*2] = l_v;
       v_arr[r_i*2+1] = h_v;
     }
+
+    uint32_t h_end = 0;
+    uint32_t l_last = 0;
+    for (int len_i = 0; len_i < len; len_i++) {
+      uint16_t masksign = 0;
+      uint32_t mf_sign = (field_sign[field_i] + len_i)/2;
+      if ((field_sign[field_i] + len_i)%2)
+        masksign = 0x0080;
+      else
+        masksign = 0x8000;
+      for (int c_i = 0; c_i < 8; c_i++) {
+        if (masksign & r->mf_in->mf_w[mf_sign]) {//wildcard 
+          h_end |= 1;
+        }
+        else if (masksign & r->mf_in->mf_v[mf_sign]) {//1
+          l_last |= 1;
+          h_end |= 1;
+        }
+        // else {
+        //   l_last <<= 1;
+        //   h_v <<= 1;
+        // }
+        if ((len_i == (len-1))&&(c_i == 7))
+          break;
+        l_last <<= 1;
+        h_end <<= 1;
+        masksign >>=1;
+      }
+    }
+
+
     qsort(v_arr, 2*insc_r_count,sizeof(uint32_t), uint32_t_cmp);
 
     uint32_t last = v_arr[0];
+
     for (int i = 0; i < 2*insc_r_count; i++) {
-      if(v_arr[i] != last){
-        struct ec *tmp = xmalloc(sizeof *tmp);
+
+      if(v_arr[i] > last){
+        struct ec_1f *tmp = xmalloc(sizeof *tmp);
         tmp->l_b = last;
         tmp->h_b = v_arr[i];
         free(tmp);
@@ -12399,8 +13284,12 @@ trie_process_ec_arule(struct trie_node *root, struct ex_rule *r) {
       }
     }
   }
-
+  // gettimeofday(&stop,NULL);
+  // T_for_add = diff(&stop, &start);
+  // printf("Trie test rule with %d - %d: %lld us with computing EC\n", r->sw_idx, r->idx, T_for_add);
+  printf("This rule insect %d rules\n", insc_r_count);
     // arr[i]->relevent_rules = add_rule_to_ex_rules_arr(arr[i]->relevent_rules, r);
+
   return insc_r_count;
 }
 
@@ -12480,18 +13369,25 @@ trie_add_rules_for_nt_test_all(struct trie_node *root, struct network_wc *nt) {
   uint32_t arr[SW_NUM] = {29, 94, 23, 40, 34, 49, 26, 28, 68};
 
   for (int i = 0; i < SW_NUM; i++) {
+  // for (int i = 0; i < 1; i++) {
     // trie_add_rules_for_sw_test_all(root, nt->sws[i]);
     struct switch_rs *sw = nt->sws[i];
-    for (int j = 0; j < sw->nrules; j++) {
-    // for (int j = arr[i]; j < sw->nrules; j++) {
+    // for (int j = 0; j < sw->nrules; j++) {
+      // if((j>600))
+      //   break;
+    // for (int j = 0; j < 5; j++) {
+    for (int j = arr[i]; j < sw->nrules; j++) {
     // for (int k = arr[i]; k < sw->nrules; k++) {
     //   uint32_t j = sw->nrules - k + arr[i]-1;
       gettimeofday(&start,NULL);
       trie_insert_rule (root, sw->rules[j]);
-      uint32_t insc_r_count = trie_process_ec_arule(root, sw->rules[j]);
+      // gettimeofday(&stop,NULL);
+      // uint32_t insc_r_count = trie_process_ec_arule(root, sw->rules[j]);
+      // uint32_t insc_r_count = trie_process_ec_arule_intrie(root, sw->rules[j]);
+      uint32_t insc_r_count = trie_process_ec_arule_veriflow(root, sw->rules[j]);
       gettimeofday(&stop,NULL);
       long long int T_for_add = diff(&stop, &start);
-      printf("Trie test rule with %d - %d: %lld us\n", sw->sw_idx, sw->rules[j]->idx, T_for_add);
+      printf("Trie test rule with %d - %d: %lld us with inserting\n", sw->sw_idx, sw->rules[j]->idx, T_for_add);
       printf("This rule insect %d rules\n", insc_r_count);
     }
   }
@@ -12537,7 +13433,7 @@ get_terminal_by_r(struct trie_node *root, struct ex_rule *r) {
 /*========================================================================*/
 
 struct network_bdd {
-  struct switch_bdd_rs *sws[SW_NUM]
+  struct switch_bdd_rs *sws[SW_NUM];
 };
 
 BDD
@@ -12608,6 +13504,13 @@ is_action_same(struct bdd_rule *a, struct bdd_rule *b){
 }
 
 bool
+is_inport_same_rwc(struct bdd_rule *a, struct bdd_rule *b){
+  if (!is_links_of_rule_same(a->lks_in, b->lks_in))
+    return false;
+  return true;
+}
+
+bool
 is_action_same_rwc(struct bdd_rule *a, struct bdd_rule *b){
   if (!is_mask_uint16_t_same(a->mask, b->mask))
     return false;
@@ -12615,8 +13518,8 @@ is_action_same_rwc(struct bdd_rule *a, struct bdd_rule *b){
     return false;
   if (!is_links_of_rule_same(a->lks_out, b->lks_out))
     return false;
-  // if (!is_links_of_rule_same(a->lks_in, b->lks_in))
-  //   return false;
+  if (!is_links_of_rule_same(a->lks_in, b->lks_in))
+    return false;
   return true;
 }
 
@@ -12669,6 +13572,12 @@ ex_rule_to_bdd_rule_noredun(struct ex_rule *r, struct switch_bdd_rs *sw, uint32_
   }
   else
     bdd_r->vtnode_in = mtbdd_maketnode_from_r(bdd_r);
+
+  for (int i = 0; i < count; i++){
+    if (is_inport_same_rwc(bdd_r, sw->rules[i]))
+      bdd_r->mf_in = bdd_apply(bdd_r->mf_in, sw->rules[i]->mf_in, bddop_diff);
+  }
+
   bdd_addref(bdd_r->vtnode_in);
   bdd_r->mtbdd_in = bdd_rule_get_mtbdd_in(r, bdd_r->vtnode_in); 
   bdd_addref(bdd_r->mtbdd_in);
@@ -12706,6 +13615,48 @@ switch_rs_to_bdd_rs_noredun(struct switch_rs *sw){
   return tmp;
 }
 
+struct switch_bdd_rs *
+switch_rs_to_bdd_rs_merged(struct switch_rs *sw){
+  struct bdd_rule *arrtmp[20000];
+  uint32_t count = 0;
+
+  // struct switch_bdd_rs *tmp = xmalloc(2*sizeof(uint32_t)+(sw->nrules)*sizeof(struct bdd_rule *));
+  // tmp->sw_idx = sw->sw_idx;
+  // tmp->nrules = sw->nrules;
+  for (int i = 0; i < sw->nrules; i++) {
+  // for (int i = 0; i < 3; i++) {
+    bool isame = false;
+    struct bdd_rule *rtmp = ex_rule_to_bdd_rule(sw->rules[i]);
+
+
+    for (int j = 0; j < count; j++){
+      if (is_inport_same_rwc(rtmp, arrtmp[j]))
+        rtmp->mf_in = bdd_apply(rtmp->mf_in, arrtmp[j]->mf_in, bddop_diff);    
+    }
+    for (int j = 0; j < count; j++) {
+      if (is_action_same_rwc(rtmp, arrtmp[j])){
+        arrtmp[j]->mf_in = bdd_apply(arrtmp[j]->mf_in, rtmp->mf_in, bddop_or);
+        isame = true;
+        break;
+      }   
+    }
+    if (!isame) {
+      arrtmp[count] = rtmp;
+      count ++;
+    }
+
+    // printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum()); 
+  }
+  struct switch_bdd_rs *tmp = xmalloc(2*sizeof(uint32_t)+(count)*sizeof(struct bdd_rule *));
+  tmp->sw_idx = sw->sw_idx;
+  tmp->nrules = count;
+  for (int i = 0; i < count; i++)
+    tmp->rules[i] = arrtmp[i];
+  printf("switch_bdd_rs %d has %d rules.\n", tmp->sw_idx, tmp->nrules); 
+  printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum()); 
+  return tmp;
+}
+
 struct network_bdd *
 network_wc_to_bdd(struct network_wc *nt){
   struct network_bdd *tmp = xmalloc(sizeof(*tmp));
@@ -12723,6 +13674,16 @@ network_wc_to_bdd_noredun(struct network_wc *nt){
   }
   return tmp;
 }
+
+struct network_bdd *
+network_wc_to_bdd_merged(struct network_wc *nt){
+  struct network_bdd *tmp = xmalloc(sizeof(*tmp));
+  for (int i = 0; i < SW_NUM; i++) {
+    tmp->sws[i] = switch_rs_to_bdd_rs_merged(nt->sws[i]);
+  }
+  return tmp;
+}
+
 
 
 
@@ -12753,6 +13714,46 @@ switch_bddrs_getinscbdd_test_all(struct network_bdd *nt) {
       printf("get diff the rule idx %d: %lld us\n", i+1, T_for_add);
     }
   }
+}
+
+void
+get_APs(struct network_bdd *nt){
+  BDD arr1[500000];
+  arr1[0] = 1;
+  uint32_t count1 = 1;
+  BDD arr2[500000];
+  uint32_t count2 = 0;
+
+
+  for (int k = 0; k < SW_NUM; k++) {
+    printf("the sw %d has been completed\n", k);
+    struct switch_bdd_rs *sw = nt->sws[k];
+    for (int i = 0; i < sw->nrules; i++) {
+      BDD in = sw->rules[i]->mf_in;
+      BDD notin = bdd_not(in);
+      for (int arr1_i = 0; arr1_i < count1; arr1_i++) {
+        BDD insc = bdd_apply (arr1[arr1_i], in, bddop_and);
+        if (insc)
+        {
+          arr2[count2] = insc;
+          count2 ++;
+        }
+        
+        insc= bdd_apply (arr1[arr1_i], notin, bddop_and);
+        if (insc)
+        {
+          arr2[count2] = insc;
+          count2 ++;
+        }
+      }
+      count1 = count2;
+      for (int arr2_i = 0; arr2_i < count2; arr2_i++) {
+        arr1[arr2_i] = arr2[arr2_i];
+      }
+      count2 = 0;
+    }
+  }
+  printf("there has been the %d aps\n", count1);
 }
 
 void
@@ -12837,10 +13838,10 @@ switch_bddrs_to_mtbdd_test_difflast1(struct switch_bdd_rs *sw, uint32_t idx) {
   gettimeofday(&stop,NULL);
   long long int T_up_last1 = diff(&stop, &start);
   // printf("the last rule has %d nodes\n", bdd_nodecount(sw->rules[order[sw->nrules - 1]]->mtbdd_in));
-  printf("the root has %d nodes\n", bdd_nodecount(root));
-  printf("Test the last one with idx %d: %lld us\n", sw->rules[order[sw->nrules - 1]]->idx, T_up_last1);
+  // printf("the root has %d nodes\n", bdd_nodecount(root));
+  printf("Test the rule idx %d: %lld us\n", sw->rules[order[sw->nrules - 1]]->idx, T_up_last1);
   // printf("This rule insect %d rules\n", mtbddvalues[(bddnodes[sw->rules[order[sw->nrules - 1]]->vtnode_in].high)].test_count);
-  printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum()); 
+  // printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum()); 
   return root;
 }
 

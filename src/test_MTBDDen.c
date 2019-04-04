@@ -165,7 +165,7 @@ main (int argc, char **argv)
   // test();
   
   // 加载net数据
-  char *net = "stanford";
+  // char *net = "stanford";
   // char *net = "stanford_32";
   // char *net = "stanford_whole";
   // char *net = "i2";
@@ -191,7 +191,7 @@ main (int argc, char **argv)
   // print_rule(rule1);
 
   // uint32_t test_sw_idx = 0;
-  uint32_t swsnum = 9;
+  uint32_t swsnum = 16;
   struct switch_rs *sws[swsnum];
 
   for (int i = 0; i < swsnum; i++){
@@ -218,10 +218,15 @@ main (int argc, char **argv)
   printf("-------------------------------------------------------\n");
 
   // gettimeofday(&start,NULL);
-  // greed_calc_arule_insc_sw(swr0, test_r_idx);
+  // for (int i = 15; i < swsnum; i++) {
+  //   for (int j = 0; j < sws[i]->nrules; j++) {
+  //     greed_calc_arule_insc_sw(sws[i], j+1);
+  //   }   
+  //   // printf("Test the greedy find wildcard insc with idx %d: %lld us\n", test_r_idx,T_greed_calc);
+  // }
+ 
   // gettimeofday(&stop,NULL);
   // long long int T_greed_calc = diff(&stop, &start);
-  // printf("Test the greedy find wildcard insc with idx %d: %lld us\n", test_r_idx,T_greed_calc);
   printf("-------------------------------------------------------\n");
 
   // gettimeofday(&start,NULL);
@@ -229,7 +234,7 @@ main (int argc, char **argv)
   // gettimeofday(&stop,NULL);
   // long long int build_trie = diff(&stop, &start);
   // printf("build trie from sw0: %lld us\n", build_trie);
-  // printf("-------------------------------------------------------\n");
+  printf("-------------------------------------------------------\n");
 
 
 
@@ -263,17 +268,28 @@ main (int argc, char **argv)
   // gettimeofday(&stop,NULL);
   // long long int T_getinscbdd = diff(&stop, &start);
   // printf("Test the greedy find bdd insc with idx %d: %lld us\n", test_r_idx,T_getinscbdd);
-  // switch_bddrs_getinscbdd_test_all(sw_tmp);
+  // for (int i = 15; i < swsnum; i++)
+    // switch_bddrs_AP_test_lastdiff1(sws_bdd[i], sws_bdd[i]->nrules);
+    // switch_bddrs_getinscbdd_test_all(sws_bdd[i]);
   printf("-------------------------------------------------------\n");
 
+  // for (int i = 0; i < swsnum; i++)
+  //   switch_bddrs_AP_test_lastdiff1(sws_bdd[i], sws_bdd[i]->nrules);
   // switch_bddrs_AP_test_lastdiff1(sw_tmp, test_r_idx);
+
+
+  
+
+
   printf("-------------------------------------------------------\n");
- 
+
   // switch_bddrs_mergeAP_count(sw_tmp);
   printf("-------------------------------------------------------\n");
-  BDD fn_mtbdd = 0;
-  for (int i = 0; i < swsnum; i++)
-    fn_mtbdd = switch_bddrs_to_mtbdd_test_difflast1(sws_bdd[i], sws_bdd[i]->nrules);
+  // BDD fn_mtbdd = 0;
+  // for (int i = 0; i < swsnum; i++)
+  //   fn_mtbdd = switch_bddrs_to_mtbdd_test_difflast1(sws_bdd[i], sws_bdd[i]->nrules);
+  // for (int i = 0; i < swsnum; i++)
+  //   fn_mtbdd = switch_bddrs_to_mtbdd_test_alltogether(sws_bdd[i], fn_mtbdd);
   // BDD *fn_mtbdd = switch_bddrs_to_mtbdd_test_difflast1(sw_tmp, test_r_idx);
   printf("-------------------------------------------------------\n");
 

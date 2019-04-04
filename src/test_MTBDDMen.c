@@ -87,53 +87,6 @@ test(void) {
   // fclose(f);
 }
 
-void
-print_vElemsNUM_of_Matrix_CSR(struct matrix_CSR *matrix_CSR) {
-  uint32_t sum = 0;
-  for (int i = 0; i < matrix_CSR->nrows; i++) {
-    if (matrix_CSR->rows[i]) {
-      sum += matrix_CSR->rows[i]->nidx_vs;
-    }
-  }
-  printf("This Matrix_CSR has %d valid elements\n", sum);
-}
-
-void
-print_npairsNUM_of_Matrix_CSR(struct matrix_CSR *matrix_CSR) {
-  uint32_t sum = 0;
-  for (int i = 0; i < matrix_CSR->nrows; i++) {
-    if (matrix_CSR->rows[i]) {
-      for (int j = 0; j < matrix_CSR->rows[i]->nidx_vs; j++) {
-        sum += matrix_CSR->rows[i]->idx_vs[j]->elem->npairs;
-      }
-    }
-  }
-  printf("This Matrix_CSR has %d valid npairs\n", sum);
-}
-
-void
-print_vElemsNUM_of_Matrix_CSC(struct matrix_CSC *matrix_CSC) {
-  uint32_t sum = 0;
-  for (int i = 0; i < matrix_CSC->ncols; i++) {
-    if (matrix_CSC->cols[i]) {
-      sum += matrix_CSC->cols[i]->nidx_vs;
-    }
-  }
-  printf("This Matrix_CSC has %d valid elements\n", sum);
-}
-
-void
-print_npairsNUM_of_Matrix_CSC(struct matrix_CSC *matrix_CSC) {
-  uint32_t sum = 0;
-  for (int i = 0; i < matrix_CSC->ncols; i++) {
-    if (matrix_CSC->cols[i]) {
-      for (int j = 0; j < matrix_CSC->cols[i]->nidx_vs; j++) {
-        sum += matrix_CSC->cols[i]->idx_vs[j]->elem->npairs;
-      }
-    }
-  }
-  printf("This Matrix_CSC has %d valid npairs\n", sum);
-}
 
 void
 counter_init(void) {
@@ -196,11 +149,11 @@ main (int argc, char **argv)
   printf("==============================================================\n");
 
 
-  //made trie and updating rules
+  //made trie and updating rulesarr
   /*==============================================================================*/
   struct trie_node *trie_root = crate_trie_node_init();
 
-  // trie_add_rules_for_nt_test_all(trie_root, nt_wc);
+  trie_add_rules_for_nt_test_all(trie_root, nt_wc);
   // trie_add_rules_for_sw_test_difflast1(trie_root, swr0, test_r_idx);
   printf("-------------------------------------------------------\n");
 
@@ -241,12 +194,13 @@ main (int argc, char **argv)
   // printf("get BDD from switch_rs: %lld us\n", T_sw_to_BDD);
 
 
-  gettimeofday(&start,NULL);
-  struct network_bdd *nt_bdd = network_wc_to_bdd(nt_wc);
+  // gettimeofday(&start,NULL);
+  // struct network_bdd *nt_bdd = network_wc_to_bdd(nt_wc);
   // struct network_bdd *nt_bdd = network_wc_to_bdd_noredun(nt_wc);
-  gettimeofday(&stop,NULL);
-  long long int T_nt_to_BDD = diff(&stop, &start);
-  printf("get BDD from switch_rs: %lld us\n", T_nt_to_BDD);
+  // struct network_bdd *nt_bdd = network_wc_to_bdd_merged(nt_wc);
+  // gettimeofday(&stop,NULL);
+  // long long int T_nt_to_BDD = diff(&stop, &start);
+  // printf("get BDD from switch_rs: %lld us\n", T_nt_to_BDD);
   printf("-------------------------------------------------------\n");
 
   // gettimeofday(&start,NULL);
@@ -259,14 +213,14 @@ main (int argc, char **argv)
 
   // switch_bddrs_AP_test_lastdiff1(sw_tmp, test_r_idx);
   printf("-------------------------------------------------------\n");
- 
+  // get_APs(nt_bdd);
   // switch_bddrs_mergeAP_count(sw_tmp);
   printf("-------------------------------------------------------\n");
 
   // BDD *fn_mtbdd = switch_bddrs_to_mtbdd_test_difflast1(sw_tmp, test_r_idx);
   printf("-------------------------------------------------------\n");
 
-  nt_bdd_to_mtbdd_test_all(nt_bdd);
+  // nt_bdd_to_mtbdd_test_all(nt_bdd);
   printf("-------------------------------------------------------\n");
 
   // gettimeofday(&start,NULL);

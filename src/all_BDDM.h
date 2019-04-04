@@ -21,7 +21,7 @@
 
 //结构体或变量定义
 //自定义
-#define STANDFORD_W 0
+#define STANDFORD_W 0 // standford 和 i2 时为 0，standford whole 时为1
 // #define MF_LEN 8 //128位bit， 8×16
 // #define MF_LEN 2 //32位bit standford
 #define MF_LEN 3 //48位bit i2
@@ -2577,6 +2577,34 @@ bdd_rw_BDD(BDD a, struct mask_uint16_t *mask, struct mask_uint16_t *rw) {
 }
 
 BDD
+bdd_rw_ITE_BDD(BDD a, struct mask_uint16_t *mask, struct mask_uint16_t *rw) {
+  // struct timeval start,stop; 
+  // gettimeofday(&start,NULL);
+  struct mf_uint16_t *mask_v = xmalloc(sizeof(*mask_v ));
+  for (int i = 0; i < MF_LEN; i++) {
+    mask_v->mf_w[i] = 0;
+    mask_v->mf_v[i] = mask->v[i];
+  }
+  struct mf_uint16_t *rw_v = xmalloc(sizeof(*rw_v ));
+  for (int i = 0; i < MF_LEN; i++) {
+    rw_v->mf_w[i] = 0;
+    rw_v->mf_v[i] = rw->v[i];
+  }
+  BDD root_mask = mf2bdd(mask_v);
+  // gettimeofday(&stop,NULL);
+  // time_counter4 += diff(&stop, &start);
+  // gettimeofday(&start,NULL);
+  BDD root_rw = mf2bdd(rw_v);
+  // BDD root_rw = rw2bdd(mask, rw);
+  root_rw = bdd_ite(root_mask, a, root_rw);
+  // gettimeofday(&stop,NULL);
+  // time_counter5 += diff(&stop, &start);
+  free(mask_v);
+  free(rw_v);
+  return root_rw;
+}
+
+BDD
 bdd_rw_back_BDD(BDD a, BDD a_IN, struct mask_uint16_t *mask) {
   // struct timeval start,stop; 
   // gettimeofday(&start,NULL);
@@ -2869,6 +2897,84 @@ matrix_elem_plus_keepb(struct matrix_element *a, struct matrix_element *b) {
     tmp->nf_pairs[i] = nps[i]; 
   free(a);
   a = NULL;
+  return tmp; 
+}
+
+struct matrix_element *
+matrix_elem_plus_reuse(struct matrix_element *a, struct matrix_element *b) {
+  if (!b)
+    return a;
+  if (!a)
+    return b;
+  struct nf_space_pair *nps[10000];
+  struct nf_space_pair *nps_new[10000];
+  uint32_t count = 0;
+  for (int i = 0; i < a->npairs; i++) {
+    nps[count] = a->nf_pairs[i];
+    nps_new[count] = NULL;
+    count++;
+  }
+
+  for (int i = 0; i < b->npairs; i++) {
+    bool issame = false;
+    for (int j = 0; j < a->npairs; j++) {
+      if (issame_nf_space_pair_action(nps[j], b->nf_pairs[i])) {
+        if (nps_new[j]) {
+          bdd_delref(nps[j]->in->mf);
+          bdd_delref(nps[j]->out->mf);
+          nps[j]->in->mf = bdd_apply(nps[j]->in->mf, b->nf_pairs[i]->in->mf, bddop_or);
+          nps[j]->out->mf = bdd_apply(nps[j]->out->mf, b->nf_pairs[i]->out->mf, bddop_or);
+          bdd_addref(nps[j]->in->mf);
+          bdd_addref(nps[j]->out->mf);
+        }
+        else{
+          nps_new[j] = copy_nf_space_pair(nps[j]);
+          bdd_delref(nps[j]->in->mf);
+          bdd_delref(nps[j]->out->mf);
+          nps[j]->in->mf = bdd_apply(nps[j]->in->mf, b->nf_pairs[i]->in->mf, bddop_or);
+          nps[j]->out->mf = bdd_apply(nps[j]->out->mf, b->nf_pairs[i]->out->mf, bddop_or);
+          bdd_addref(nps[j]->in->mf);
+          bdd_addref(nps[j]->out->mf);
+        }
+        // free_nf_space_pair(b->nf_pairs[i]);
+        break;
+      } 
+    }
+    if (!issame) {
+      nps[count] = b->nf_pairs[i];
+      nps_new[count] = NULL;
+      // nps[count] = b->nf_pairs[i];
+      count++;
+    }
+  }
+
+  struct matrix_element *tmp = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+count*sizeof(struct nf_space_pair *));
+  tmp->npairs = count;
+  if (a->bdd_in == b->bdd_in) {
+    tmp->bdd_in = a->bdd_in;
+  }
+  else {
+    tmp->bdd_in = bdd_apply(a->bdd_in, b->bdd_in, bddop_or);
+    bdd_delref(a->bdd_in);
+    bdd_addref(tmp->bdd_in);
+  }
+  if (a->bdd_out == b->bdd_out) {
+    tmp->bdd_out = a->bdd_out;
+  }
+  else {
+    tmp->bdd_out = bdd_apply(a->bdd_out, b->bdd_out, bddop_or);
+    bdd_delref(a->bdd_out);
+    bdd_addref(tmp->bdd_out);
+  }
+  for (int i = 0; i < count; i++) {
+    if (nps_new[i]) 
+      tmp->nf_pairs[i] = nps_new[i];
+    else
+      tmp->nf_pairs[i] = nps[i];
+  } 
+    
+  // free(a);
+  // a = NULL;
   return tmp; 
 }
 
@@ -3303,6 +3409,7 @@ two_CS_matrix_idx_v_arr_plus_keeprow2(struct CS_matrix_idx_v_arr *row1, struct C
   // row2 = NULL;
   return tmp;
 }
+
 
 uint32_t
 get_merged_matrix_idx_fr_idx(uint32_t idx) {
@@ -4495,6 +4602,32 @@ sparse_matrix_multiply_nsqure(struct matrix_CSR *matrix_CSR, struct matrix_CSC *
   return tmp;
 }
 
+struct matrix_CSR * //reuse the vector of the old one
+sparse_matrix_plus(struct matrix_CSR *matrix_CSR1, struct matrix_CSR *matrix_CSR2) {
+  // uint32_t threshold = matrix_CSR->nrows/600;
+  struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+matrix_CSR1->nrows*sizeof(struct CS_matrix_idx_v_arr *));
+  tmp->nrows = matrix_CSR1->nrows;
+  for (uint32_t i = 0; i < tmp->nrows; i++)
+    tmp->rows[i] = NULL;
+
+  for (uint32_t i = 0; i < tmp->nrows; i++) {
+    if (matrix_CSR1->rows[i]){
+      if (matrix_CSR2->rows[i]){
+        tmp->rows[i] = two_CS_matrix_idx_v_arr_plus_keeprow2(matrix_CSR1->rows[i], matrix_CSR2->rows[i], tmp->nrows);
+      }
+      else{
+        tmp->rows[i] = matrix_CSR1->rows[i];
+      }
+    }
+    else{
+      tmp->rows[i] = matrix_CSR2->rows[i];
+    }
+  }
+  // printf("row number:%d\n", matrix_CSR->nrows);
+  // printf("tmp:%d\n", tmp->nrows);
+  return tmp;
+}
+
 void
 BDD_init_matrix_multiply(void) {
   bdd_init(BDDSIZE, BDDOPCHCHE);
@@ -4976,7 +5109,7 @@ average_updating_r_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *orin
   struct timeval start,stop;
   // long long int average = 0;
   // uint32_t sw_idx = 6;
-  for (int sw_idx = 0; sw_idx < 16; sw_idx++){
+  for (int sw_idx = 0; sw_idx < 9; sw_idx++){
  
     for (int r_i = 0; r_i < bdd_sws_arr[sw_idx]->nrules; r_i++) {
       struct bdd_rule *r = bdd_sws_arr[sw_idx]->rules[r_i];
@@ -5533,7 +5666,6 @@ gen_sparse_matrix_row_fr_inport_lk(uint32_t inport, struct matrix_CSR *matrix_CS
   return csr_tmp;
 }
 
-
 bool
 average_updating_link_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *orin_matrix_CSR) {
   struct timeval start,stop;
@@ -5590,4 +5722,53 @@ average_updating_link_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *o
 
   printf("--------------------------------------\n");
   return 1;
+}
+
+void
+test_rw_with_ite(void) {
+  struct timeval start,stop;
+  for (int i = 0; i < 1; i++) {
+    for (int j = 0; j < bdd_sws_arr[i]->nrules; j++) {
+      if ( bdd_sws_arr[i]->rules[j]->mask) {
+        gettimeofday(&start,NULL);
+        BDD result_rw = bdd_rw_BDD(bdd_sws_arr[i]->rules[j]->mf_in, bdd_sws_arr[i]->rules[j]->mask, bdd_sws_arr[i]->rules[j]->rewrite);
+        gettimeofday(&stop,NULL);
+        printf("%ld us - ", diff(&stop, &start) );
+        gettimeofday(&start,NULL);
+        BDD result_ite = bdd_rw_ITE_BDD(bdd_sws_arr[i]->rules[j]->mf_in, bdd_sws_arr[i]->rules[j]->mask, bdd_sws_arr[i]->rules[j]->rewrite);
+        gettimeofday(&stop,NULL);
+        printf("%ld us ;", diff(&stop, &start) );
+        if (result_rw == result_ite) {
+          printf("%d - %d same\n", bdd_sws_arr[i]->rules[j]->sw_idx,bdd_sws_arr[i]->rules[j]->idx);
+        }
+        else {
+          printf("%d - %d not same\n", bdd_sws_arr[i]->rules[j]->sw_idx,bdd_sws_arr[i]->rules[j]->idx);
+        }
+      }
+    }
+  }
+}
+
+
+// struct switch_bdd_rs *bdd_sws_arr[SW_NUM];
+// struct r_to_merge *r_to_merge_arr[SW_NUM]; //原来的r到新合并的r之间的映射
+// struct r_to_merge *merged_arr[SW_NUM];
+// uint32_t r_merge_num_arr[SW_NUM];
+// struct r_to_merge {
+//   uint32_t nrules;
+//   uint32_t rules[0];
+// };
+void
+get_transformer(void) {
+  for (int i = 0; i < SW_NUM; i++) {
+    for (int j = 0; j < merged_arr[i]->nrules; j++) {
+      uint32_t idx = merged_arr[i]->rules[j];
+      if (bdd_sws_arr[i]->rules[idx]->mask){
+        printf("rule %d - %d:\n", i, idx+1);
+        print_mask_uint16_t(bdd_sws_arr[i]->rules[idx]->mask);
+        print_mask_uint16_t(bdd_sws_arr[i]->rules[idx]->rewrite);
+        printf("\n");
+      }
+    }
+  }
 }

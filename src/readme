@@ -19,9 +19,7 @@ gcc -std=c99 -Wall -lpthread test_MTBDDMen.c -fexec-charset=gbk -lm -o test_MTBD
 gcc -std=c99 -Wall -lpthread test_MTBDDen.c -fexec-charset=gbk -lm -o test_MTBDDen
 ./test_MTBDDen
 
-
-
-
-
 git clone https://github.com/oceanly020/NIVwithHSA.git
 git clone https://github.com/oceanly020/hassel-public.git
+
+sudo apt-get install gdb

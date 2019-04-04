@@ -6527,12 +6527,12 @@ mtbdd_maketnode_fr_2tn_add_simple(BDD tnode1, BDD tnode2){
     //   v2->test_count++;
     // }
     // bdd_delref(v2->self_bdd);
-    // v2->self_bdd = bdd_apply(v2->self_bdd, v1->self_bdd, bddop_or); 
+    v2->self_bdd = bdd_apply(v2->self_bdd, v1->self_bdd, bddop_or); 
     // bdd_addref(v2->self_bdd);
     /* v1->self_bdd not change */
 
     // bdd_delref(v2->coveredby_bdd);
-    v2->coveredby_bdd = bdd_apply(v2->coveredby_bdd, insc, bddop_xor);
+    // v2->coveredby_bdd = bdd_apply(v2->coveredby_bdd, insc, bddop_xor);
     // bdd_addref(v2->coveredby_bdd);
 
     // bdd_delref(v1->covering_bdd);
@@ -6540,6 +6540,7 @@ mtbdd_maketnode_fr_2tn_add_simple(BDD tnode1, BDD tnode2){
     // bdd_addref(v1->covering_bdd);
     return tnode1;
   }
+  // BDD insc = bdd_apply(v1->self_bdd, v2->self_bdd, bddop_and);
   // if (v1->self_bdd == v2->self_bdd) {
     // v1->test_count++;
     // v2->test_count++;
