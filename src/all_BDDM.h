@@ -15,18 +15,22 @@
 #include <stdlib.h>
 #include <string.h>
 #include <dirent.h>  
-#include "usedBDD.h"  
+#include "usedBDD.h"
+#include "cJSON.h"
 #include <sys/time.h>
 #include <malloc.h>
 
 //结构体或变量定义
 //自定义
+// #define STANDFORD_W 1
 #define STANDFORD_W 0 // standford 和 i2 时为 0，standford whole 时为1
-// #define MF_LEN 8 //128位bit， 8×16
+#define MF_LEN 8 //128位bit， 8×16
 // #define MF_LEN 2 //32位bit standford
-#define MF_LEN 3 //48位bit i2
-#define SW_NUM 9
-// #define SW_NUM 16
+// #define MF_LEN 3 //48位bit i2
+// #define SW_NUM 9
+#define SW_NUM 16
+// #define SW_NUM 18 //json数据中，18个表对i2，每个 sw 2个表
+// #define SW_NUM 48 //json数据中，48个表对stanfotd，每个 sw 3个表
 
 #define NW_DST_H 0
 #define NW_DST_L 1
@@ -37,7 +41,6 @@
 #define RULE_LINK_OUT 1
 #define IN_LINK 1
 #define OUT_LINK 0
-
 
 #if __x86_64 || __amd64 || _M_X64 //64位或32位
 typedef uint64_t array_t; //8字节一字节8位,16位16进制
@@ -627,11 +630,14 @@ struct matrix_Tri_express {
 
 struct Tri_arr {
   uint32_t nTris;
-  struct matrix_Tri_express *arr[];
+  struct matrix_Tri_express *arr[0];
 };
 
 
-
+struct network_bdd {
+  uint32_t nsws;
+  struct switch_bdd_rs *sws[SW_NUM];
+};
 
 //BDD sw 全局数组
 struct switch_bdd_rs *bdd_sws_arr[SW_NUM];
@@ -758,6 +764,7 @@ struct links_of_rule *links_insc(struct links_of_rule *a, struct links_of_rule *
 /*一些需求的比较函数和判断*/
 /*========================================================================*/
 static int uint32_t_cmp(const void *a, const void *b);
+static int uint16_t_cmp(const void *a, const void *b);
 static int link_idx_cmp(const void *a, const void *b); //本头文件限定，bsearch函数要求的比较函数
 
 bool is_mf_allx(struct mf_uint16_t *a);
@@ -955,7 +962,6 @@ get_link_idx_from_inport (const uint32_t inport) {
       count ++;
     }
   }
-
   struct u32_arrs *tmp = xmalloc((count+1)*sizeof(uint32_t));
   tmp->ns = count;
   for (uint32_t i = 0; i < count; i++) {
@@ -982,12 +988,10 @@ get_outrules_idx_from_inport (const uint32_t inport) {
         arrs_tmp[count] = matrix_idx_get_2idx(*(uint32_t *)lout_arrs, *(uint32_t *)(lout_arrs+1));
         count ++;
         lout_arrs += 2;
-
       }  
     }
   }
   free(link_idx);
-  
   struct u32_arrs *tmp = NULL;
   if(count) {
     qsort(arrs_tmp, count,sizeof (uint32_t), uint32_t_cmp);
@@ -1002,7 +1006,6 @@ get_outrules_idx_from_inport (const uint32_t inport) {
         pre_one = arrs_tmp[i];
       }
     }
-
     tmp = xmalloc((count+1)*sizeof(uint32_t));
     tmp->ns = count_unrep;
     for (int i = 0; i < count_unrep; i++)
@@ -1010,7 +1013,7 @@ get_outrules_idx_from_inport (const uint32_t inport) {
   }
   return tmp;
 }
-
+ 
 void
 print_link(const struct link *lk) {
   if(!lk){
@@ -1278,7 +1281,6 @@ print_CSC_elem_from_idx(const uint32_t row_idx, const uint32_t col_idx, const st
   printf("This row is empty!\n");
   return 0;
 }
-
 
 //data.c
 void 
@@ -2291,6 +2293,8 @@ gen_sw_rules(uint32_t sw_idx) {
 void
 free_bdd_rule(struct bdd_rule *r) {
   if(r) {
+    bdd_delref(r->mf_in);
+    bdd_delref(r->mf_out);
     if(r->mask) {
       free(r->mask);
       free(r->rewrite);
@@ -2328,13 +2332,24 @@ bdd_sw_unload(void) {
 
 /*生成合并的规则*/
 /*------------------------------------------------*/
-
 // struct r_to_merge {
 //   uint32_t nrules;
 //   uint32_t rules[0];
 // };
 // struct r_to_merge *r_to_merge_arr[SW_NUM];
 // r_merge_num_arr
+
+// struct bdd_sws {
+//   uint32_t nsws;
+//   struct switch_bdd_rs *sws_arr[0];
+// };
+
+// //BDD sw 全局数组
+// struct switch_bdd_rs *bdd_sws_arr[SW_NUM];
+// struct r_to_merge *r_to_merge_arr[SW_NUM]; //原来的r到新合并的r之间的映射
+// struct r_to_merge *merged_arr[SW_NUM];
+// uint32_t r_merge_num_arr[SW_NUM];
+
 bool
 is_r_action_same(struct bdd_rule *a, struct bdd_rule *b){
   if (!is_mask_uint16_t_same(a->mask, b->mask))
@@ -2347,6 +2362,15 @@ is_r_action_same(struct bdd_rule *a, struct bdd_rule *b){
     return false;
   return true;
 }
+bool
+is_r_rw_same(struct bdd_rule *a, struct bdd_rule *b){
+  if (!is_mask_uint16_t_same(a->mask, b->mask))
+    return false;
+  if (!is_mask_uint16_t_same(a->rewrite, b->rewrite))
+    return false;
+  return true;
+}
+
 
 uint32_t same_num;
 void
@@ -2359,7 +2383,6 @@ init_r_to_merge(void) {
     uint32_t arr_tmp[bdd_sws_arr[i]->nrules];
     arr_tmp[0] = 0;
     uint32_t count = 1;
-
     
     for (int j = 1; j < bdd_sws_arr[i]->nrules; j++) {
       bool issame = false;
@@ -2386,6 +2409,1742 @@ init_r_to_merge(void) {
   }
 }
 
+// struct switch_bdd_rs {
+//   uint32_t sw_idx;
+//   uint32_t nrules;
+//   struct bdd_rule *rules[0];
+// };
+// struct bdd_rule {
+//   uint32_t sw_idx;
+//   uint32_t idx;
+//   BDD mf_in;
+//   BDD mf_out;
+//   struct mask_uint16_t *mask;
+//   struct mask_uint16_t *rewrite; 
+//   struct links_of_rule *lks_in;
+//   struct links_of_rule *lks_out;
+// };
+
+// struct network_bdd {
+//   uint32_t nsws;
+//   struct switch_bdd_rs *sws[SW_NUM];
+// };
+
+uint32_t
+get_num_of_rules_innet(struct network_bdd *net){
+  uint32_t sumnum = 0;
+  for (int i = 0; i < net->nsws; i++) {
+    sumnum += net->sws[i]->nrules;
+  }
+  return sumnum;
+}
+
+struct network_bdd *
+get_bdd_sws_uncover(void){
+  struct network_bdd *tmp = xmalloc(sizeof(uint32_t)+SW_NUM*sizeof(struct switch_bdd_rs *));
+  tmp->nsws = SW_NUM;
+  for (int i = 0; i < SW_NUM; i++) {
+    tmp->sws[i] = xmalloc(2*sizeof(uint32_t)+bdd_sws_arr[i]->nrules*sizeof(struct bdd_rule *));
+    tmp->sws[i]->sw_idx = i;
+    tmp->sws[i]->nrules = bdd_sws_arr[i]->nrules;
+    BDD minus_tmp = 0;
+    for (int j = 0; j < tmp->sws[i]->nrules; j++){
+      tmp->sws[i]->rules[j] = xmalloc(sizeof(struct bdd_rule));
+      struct bdd_rule *r_tmp = tmp->sws[i]->rules[j];
+      struct bdd_rule *r = bdd_sws_arr[i]->rules[j];
+      r_tmp->sw_idx = r->sw_idx;
+      r_tmp->idx = r->idx;
+      r_tmp->mask = r->mask;
+      r_tmp->rewrite = r->rewrite;
+      r_tmp->lks_in = r->lks_in;
+      r_tmp->lks_out = r->lks_out;
+
+      r_tmp->mf_in = bdd_apply(r->mf_in, minus_tmp, bddop_diff);
+      r_tmp->mf_out = r->mf_out;
+      if (r_tmp->mask)
+        if (r_tmp->mf_in != r->mf_in)
+          r_tmp->mf_out = bdd_rw_BDD(r_tmp->mf_in, r_tmp->mask, r_tmp->rewrite);
+      minus_tmp = bdd_apply(minus_tmp, r->mf_out, bddop_or);
+    }
+  }
+  return tmp;
+}
+
+struct network_bdd *
+get_bdd_sws_merge(struct network_bdd *nt){
+  struct network_bdd *tmp = xmalloc(sizeof(uint32_t)+SW_NUM*sizeof(struct switch_bdd_rs *));
+  tmp->nsws = SW_NUM;
+  for (int i = 0; i < SW_NUM; i++){
+    tmp->sws[i] = xmalloc(2*sizeof(uint32_t)+merged_arr[i]->nrules*sizeof(struct bdd_rule *));
+    tmp->sws[i]->nrules = merged_arr[i]->nrules;
+    tmp->sws[i]->sw_idx = i;
+    for (int r_i = 0; r_i < merged_arr[i]->nrules; r_i++)
+      tmp->sws[i]->rules[r_i] = NULL;
+    for (int r_i = 0; r_i < r_to_merge_arr[i]->nrules; r_i++){
+      if (tmp->sws[i]->rules[r_to_merge_arr[i]->rules[r_i]]){
+        struct bdd_rule *r_tmp = tmp->sws[i]->rules[r_to_merge_arr[i]->rules[r_i]];
+        // struct bdd_rule *r = merged_arr[i]->rules[r_to_merge_arr[i]->nrule[r_i]];
+        r_tmp->mf_in = bdd_apply(nt->sws[i]->rules[r_i]->mf_in, r_tmp->mf_in, bddop_or);
+        r_tmp->mf_out = bdd_apply(nt->sws[i]->rules[r_i]->mf_out, r_tmp->mf_out, bddop_or);
+      }
+      else{
+        tmp->sws[i]->rules[r_to_merge_arr[i]->rules[r_i]] = xmalloc(sizeof(struct bdd_rule));
+        struct bdd_rule *r_tmp = tmp->sws[i]->rules[r_to_merge_arr[i]->rules[r_i]];
+        struct bdd_rule *r = nt->sws[i]->rules[r_i];
+        r_tmp->sw_idx = r->sw_idx;
+        r_tmp->idx = r_to_merge_arr[i]->rules[r_i];
+        r_tmp->mf_in = r->mf_in;
+        r_tmp->mf_out = r->mf_out;
+        r_tmp->mask = r->mask;
+        r_tmp->rewrite = r->rewrite;
+        r_tmp->lks_in = r->lks_in;
+        r_tmp->lks_out = r->lks_out;
+      }
+    }
+  }
+  return tmp;
+}
+
+struct APs {
+  uint32_t nAPs;
+  BDD AP_bdds[0];
+  // struct mask_uint16_t *mask;
+  // struct mask_uint16_t *rewrite; 
+};
+
+struct APs *
+get_APs_simple(struct network_bdd *nt){
+  struct timeval start,stop;  //计算时间差 usec
+  BDD arr1[500000];
+  arr1[0] = 1;
+  uint32_t count1 = 1;
+  BDD arr2[500000];
+  uint32_t count2 = 0;
+  bool sign = false;//if false means use arr1 as base
+
+  for (int k = 0; k < SW_NUM; k++) {
+    // printf("the sw %d has been completed\n", k);
+    struct switch_bdd_rs *sw = nt->sws[k];
+    for (int i = 0; i < sw->nrules; i++) {
+      if (sign)
+        printf("apcount = %d ", count2);
+      else
+        printf("apcount = %d ", count1);
+      gettimeofday(&start,NULL);
+      BDD in = sw->rules[i]->mf_in;
+      BDD notin = bdd_not(in);
+      if (sign) {
+        for (int arr2_i = 0; arr2_i < count2; arr2_i++) {
+          BDD insc = bdd_apply (arr2[arr2_i], in, bddop_and);
+          if (insc) {
+            arr1[count1] = insc;
+            count1 ++;
+          }
+          insc= bdd_apply (arr2[arr2_i], notin, bddop_and);
+          if (insc) {
+            arr1[count1] = insc;
+            count1 ++;
+          }
+        }
+        count2 = 0;
+        sign = false;
+      }
+      else {
+        for (int arr1_i = 0; arr1_i < count1; arr1_i++) {
+          BDD insc = bdd_apply (arr1[arr1_i], in, bddop_and);
+          if (insc) {
+            arr2[count2] = insc;
+            count2 ++;
+          }
+          insc= bdd_apply (arr1[arr1_i], notin, bddop_and);
+          if (insc) {
+            arr2[count2] = insc;
+            count2 ++;
+          }
+        }
+      count1 = 0;
+      sign = true;
+      }
+      gettimeofday(&stop,NULL);
+      long long int update_T = diff(&stop, &start);
+      // BddCache_reset(&applycache);
+      printf("APs compute for all: %lld us;\n", update_T);
+    }
+  }
+  uint32_t count = 0;
+  if (sign)
+    count = count2;
+  else
+    count = count1;
+  struct APs *tmp = xmalloc(sizeof(uint32_t)+count*sizeof(BDD));
+  tmp->nAPs = count;
+  if (sign) {
+    for (int i = 0; i < count; i++)
+      tmp->AP_bdds[i] = arr2[i];
+  }
+  else {
+    for (int i = 0; i < count; i++)
+      tmp->AP_bdds[i] = arr1[i];
+  }
+  printf("there has been the %d aps\n", count);
+  return tmp;
+}
+
+struct APs *
+get_APs_simple_withdiff(struct network_bdd *nt){
+  struct timeval start,stop;  //计算时间差 usec
+  BDD arr1[500000];
+  arr1[0] = 1;
+  uint32_t count1 = 1;
+  BDD arr2[500000];
+  uint32_t count2 = 0;
+  bool sign = false;//if false means use arr1 as base
+
+  for (int k = 0; k < SW_NUM; k++) {
+    // printf("the sw %d has been completed\n", k);
+    struct switch_bdd_rs *sw = nt->sws[k];
+    for (int i = 0; i < sw->nrules; i++) {
+      gettimeofday(&start,NULL);
+      BDD in = sw->rules[i]->mf_in;
+      BDD notin = bdd_not(in);
+      if (sign) {
+        for (int arr2_i = 0; arr2_i < count2; arr2_i++) {
+          BDD insc = bdd_apply (arr2[arr2_i], in, bddop_and);
+          if (insc) {
+            arr1[count1] = insc;
+            count1 ++;
+            in = bdd_apply (in, insc, bddop_diff);
+          }
+          insc= bdd_apply (arr2[arr2_i], notin, bddop_and);
+          if (insc) {
+            arr1[count1] = insc;
+            count1 ++;
+            notin = bdd_apply (notin, insc, bddop_diff);
+          }
+          if ((!in)&&(!notin))
+            break;
+        }
+        count2 = 0;
+        sign = false;
+      }
+      else {
+        for (int arr1_i = 0; arr1_i < count1; arr1_i++) {
+          BDD insc = bdd_apply (arr1[arr1_i], in, bddop_and);
+          if (insc) {
+            arr2[count2] = insc;
+            count2 ++;
+            in = bdd_apply (in, insc, bddop_diff);
+          }
+          insc= bdd_apply (arr1[arr1_i], notin, bddop_and);
+          if (insc) {
+            arr2[count2] = insc;
+            count2 ++;
+            notin = bdd_apply (notin, insc, bddop_diff);
+          }
+          if ((!in)&&(!notin))
+            break;
+        }
+      count1 = 0;
+      sign = true;
+      }
+      gettimeofday(&stop,NULL);
+      long long int update_T = diff(&stop, &start);
+      // BddCache_reset(&applycache);
+      printf("APs compute for all: %lld us\n", update_T);
+    }
+  }
+  uint32_t count = 0;
+  if (sign)
+    count = count2;
+  else
+    count = count1;
+  struct APs *tmp = xmalloc(sizeof(uint32_t)+count*sizeof(BDD));
+  tmp->nAPs = count;
+  if (sign) {
+    for (int i = 0; i < count; i++)
+      tmp->AP_bdds[i] = arr2[i];
+  }
+  else {
+    for (int i = 0; i < count; i++)
+      tmp->AP_bdds[i] = arr1[i];
+  }
+  printf("there has been the %d aps\n", count);
+  return tmp;
+}
+
+struct APs *
+get_APs(struct network_bdd *nt){
+  struct timeval start,stop;  //计算时间差 usec
+  BDD arr1[500000];
+  arr1[0] = 1;
+  uint32_t count1 = 1;
+  BDD arr2[500000];
+  uint32_t count2 = 0; 
+
+  BDD arr_need1[20000];
+  uint32_t count_need1 = 0;
+  BDD arr_need2[20000];
+  uint32_t count_need2 = 0;
+
+  bool sign = false;//if false means use arr1 as base
+  bool need_sign = false;//if false means use arr_need1 as base
+  struct bdd_rule *Transformers[2000];
+  uint32_t tcount = 0;
+  // bool while_sign = false;//if false means use arr1 as base
+  for (int k = 0; k < SW_NUM; k++) {
+    // printf("the sw %d has been completed\n", k);
+    struct switch_bdd_rs *sw = nt->sws[k];
+    for (int i = 0; i < sw->nrules; i++) {
+      gettimeofday(&start,NULL);
+      if (sw->rules[i]->mask) {
+        Transformers[tcount] = sw->rules[i];
+        tcount++;
+        // printf(" this rule is rewrite\n");
+      }
+      // BDD in = sw->rules[i]->mf_in;
+      // BDD notin = bdd_not(in);
+      if (need_sign){
+        arr_need2[0] = sw->rules[i]->mf_in;
+        count_need2++;
+        if (sw->rules[i]->mask) {
+          arr_need2[1] = bdd_rw_BDD(sw->rules[i]->mf_in, sw->rules[i]->mask, sw->rules[i]->rewrite);
+          count_need2++;
+        }
+      }
+      else{
+        arr_need1[0] = sw->rules[i]->mf_in;
+        count_need1++;
+        if (sw->rules[i]->mask) {
+          arr_need1[1] = bdd_rw_BDD(sw->rules[i]->mf_in, sw->rules[i]->mask, sw->rules[i]->rewrite);
+          count_need1++;
+        }
+      }
+      // if (sw->rules[i]->mask) 
+        // printf(" this rule is rewrite\n");
+
+      while(1){
+        // printf(" this rule is while\n");
+        if (need_sign) {
+          printf(" this rule %d - %d is while if1 %d - %d\n", k, i, count_need2, tcount);
+          for (int n_i = 0; n_i < count_need2; n_i++){
+            if (sign) {
+              for (int arr2_i = 0; arr2_i < count2; arr2_i++) {
+                BDD insc = bdd_apply(arr2[arr2_i], arr_need2[n_i], bddop_and);
+                // printf(" this rule is while if2\n");
+                if (insc) {
+                  arr1[count1] = insc;
+                  count1++;
+                  if(insc != arr2[arr2_i]){
+                    for (int t_i = 0; t_i < tcount; t_i++) {
+                      // printf(" this rule is while if3 %d\n",tcount);
+                      BDD t_insc = bdd_apply(insc, Transformers[t_i]->mf_in, bddop_and);
+                      if (t_insc) {
+                        arr_need1[count_need1] = bdd_rw_BDD(t_insc, Transformers[t_i]->mask, Transformers[t_i]->rewrite);
+                        count_need1++;
+                      }
+                    }
+                  }
+                }
+                // printf(" this rule is while if3\n");
+                BDD not = bdd_not(arr_need2[n_i]);
+                insc = bdd_apply (arr2[arr2_i], not, bddop_and);
+                if (insc) {
+                  arr1[count1] = insc;
+                  count1 ++;
+                  if(insc != arr2[arr2_i]){
+                    for (int t_i = 0; t_i < tcount; t_i++) {
+                      BDD t_insc = bdd_apply(insc, Transformers[t_i]->mf_in, bddop_and);
+                      if (t_insc) {
+                        arr_need1[count_need1] = bdd_rw_BDD(t_insc, Transformers[t_i]->mask, Transformers[t_i]->rewrite);
+                        count_need1++;
+                      }
+                    }
+                  }
+                }
+              }
+              count2 = 0;
+              sign = false;
+            }
+            else {
+              for (int arr1_i = 0; arr1_i < count1; arr1_i++) {
+                BDD insc = bdd_apply(arr1[arr1_i], arr_need2[n_i], bddop_and);
+                // printf(" this rule is while if2\n");
+                if (insc) {
+                  arr2[count2] = insc;
+                  count2++;
+                  if(insc != arr1[arr1_i]){
+                    for (int t_i = 0; t_i < tcount; t_i++) {
+                      // printf(" this rule is while if3 %d\n",tcount);
+                      BDD t_insc = bdd_apply(insc, Transformers[t_i]->mf_in, bddop_and);
+                      if (t_insc) {
+                        arr_need1[count_need1] = bdd_rw_BDD(t_insc, Transformers[t_i]->mask, Transformers[t_i]->rewrite);
+                        count_need1++;
+                      }
+                    }
+                  }
+                }
+                // printf(" this rule is while if3\n");
+                BDD not = bdd_not(arr_need2[n_i]);
+                insc = bdd_apply (arr1[arr1_i], not, bddop_and);
+                if (insc) {
+                  arr2[count2] = insc;
+                  count2 ++;
+                  if(insc != arr1[arr1_i]){
+                    for (int t_i = 0; t_i < tcount; t_i++) {
+                      BDD t_insc = bdd_apply(insc, Transformers[t_i]->mf_in, bddop_and);
+                      if (t_insc) {
+                        arr_need1[count_need1] = bdd_rw_BDD(t_insc, Transformers[t_i]->mask, Transformers[t_i]->rewrite);
+                        count_need1++;
+                      }
+                    }
+                  }
+                }
+              }
+              count1 = 0;
+              sign = true;
+            }
+          }
+          count_need2 = 0;
+          need_sign = false;
+          // printf(" this rule %d - %d is while ifend %d - %d\n", k, i, count_need1, tcount);
+          if (!count_need1)
+            break;
+        }
+        else {
+          printf(" this rule %d - %d is while else1 %d - %d\n", k, i, count_need1, tcount);
+          for (int n_i = 0; n_i < count_need1; n_i++){
+            if (sign) {
+              for (int arr2_i = 0; arr2_i < count2; arr2_i++) {
+                BDD insc = bdd_apply(arr2[arr2_i], arr_need1[n_i], bddop_and);
+                // printf(" this rule is while if2\n");
+                if (insc) {
+                  arr1[count1] = insc;
+                  count1++;
+                  if(insc != arr2[arr2_i]){
+                    for (int t_i = 0; t_i < tcount; t_i++) {
+                      // printf(" this rule is while if3 %d\n",tcount);
+                      BDD t_insc = bdd_apply(insc, Transformers[t_i]->mf_in, bddop_and);
+                      if (t_insc) {
+                        arr_need2[count_need2] = bdd_rw_BDD(t_insc, Transformers[t_i]->mask, Transformers[t_i]->rewrite);
+                        count_need2++;
+                      }
+                    }
+                  }
+                }
+                // printf(" this rule is while if3\n");
+                BDD not = bdd_not(arr_need1[n_i]);
+                insc = bdd_apply (arr2[arr2_i], not, bddop_and);
+                if (insc) {
+                  arr1[count1] = insc;
+                  count1 ++;
+                  if(insc != arr2[arr2_i]){
+                    for (int t_i = 0; t_i < tcount; t_i++) {
+                      BDD t_insc = bdd_apply(insc, Transformers[t_i]->mf_in, bddop_and);
+                      if (t_insc) {
+                        arr_need2[count_need2] = bdd_rw_BDD(t_insc, Transformers[t_i]->mask, Transformers[t_i]->rewrite);
+                        count_need2++;
+                      }
+                    }
+                  }
+                }
+              }
+              count2 = 0;
+              sign = false;
+            }
+            else {
+              for (int arr1_i = 0; arr1_i < count1; arr1_i++) {
+                BDD insc = bdd_apply(arr1[arr1_i], arr_need1[n_i], bddop_and);
+                // printf(" this rule is while if2\n");
+                if (insc) {
+                  arr2[count2] = insc;
+                  count2++;
+                  if(insc != arr1[arr1_i]){
+                    for (int t_i = 0; t_i < tcount; t_i++) {
+                      // printf(" this rule is while if3 %d\n",tcount);
+                      BDD t_insc = bdd_apply(insc, Transformers[t_i]->mf_in, bddop_and);
+                      if (t_insc) {
+                        arr_need2[count_need2] = bdd_rw_BDD(t_insc, Transformers[t_i]->mask, Transformers[t_i]->rewrite);
+                        count_need2++;
+                      }
+                    }
+                  }
+                }
+                // printf(" this rule is while if3\n");
+                BDD not = bdd_not(arr_need1[n_i]);
+                insc = bdd_apply (arr1[arr1_i], not, bddop_and);
+                if (insc) {
+                  arr2[count2] = insc;
+                  count2 ++;
+                  if(insc != arr1[arr1_i]){
+                    for (int t_i = 0; t_i < tcount; t_i++) {
+                      BDD t_insc = bdd_apply(insc, Transformers[t_i]->mf_in, bddop_and);
+                      if (t_insc) {
+                        arr_need2[count_need2] = bdd_rw_BDD(t_insc, Transformers[t_i]->mask, Transformers[t_i]->rewrite);
+                        count_need2++;
+                      }
+                    }
+                  }
+                }
+              }
+              count1 = 0;
+              sign = true;
+            }
+          }
+          count_need1 = 0;
+          need_sign = true;
+          // printf(" this rule %d - %d is while ifend %d - %d\n", k, i, count_need2, tcount);
+          if (!count_need2)
+            break;
+        }
+      }
+
+
+      gettimeofday(&stop,NULL);
+      long long int update_T = diff(&stop, &start);
+      // BddCache_reset(&applycache);
+      printf("APs compute for all: %lld us\n", update_T);
+    }
+  }
+  uint32_t count = 0;
+  if (sign)
+    count = count2;
+  else
+    count = count1;
+  struct APs *tmp = xmalloc(sizeof(uint32_t)+count*sizeof(BDD));
+  tmp->nAPs = count;
+  if (sign) {
+    for (int i = 0; i < count; i++)
+      tmp->AP_bdds[i] = arr2[i];
+  }
+  else {
+    for (int i = 0; i < count; i++)
+      tmp->AP_bdds[i] = arr1[i];
+  }
+  printf("there has been the %d aps\n", count);
+  return tmp;
+}
+
+
+struct AP_rw {
+  BDD apbdd;
+  uint32_t n;
+  struct bdd_rule *rwrules[SW_NUM];
+};
+struct APs *
+get_APs_bounding(struct network_bdd *nt){
+  struct timeval start,stop;  //计算时间差 usec
+  struct AP_rw *arr1[500000];
+  arr1[0] = xmalloc(sizeof(struct AP_rw));
+  arr1[0]->apbdd = 1;
+  arr1[0]->n = 0;
+  uint32_t count1 = 1;
+  struct AP_rw *arr2[500000];
+  uint32_t count2 = 0; 
+
+  BDD arr_need1[20000];
+  uint32_t count_need1 = 0;
+  BDD arr_need2[20000];
+  uint32_t count_need2 = 0;
+
+  bool sign = false;//if false means use arr1 as base
+  bool need_sign = false;//if false means use arr_need1 as base
+  // struct bdd_rule *Transformers[2000];
+  // uint32_t tcount = 0;
+  // bool while_sign = false;//if false means use arr1 as base
+  for (int k = 0; k < SW_NUM; k++) {
+    // printf("the sw %d has been completed\n", k);
+    struct switch_bdd_rs *sw = nt->sws[k];
+    for (int i = 0; i < sw->nrules; i++) {
+      gettimeofday(&start,NULL);
+      // if (sw->rules[i]->mask) {
+      //   Transformers[tcount] = sw->rules[i];
+      //   tcount++;
+      // }
+      // BDD in = sw->rules[i]->mf_in;
+      // BDD notin = bdd_not(in);
+      bool isfirst = true;
+      if (need_sign){
+        arr_need2[0] = sw->rules[i]->mf_in;
+        count_need2++;
+        // if (sw->rules[i]->mask) {
+        //   arr_need2[1] = bdd_rw_BDD(sw->rules[i]->mf_in, sw->rules[i]->mask, sw->rules[i]->rewrite);
+        //   count_need2++;
+        // }
+      }
+      else{
+        arr_need1[0] = sw->rules[i]->mf_in;
+        count_need1++;
+        // if (sw->rules[i]->mask) {
+        //   arr_need1[1] = bdd_rw_BDD(sw->rules[i]->mf_in, sw->rules[i]->mask, sw->rules[i]->rewrite);
+        //   count_need1++;
+        // }
+      }
+      // if (sw->rules[i]->mask) 
+        // printf(" this rule is rewrite\n");
+
+      while(1){
+        // printf(" this rule is while\n");
+        if (need_sign) {
+          if (sign) 
+            printf(" this rule %d - %d is while if-if %d - %d\n", k, i, count_need2, count2);
+          else
+            printf(" this rule %d - %d is while if-else %d - %d\n", k, i, count_need2, count1);
+          for (int n_i = 0; n_i < count_need2; n_i++){
+            if (sign) {
+              for (int arr2_i = 0; arr2_i < count2; arr2_i++) {
+                BDD insc = bdd_apply(arr2[arr2_i]->apbdd, arr_need2[n_i], bddop_and);
+                // printf(" this rule is while if2\n");
+                if (insc) {
+                  arr1[count1] = xmalloc(sizeof(struct AP_rw));
+                  arr1[count1]->apbdd = insc;
+                  arr1[count1]->n = arr2[arr2_i]->n;
+                  for (int rwr_i = 0; rwr_i < arr2[arr2_i]->n; rwr_i++)
+                    arr1[count1]->rwrules[rwr_i] = arr2[arr2_i]->rwrules[rwr_i];  
+                  if ((isfirst)&&(n_i == 0)&&(sw->rules[i]->mask)){
+                    bool isrwexist = false;
+                    for (int rw_i = 0; rw_i < arr1[count1]->n; rw_i++) {
+                      if (is_r_rw_same(arr1[count1]->rwrules[rw_i], sw->rules[i]))
+                        isrwexist = true;
+                    }
+                    if (!isrwexist){
+                      arr1[count1]->rwrules[arr1[count1]->n] = sw->rules[i];
+                      arr1[count1]->n = arr1[count1]->n + 1;
+                    }
+                    if (arr2[arr2_i]->apbdd == arr_need2[n_i]){
+                        arr_need1[count_need1] = bdd_rw_BDD(arr_need2[n_i], sw->rules[i]->mask, sw->rules[i]->rewrite);;
+                        count_need1++;
+                    }
+                  }
+                  if(insc != arr2[arr2_i]->apbdd){
+                    for (int t_i = 0; t_i < arr1[count1]->n; t_i++) {
+                      // printf(" this rule is while if3 %d\n",tcount);
+                      BDD t_insc = bdd_apply(insc, arr1[count1]->rwrules[t_i]->mf_in, bddop_and);
+                      if (t_insc) {
+                        BDD rw_bdd =bdd_rw_BDD(t_insc, arr1[count1]->rwrules[t_i]->mask, arr1[count1]->rwrules[t_i]->rewrite);
+                        bool isexist = false;
+                        for (int need_i = 0; need_i < count_need1; need_i++) {
+                          if (arr_need1[need_i] == rw_bdd)
+                            isexist = true;
+                        }
+                        if (!isexist){
+                          arr_need1[count_need1] = rw_bdd;
+                          count_need1++;
+                        }
+                      }
+                    }
+                  }
+                  count1++;
+                }
+                // printf(" this rule is while if3\n");
+                BDD not = bdd_not(arr_need2[n_i]);
+                insc = bdd_apply (arr2[arr2_i]->apbdd, not, bddop_and);
+                if (insc) {
+                  arr1[count1] = xmalloc(sizeof(struct AP_rw));
+                  arr1[count1]->apbdd = insc;
+                  arr1[count1]->n = arr2[arr2_i]->n;
+                  for (int rwr_i = 0; rwr_i < arr2[arr2_i]->n; rwr_i++)
+                    arr1[count1]->rwrules[rwr_i] = arr2[arr2_i]->rwrules[rwr_i];
+                  if(insc != arr2[arr2_i]->apbdd){
+                    for (int t_i = 0; t_i <  arr1[count1]->n; t_i++) {
+                      BDD t_insc = bdd_apply(insc, arr1[count1]->rwrules[t_i]->mf_in, bddop_and);
+                      if (t_insc) {
+                        BDD rw_bdd = bdd_rw_BDD(t_insc, arr1[count1]->rwrules[t_i]->mask, arr1[count1]->rwrules[t_i]->rewrite);
+                        bool isexist = false;
+                        for (int need_i = 0; need_i < count_need1; need_i++) {
+                          if (arr_need1[need_i] == rw_bdd)
+                            isexist = true;
+                        }
+                        if (!isexist){
+                          arr_need1[count_need1] = rw_bdd;
+                          count_need1++;
+                        }
+                      }
+                    }
+                  }
+                  count1++;
+                }
+              }
+              for (int arr2_i = 0; arr2_i < count2; arr2_i++)
+                free(arr2[arr2_i]);
+              count2 = 0;
+              sign = false;
+              isfirst = false;
+            }
+            else {
+              for (int arr1_i = 0; arr1_i < count1; arr1_i++) {
+                BDD insc = bdd_apply(arr1[arr1_i]->apbdd, arr_need2[n_i], bddop_and);
+                // printf(" this rule is while if2\n");
+                if (insc) {
+                  arr2[count2] = xmalloc(sizeof(struct AP_rw));
+                  arr2[count2]->apbdd = insc;
+                  arr2[count2]->n = arr1[arr1_i]->n;
+                  for (int rwr_i = 0; rwr_i < arr1[arr1_i]->n; rwr_i++)
+                    arr2[count2]->rwrules[rwr_i] = arr1[arr1_i]->rwrules[rwr_i];
+                  if ((isfirst)&&(n_i == 0)&&(sw->rules[i]->mask)){
+                    bool isrwexist = false;
+                    for (int rw_i = 0; rw_i < arr2[count2]->n; rw_i++) {
+                      if (is_r_rw_same(arr2[count2]->rwrules[rw_i], sw->rules[i]))
+                        isrwexist = true;
+                    }
+                    if (!isrwexist){
+                      arr2[count2]->rwrules[arr2[count2]->n] = sw->rules[i];
+                      arr2[count2]->n = arr2[count2]->n + 1;
+                    }  
+                    if (arr1[arr1_i]->apbdd == arr_need2[n_i]){
+                      arr_need1[count_need1] = bdd_rw_BDD(arr_need2[n_i], sw->rules[i]->mask, sw->rules[i]->rewrite);
+                      count_need1++;
+                    }
+                  }
+                  if(insc != arr1[arr1_i]->apbdd){
+                    for (int t_i = 0; t_i < arr2[count2]->n; t_i++) {
+                      // printf(" this rule is while if3 %d\n",tcount);
+                      BDD t_insc = bdd_apply(insc, arr2[count2]->rwrules[t_i]->mf_in, bddop_and);
+                      if (t_insc) {
+                        BDD rw_bdd = bdd_rw_BDD(t_insc, arr2[count2]->rwrules[t_i]->mask, arr2[count2]->rwrules[t_i]->rewrite);
+                        bool isexist = false;
+                        for (int need_i = 0; need_i < count_need1; need_i++) {
+                          if (arr_need1[need_i] == rw_bdd)
+                            isexist = true;
+                        }
+                        if (!isexist){
+                          arr_need1[count_need1] = rw_bdd;
+                          count_need1++;
+                        }
+                      }
+                    }
+                  }             
+                  count2++;
+                }
+                // printf(" this rule is while if3\n");
+                BDD not = bdd_not(arr_need2[n_i]);
+                insc = bdd_apply (arr1[arr1_i]->apbdd, not, bddop_and);
+                if (insc) {
+                  arr2[count2] = xmalloc(sizeof(struct AP_rw));
+                  arr2[count2]->apbdd = insc;
+                  arr2[count2]->n = arr1[arr1_i]->n;
+                  for (int rwr_i = 0; rwr_i < arr1[arr1_i]->n; rwr_i++)
+                    arr2[count2]->rwrules[rwr_i] = arr1[arr1_i]->rwrules[rwr_i];
+                  if(insc != arr1[arr1_i]->apbdd){
+                    for (int t_i = 0; t_i <  arr2[count2]->n; t_i++) {
+                      BDD t_insc = bdd_apply(insc,  arr2[count2]->rwrules[t_i]->mf_in, bddop_and);
+                      if (t_insc) {
+                        BDD rw_bdd = bdd_rw_BDD(t_insc,  arr2[count2]->rwrules[t_i]->mask,  arr2[count2]->rwrules[t_i]->rewrite);
+                        bool isexist = false;
+                        for (int need_i = 0; need_i < count_need1; need_i++) {
+                          if (arr_need1[need_i] == rw_bdd)
+                            isexist = true;
+                        }
+                        if (!isexist){
+                          arr_need1[count_need1] = rw_bdd;
+                          count_need1++;
+                        }
+                      }
+                    }
+                  }
+                  count2++;
+                }
+              }
+              for (int arr1_i = 0; arr1_i < count1; arr1_i++)
+                free(arr1[arr1_i]);
+              count1 = 0;
+              sign = true;
+              isfirst = false;
+            }
+          }
+          count_need2 = 0;
+          need_sign = false;
+          // printf(" this rule %d - %d is while ifend %d - %d\n", k, i, count_need1, tcount);
+          if (!count_need1)
+            break;
+        }
+        else {
+          if (sign) 
+            printf(" this rule %d - %d is while else-if %d - %d\n", k, i, count_need1, count2);
+          else
+            printf(" this rule %d - %d is while else-else %d - %d\n", k, i, count_need1, count1);
+          for (int n_i = 0; n_i < count_need1; n_i++){
+            if (sign) {
+              for (int arr2_i = 0; arr2_i < count2; arr2_i++) {
+                // printf(" this rule is while else-if for updating %d - %d - %d\n", arr2[arr2_i]->n, count_need2, count1);
+                BDD insc = bdd_apply(arr2[arr2_i]->apbdd, arr_need1[n_i], bddop_and);
+                // printf(" this rule is while if2\n");
+                if (insc) {
+                  arr1[count1] = xmalloc(sizeof(struct AP_rw));
+                  arr1[count1]->apbdd = insc;
+                  arr1[count1]->n = arr2[arr2_i]->n;
+                  for (int rwr_i = 0; rwr_i < arr2[arr2_i]->n; rwr_i++)
+                    arr1[count1]->rwrules[rwr_i] = arr2[arr2_i]->rwrules[rwr_i];
+                  if ((isfirst)&&(n_i == 0)&&(sw->rules[i]->mask)){
+                    bool isrwexist = false;
+                    for (int rw_i = 0; rw_i < arr1[count1]->n; rw_i++) {
+                      if (is_r_rw_same(arr1[count1]->rwrules[rw_i], sw->rules[i]))
+                        isrwexist = true;
+                    }
+                    if (!isrwexist){
+                      arr1[count1]->rwrules[arr1[count1]->n] = sw->rules[i];
+                      arr1[count1]->n = arr1[count1]->n + 1;
+                    }  
+                    
+                    if (arr2[arr2_i]->apbdd ==  arr_need1[n_i]){
+                      arr_need2[count_need2] = bdd_rw_BDD(arr_need1[n_i], sw->rules[i]->mask, sw->rules[i]->rewrite);
+                      count_need2++;
+                    }
+                  }     
+                  if(insc != arr2[arr2_i]->apbdd){
+                    for (int t_i = 0; t_i < arr1[count1]->n; t_i++) {
+                      // printf(" this rule is while if3 %d\n",tcount);
+                      BDD t_insc = bdd_apply(insc, arr1[count1]->rwrules[t_i]->mf_in, bddop_and);
+                      if (t_insc) {
+                        BDD rw_bdd = bdd_rw_BDD(t_insc, arr1[count1]->rwrules[t_i]->mask, arr1[count1]->rwrules[t_i]->rewrite);
+                        bool isexist = false;
+                        for (int need_i = 0; need_i < count_need2; need_i++) {
+                          if (arr_need2[need_i] == rw_bdd)
+                            isexist = true;
+                        }
+                        if (!isexist){
+                          arr_need2[count_need2] = rw_bdd;
+                          count_need2++;
+                        }
+                      }
+                    }
+                  }
+                  count1++;
+                }
+                
+                BDD not = bdd_not(arr_need1[n_i]);
+                insc = bdd_apply (arr2[arr2_i]->apbdd, not, bddop_and);
+                if (insc) {
+                  arr1[count1] = xmalloc(sizeof(struct AP_rw));
+                  arr1[count1]->apbdd = insc;
+                  arr1[count1]->n = arr2[arr2_i]->n;
+                  for (int rwr_i = 0; rwr_i < arr2[arr2_i]->n; rwr_i++)
+                    arr1[count1]->rwrules[rwr_i] = arr2[arr2_i]->rwrules[rwr_i];
+                  
+                  if(insc != arr2[arr2_i]->apbdd){
+                    for (int t_i = 0; t_i < arr1[count1]->n; t_i++) {
+                      BDD t_insc = bdd_apply(insc,  arr1[count1]->rwrules[t_i]->mf_in, bddop_and);
+                      if (t_insc) {
+                        BDD rw_bdd = bdd_rw_BDD(t_insc,  arr1[count1]->rwrules[t_i]->mask,  arr1[count1]->rwrules[t_i]->rewrite);
+                        bool isexist = false;
+                        for (int need_i = 0; need_i < count_need2; need_i++) {
+                          if (arr_need2[need_i] == rw_bdd)
+                            isexist = true;
+                        }
+                        if (!isexist){
+                          arr_need2[count_need2] = rw_bdd;
+                          count_need2++;
+                        }
+                      }
+                    }
+                  }
+                  count1 ++;
+                }
+                // printf("the else-if for end\n");
+              }
+              for (int arr2_i = 0; arr2_i < count2; arr2_i++)
+                free(arr2[arr2_i]);
+              count2 = 0;
+              sign = false;
+              isfirst = false;
+              // printf("the else-if end\n");
+            }
+            else {
+              for (int arr1_i = 0; arr1_i < count1; arr1_i++) {
+                // printf(" this rule is while else-else for updating %d - %d - %d\n", arr1[arr1_i]->n, count_need2, count2);
+                BDD insc = bdd_apply(arr1[arr1_i]->apbdd, arr_need1[n_i], bddop_and);
+                // printf(" this rule is while if2\n");
+                if (insc) {
+                  arr2[count2] = xmalloc(sizeof(struct AP_rw));
+                  arr2[count2]->apbdd = insc;
+                  arr2[count2]->n = arr1[arr1_i]->n;
+                  for (int rwr_i = 0; rwr_i < arr1[arr1_i]->n; rwr_i++)
+                    arr2[count2]->rwrules[rwr_i] = arr1[arr1_i]->rwrules[rwr_i];
+                  if ((isfirst)&&(n_i == 0)&&(sw->rules[i]->mask)){
+                    bool isrwexist = false;
+                    for (int rw_i = 0; rw_i < arr2[count2]->n; rw_i++) {
+                      if (is_r_rw_same(arr2[count2]->rwrules[rw_i], sw->rules[i]))
+                        isrwexist = true;
+                    }
+                    if (!isrwexist){
+                      arr2[count2]->rwrules[arr2[count2]->n] = sw->rules[i];
+                      arr2[count2]->n = arr2[count2]->n + 1;
+                    }  
+                    
+                    if (arr1[arr1_i]->apbdd ==  arr_need1[n_i]){
+                      arr_need2[count_need2] = bdd_rw_BDD(arr_need1[n_i], sw->rules[i]->mask, sw->rules[i]->rewrite);
+                      count_need2++;
+                    }
+                  }
+                  // printf(" this rule is while if3 %d\n",arr2[count2]->n);
+                  if(insc != arr1[arr1_i]->apbdd){
+                    for (int t_i = 0; t_i < arr2[count2]->n; t_i++) {
+                      // printf(" this rule is while if3 %d\n",tcount);
+                      BDD t_insc = bdd_apply(insc, arr2[count2]->rwrules[t_i]->mf_in, bddop_and);
+                      if (t_insc) {
+                        BDD rw_bdd = bdd_rw_BDD(t_insc, arr2[count2]->rwrules[t_i]->mask, arr2[count2]->rwrules[t_i]->rewrite);
+                        bool isexist = false;
+                        for (int need_i = 0; need_i < count_need2; need_i++) {
+                          if (arr_need2[need_i] == rw_bdd)
+                            isexist = true;
+                        }
+                        if (!isexist){
+                          arr_need2[count_need2] = rw_bdd;
+                          count_need2++;
+                        }
+                      }
+                    }
+                  }
+                  count2++;
+                }
+                // printf(" this rule is while if3\n");
+                BDD not = bdd_not(arr_need1[n_i]);
+                insc = bdd_apply (arr1[arr1_i]->apbdd, not, bddop_and);
+                if (insc) {
+                  arr2[count2] = xmalloc(sizeof(struct AP_rw));
+                  arr2[count2]->apbdd = insc;
+                  arr2[count2]->n = arr1[arr1_i]->n;
+                  for (int rwr_i = 0; rwr_i < arr1[arr1_i]->n; rwr_i++)
+                    arr2[count2]->rwrules[rwr_i] = arr1[arr1_i]->rwrules[rwr_i];
+                  if(insc != arr1[arr1_i]->apbdd){
+                    for (int t_i = 0; t_i < arr2[count2]->n; t_i++) {
+                      BDD t_insc = bdd_apply(insc, arr2[count2]->rwrules[t_i]->mf_in, bddop_and);
+                      if (t_insc) {
+                        BDD rw_bdd = bdd_rw_BDD(t_insc, arr2[count2]->rwrules[t_i]->mask, arr2[count2]->rwrules[t_i]->rewrite);
+                        bool isexist = false;
+                        for (int need_i = 0; need_i < count_need2; need_i++) {
+                          if (arr_need2[need_i] == rw_bdd)
+                            isexist = true;
+                        }
+                        if (!isexist){
+                          arr_need2[count_need2] = rw_bdd;
+                          count_need2++;
+                        }
+                      }
+                    }
+                  }
+                  count2++;
+                }    
+              }
+              for (int arr1_i = 0; arr1_i < count1; arr1_i++)
+                free(arr1[arr1_i]);
+              count1 = 0;
+              sign = true;
+              isfirst = false;
+              // printf("the else-else end\n");
+            }
+          }
+          count_need1 = 0;
+          need_sign = true;
+          // printf("the else end\n");
+          // printf(" this rule %d - %d is while ifend %d - %d\n", k, i, count_need2, tcount);
+          if (!count_need2)
+            break;
+        }
+      }
+
+
+      gettimeofday(&stop,NULL);
+      long long int update_T = diff(&stop, &start);
+      // BddCache_reset(&applycache);
+      printf("APs compute for all: %lld us\n", update_T);
+    }
+  }
+  uint32_t count = 0;
+  if (sign)
+    count = count2;
+  else
+    count = count1;
+  struct APs *tmp = xmalloc(sizeof(uint32_t)+count*sizeof(BDD));
+  tmp->nAPs = count;
+  if (sign) {
+    for (int i = 0; i < count; i++){
+      tmp->AP_bdds[i] = arr2[i]->apbdd;
+      free(arr2[i]);
+    }
+  }
+  else {
+    for (int i = 0; i < count; i++){
+      tmp->AP_bdds[i] = arr1[i]->apbdd;
+      free(arr1[i]);
+    }
+  }
+  printf("there has been the %d aps\n", count);
+  return tmp;
+}
+
+
+int
+test_AP_generation(struct APs *AP_base, struct network_bdd *nt){
+  struct timeval start,stop;  //计算时间差 usec
+  BDD arr[500000];
+  uint32_t count = 1;
+  BddCache_reset(&applycache);
+
+  for (int k = 0; k < SW_NUM; k++) {
+    // printf("the sw %d has been completed\n", k);
+    struct switch_bdd_rs *sw = nt->sws[k];
+    for (int i = 0; i < sw->nrules; i++) {
+      gettimeofday(&start,NULL);
+      BDD in = sw->rules[i]->mf_in;
+      BDD notin = bdd_not(in);
+      for (int i = 0; i < count; i++) {
+        BDD insc = bdd_apply (AP_base->AP_bdds[i], in, bddop_and);
+        if (insc) {
+          arr[count] = insc;
+          count++;
+        }
+        insc= bdd_apply (AP_base->AP_bdds[i], notin, bddop_and);
+        if (insc) {
+          arr[count] = insc;
+          count++;
+        }
+      }
+      count = 0;
+      gettimeofday(&stop,NULL);
+      long long int update_T = diff(&stop, &start);
+      // BddCache_reset(&applycache);
+      printf("APs update when one of it changed: %lld us\n", update_T);
+    }
+  }
+  // printf("there has been the %d aps\n", count);
+  return 0;
+}
+
+// int
+// test_generation (struct APs *AP_base, struct network_bdd *nt){
+
+// }
+
+/*处理JSON数据并生成相应net*/
+/*========================================================================*/
+
+static int
+filter_json (const struct dirent *ent) {
+  char *ext = strrchr (ent->d_name, '.');//将会找出ent->d_name字符串中最后一次出现的字符'.'的地址，然后将该地址返回。
+  if (!ext || strcmp (ext, ".json")) return false;
+  return strcmp (ent->d_name, "topology.tf");
+}
+
+struct mf_uint16_t *
+mf_from_str (const char *s) {//每个数组的数都为一组uint32_t的匹配域中的一个,一一对应
+
+  // bool commas = strchr (s, ',');//查找某字符在字符串中首次出现的位置
+  // int div = CHAR_BIT * 2; //+ commas;// CHAR_BIT 8位
+  // int len = strlen (s); //+ commas;//返回长度
+  // assert (len % div == 0);
+  // len /= div;//字节数
+  const char *cur = s;
+  // array_t *res = array_create (len, BIT_UNDEF);
+  struct mf_uint16_t *mf = xcalloc (1, sizeof *mf);
+  // uint8_t *rcur = (uint8_t *) res;
+  for (int i = 0; i < MF_LEN; i++) {
+    uint16_t tmp_w = 0;
+    uint16_t tmp_v = 0;
+    uint16_t bool_sign = 0x8000; 
+    // for (int j = 0; j < CHAR_BIT / 2; j++, cur++) {
+    for (int j = 0; j < CHAR_BIT * 2 + 2; j++, cur++) {
+  //    enum bit_val val;
+      switch (*cur) { 
+        case '0': 
+          break;
+        case '1': 
+          tmp_v += bool_sign; break;
+        case 'x': case 'X': 
+          tmp_w += bool_sign; break;
+        case 'z': case 'Z':
+          return NULL; break;
+        case ',':
+          continue;
+        default: errx (1, "Invalid character '%c' in \"%s\".", *cur, s);
+      }
+      bool_sign >>= 1;
+      if (!bool_sign){
+        cur++;
+        break;
+      }
+  //    tmp |= val;
+    }
+    mf->mf_w[i] = tmp_w;
+    mf->mf_v[i] = tmp_v;
+
+  //  *rcur++ = tmp;
+  //  if (commas && (i % 2)) { assert (!*cur || *cur == ','); cur++; }
+  }
+  // return res;
+  return mf;
+}
+
+struct mask_uint16_t *
+mask_from_str (const char *s) {//每个数组的数都为一组uint32_t的匹配域中的一个,一一对应
+  const char *cur = s;
+  struct mask_uint16_t *mf = xcalloc (1, sizeof *mf);
+  for (int i = 0; i < MF_LEN; i++) {
+    uint16_t tmp_v = 0;
+    uint16_t bool_sign = 0x8000; 
+    for (int j = 0; j < CHAR_BIT * 2 + 2; j++, cur++) {
+      switch (*cur) { 
+        case '0': 
+          break;
+        case '1': 
+          tmp_v += bool_sign; break;
+        case ',':
+          continue;
+        default: errx (1, "Invalid character '%c' in \"%s\".", *cur, s);
+      }
+      bool_sign >>= 1;
+      if (!bool_sign){
+        cur++;
+        break;
+      }
+  //    tmp |= val;
+    }
+    mf->v[i] = tmp_v;
+  }
+  return mf;
+}
+
+
+// struct bdd_rule {
+//   uint32_t sw_idx;
+//   uint32_t idx;
+//   BDD mf_in;
+//   BDD mf_out;
+//   struct mask_uint16_t *mask;
+//   struct mask_uint16_t *rewrite; 
+//   struct links_of_rule *lks_in;
+//   struct links_of_rule *lks_out;
+// };
+struct bdd_rule *
+parse_js_rule(cJSON *r) {
+  if (!r)
+    return NULL;
+  struct bdd_rule *r_new = xmalloc(sizeof(struct bdd_rule));
+  r_new->sw_idx = 0;
+  r_new->idx = 0;
+
+  cJSON *ac = cJSON_GetObjectItem(r, "action");
+  // printf("%s\n", ac->valuestring);
+  cJSON *match = cJSON_GetObjectItem(r, "match");
+  struct mf_uint16_t *mf = mf_from_str(match->valuestring);
+  r_new->mf_in = mf2bdd(mf);
+  // bdd_addref(r_new->mf_in);
+  r_new->mf_out = r_new->mf_in; 
+  if (strcmp(ac->valuestring, "fwd") == 0) {
+    r_new->mask = NULL;
+    r_new->rewrite = NULL;
+  }
+  else if (strcmp(ac->valuestring, "rw") == 0) {
+    cJSON *mask = cJSON_GetObjectItem(r, "mask");
+    r_new->mask = mask_from_str(mask->valuestring);
+    cJSON *rewrite = cJSON_GetObjectItem(r, "rewrite");
+    r_new->rewrite = mask_from_str(rewrite->valuestring);
+    r_new->mf_out = bdd_rw_BDD(r_new->mf_in, r_new->mask, r_new->rewrite);
+  }
+  // bdd_addref(r_new->mf_out);
+  free(mf);
+
+  cJSON *in_ports = cJSON_GetObjectItem(r, "in_ports");
+  uint32_t nin_ports = cJSON_GetArraySize(in_ports);
+  r_new->lks_in = NULL;
+  if (nin_ports) {
+    r_new->lks_in = xmalloc(sizeof(uint32_t)+nin_ports*sizeof(struct wc_uint16_t));
+    r_new->lks_in->n = nin_ports;
+    uint16_t arr[nin_ports];
+    for (int i = 0; i < nin_ports; i++){
+      cJSON *port = cJSON_GetArrayItem(in_ports, i);
+      
+      arr[i] = (uint16_t)(port->valueint % 1000);
+      // printf("%d;",arr[i]);
+    }
+    qsort (arr, nin_ports,sizeof(uint16_t), uint16_t_cmp); 
+     for (int i = 0; i < nin_ports; i++){
+      r_new->lks_in->links_wc[i].w = 0;
+      r_new->lks_in->links_wc[i].v = arr[i];
+    }
+  }
+
+  cJSON *out_ports = cJSON_GetObjectItem(r, "out_ports");
+  uint32_t nout_ports = cJSON_GetArraySize(out_ports);
+  r_new->lks_out = NULL;
+  if (nout_ports) {
+    r_new->lks_out = xmalloc(sizeof(uint32_t)+nout_ports*sizeof(struct wc_uint16_t));
+    r_new->lks_out->n = nout_ports;
+    uint16_t arr[nout_ports];
+    for (int i = 0; i < nout_ports; i++){
+      cJSON *port = cJSON_GetArrayItem(out_ports, i);
+      
+      arr[i] = (uint16_t)(port->valueint % 1000);
+      // printf("%d - ", arr[i] );
+      // printf("%d;",arr[i]);
+    }
+    // printf("\n");
+    qsort (arr, nout_ports,sizeof(uint16_t), uint16_t_cmp); 
+    for (int i = 0; i < nout_ports; i++){
+      r_new->lks_out->links_wc[i].w = 0;
+      r_new->lks_out->links_wc[i].v = arr[i];
+      // printf("%d - ", arr[i] );
+    }
+    // printf("\n");
+  }
+  return r_new;
+}
+
+struct switch_bdd_rs *
+parse_tf_json_to_bddsw (const char *name, uint32_t sw_idx) {
+  FILE *in = fopen (name, "r");
+  fseek(in,0,SEEK_END);
+  long in_len = ftell(in);
+  fseek(in,0,SEEK_SET);
+  char *content = (char*)malloc(in_len+1);
+  fread(content,1,in_len,in);
+  fclose(in);
+
+  cJSON *root = cJSON_Parse(content);
+  if (!root) {
+      printf("Error before: [%s]\n",cJSON_GetErrorPtr());
+      return NULL;
+  }
+
+  cJSON *js_tableid = cJSON_GetObjectItem(root, "id"); 
+  if (!js_tableid) {
+      printf("No tableid!\n");
+      return NULL;
+  }
+
+  uint32_t tableid = js_tableid->valueint;
+  // printf("tableid: %d\n", js_tableid->valueint);
+  cJSON *js_rules = cJSON_GetObjectItem(root, "rules");
+  if (!js_rules) {
+      printf("No rules!\n");
+      return NULL;
+  }
+
+  uint32_t nrules = cJSON_GetArraySize(js_rules);
+  printf("the rule num = %d\n", nrules);
+  if (!nrules) {
+      printf("Empty rules!\n");
+      return NULL;
+  }
+  struct bdd_rule *bdd_rules[10000];
+  uint32_t rules_count = 0;
+  // struct switch_bdd_rs *sw = NULL;
+  // if(nrules)
+  //   sw = xmalloc(2*sizeof(uint32_t)+nrules*sizeof(struct bdd_rule *));
+  // printf("here is wright!2\n");
+  for (int i = 0; i < nrules; i++) {
+    cJSON *rule = cJSON_GetArrayItem(js_rules, nrules - i - 1);
+    // uint32_t re_i = nrules - i - 1;
+    struct bdd_rule *r_new = parse_js_rule(rule);
+    // printf("here is wright!3\n");
+    if (!rules_count) {
+      bdd_rules[rules_count] = r_new;
+      bdd_addref(bdd_rules[rules_count]->mf_in);
+      bdd_addref(bdd_rules[rules_count]->mf_out);
+      bdd_rules[rules_count]->sw_idx = sw_idx;
+      bdd_rules[rules_count]->idx = rules_count;
+      rules_count++;
+    }
+    else {
+      bool mergesign = false;
+      for (int j = 0; j < rules_count; j++) {
+        // printf("here is wright!4\n");
+        if (is_links_of_rule_same(r_new->lks_in, bdd_rules[j]->lks_in)) {
+          // printf("here is wright!41\n");
+          r_new->mf_in = bdd_apply(r_new->mf_in, bdd_rules[j]->mf_in, bddop_diff);
+          if (r_new->mf_in == 0){
+            bdd_addref(r_new->mf_in);
+            bdd_addref(r_new->mf_out);
+            // printf("the null rule is %d - %d\n", sw_idx, j);
+            free_bdd_rule(r_new);
+            mergesign = true;
+            break;
+          }
+          if (is_r_action_same(r_new, bdd_rules[j])) {
+            // printf("here is wright!42\n");
+            if (bdd_rules[j]->mask){
+              // printf("here is wright!42is\n");
+              r_new->mf_out = bdd_rw_BDD(r_new->mf_in, r_new->mask, r_new->rewrite);
+            }
+            else{
+              // printf("here is wright!42no\n");
+              r_new->mf_out = r_new->mf_in;
+            }
+            // printf("here is wright!42m\n");
+            bdd_delref(bdd_rules[j]->mf_in);
+            bdd_delref(bdd_rules[j]->mf_out);
+            bdd_rules[j]->mf_in = bdd_apply(bdd_rules[j]->mf_in, r_new->mf_in, bddop_or);
+            bdd_rules[j]->mf_out = bdd_apply(bdd_rules[j]->mf_out, r_new->mf_out, bddop_or);
+            bdd_addref(bdd_rules[j]->mf_in);
+            bdd_addref(bdd_rules[j]->mf_out);
+            bdd_addref(r_new->mf_in);
+            bdd_addref(r_new->mf_out);
+            // printf("here is wright!42f\n");
+            free_bdd_rule(r_new);
+            mergesign = true;
+            // printf("here is wright!42e\n");
+            break;
+          }
+        }
+      }
+      if (!mergesign) {
+        // printf("here is wright!5\n");
+        bdd_rules[rules_count] = r_new;
+        if (bdd_rules[rules_count]->mask)
+          bdd_rules[rules_count]->mf_out = bdd_rw_BDD(r_new->mf_in, r_new->mask, r_new->rewrite);
+        else
+          bdd_rules[rules_count]->mf_out = bdd_rules[rules_count]->mf_in;
+        bdd_addref(bdd_rules[rules_count]->mf_in);
+        bdd_addref(bdd_rules[rules_count]->mf_out);
+        bdd_rules[rules_count]->sw_idx = sw_idx;
+        bdd_rules[rules_count]->idx = rules_count;
+        rules_count++;
+        // printf("here is wright!5e\n");
+      }
+    }
+  }
+  free(content);
+
+  struct switch_bdd_rs *sw = NULL;
+  if (rules_count) {
+    sw = xmalloc(2*sizeof(uint32_t)+rules_count*sizeof(struct bdd_rule *));
+    sw->sw_idx = sw_idx;
+    sw->nrules = rules_count;
+    for (int i = 0; i < rules_count; i++) 
+      sw->rules[i] = bdd_rules[i];
+  }
+  return sw; //在一个交换机中保存的规则和关系
+}
+
+
+
+struct APs *
+get_APs_simple_astep(struct APs *input, BDD calcone){
+  struct timeval start,stop;  //计算时间差 usec
+  uint32_t count_out = 0;
+  BDD output[500000];
+  gettimeofday(&start,NULL);
+  // BDD in = sw->rules[i]->mf_in;
+  BDD notcalc = bdd_not(calcone);
+  for (int i = 0; i < input->nAPs; i++) {
+    BDD insc = bdd_apply (input->AP_bdds[i], calcone, bddop_and);
+    if (insc) {
+      output[count_out] = insc;
+      count_out ++;
+    }
+    insc= bdd_apply (input->AP_bdds[i], notcalc, bddop_and);
+    if (insc) {
+      output[count_out] = insc;
+      count_out ++;
+    }
+  }
+  gettimeofday(&stop,NULL);
+  long long int update_T = diff(&stop, &start);
+  printf("APs compute for all: %lld us, with the %d aps\n", update_T, count_out);
+  struct APs *tmp = xmalloc(sizeof(uint32_t)+count_out*sizeof(BDD));
+  tmp->nAPs = count_out;
+  for (int i = 0; i < count_out; i++)
+    tmp->AP_bdds[i] = output[i];
+  // free(input);
+  return tmp;
+}
+
+struct APs *
+parse_tf_json_to_bddsw_inc_APs (const char *name, uint32_t sw_idx, struct APs *input) {
+  FILE *in = fopen (name, "r");
+  fseek(in,0,SEEK_END);
+  long in_len = ftell(in);
+  fseek(in,0,SEEK_SET);
+  char *content = (char*)malloc(in_len+1);
+  fread(content,1,in_len,in);
+  fclose(in);
+
+  cJSON *root = cJSON_Parse(content);
+  if (!root) {
+      printf("Error before: [%s]\n",cJSON_GetErrorPtr());
+      return NULL;
+  }
+
+  cJSON *js_tableid = cJSON_GetObjectItem(root, "id"); 
+  if (!js_tableid) {
+      printf("No tableid!\n");
+      return NULL;
+  }
+
+  uint32_t tableid = js_tableid->valueint;
+  // printf("tableid: %d\n", js_tableid->valueint);
+  cJSON *js_rules = cJSON_GetObjectItem(root, "rules");
+  if (!js_rules) {
+      printf("No rules!\n");
+      return NULL;
+  }
+
+  uint32_t nrules = cJSON_GetArraySize(js_rules);
+  printf("the rule num = %d\n", nrules);
+  if (!nrules) {
+      printf("Empty rules!\n");
+      return NULL;
+  }
+  struct bdd_rule *bdd_rules[10000];
+  uint32_t rules_count = 0;
+
+  struct APs *tmpAP = input;
+  struct APs *freeAP = NULL;
+  // struct switch_bdd_rs *sw = NULL;
+  // if(nrules)
+  //   sw = xmalloc(2*sizeof(uint32_t)+nrules*sizeof(struct bdd_rule *));
+  // printf("here is wright!2\n");
+  for (int i = 0; i < nrules; i++) {
+    cJSON *rule = cJSON_GetArrayItem(js_rules, nrules - i - 1);
+    // uint32_t re_i = nrules - i - 1;
+    struct bdd_rule *r_new = parse_js_rule(rule);
+    // printf("here is wright!3\n");
+    if (!rules_count) {
+      bdd_rules[rules_count] = r_new;
+      bdd_addref(bdd_rules[rules_count]->mf_in);
+      bdd_addref(bdd_rules[rules_count]->mf_out);
+      bdd_rules[rules_count]->sw_idx = sw_idx;
+      bdd_rules[rules_count]->idx = rules_count;
+      freeAP = tmpAP;
+      tmpAP = get_APs_simple_astep(tmpAP, bdd_rules[rules_count]->mf_in);
+      free(freeAP);
+      rules_count++;
+    }
+    else {
+      bool mergesign = false;
+      for (int j = 0; j < rules_count; j++) {
+        // printf("here is wright!4\n");
+        if (is_links_of_rule_same(r_new->lks_in, bdd_rules[j]->lks_in)) {
+          // printf("here is wright!41\n");
+          r_new->mf_in = bdd_apply(r_new->mf_in, bdd_rules[j]->mf_in, bddop_diff);
+          if (r_new->mf_in == 0){
+            bdd_addref(r_new->mf_in);
+            bdd_addref(r_new->mf_out);
+            free_bdd_rule(r_new);
+            mergesign = true;
+            printf("APs compute for all: 0 us, with the 0 aps\n");
+            break;
+          }
+          if (is_r_action_same(r_new, bdd_rules[j])) {
+            // printf("here is wright!42\n");
+            if (bdd_rules[j]->mask){
+              // printf("here is wright!42is\n");
+              r_new->mf_out = bdd_rw_BDD(r_new->mf_in, r_new->mask, r_new->rewrite);
+            }
+            else{
+              // printf("here is wright!42no\n");
+              r_new->mf_out = r_new->mf_in;
+            }
+            // printf("here is wright!42m\n");
+            bdd_delref(bdd_rules[j]->mf_in);
+            bdd_delref(bdd_rules[j]->mf_out);
+            bdd_rules[j]->mf_in = bdd_apply(bdd_rules[j]->mf_in, r_new->mf_in, bddop_or);
+            bdd_rules[j]->mf_out = bdd_apply(bdd_rules[j]->mf_out, r_new->mf_out, bddop_or);
+            bdd_addref(bdd_rules[j]->mf_in);
+            bdd_addref(bdd_rules[j]->mf_out);
+            bdd_addref(r_new->mf_in);
+            bdd_addref(r_new->mf_out);
+            freeAP = tmpAP;
+            tmpAP = get_APs_simple_astep(tmpAP, bdd_rules[j]->mf_in);
+            free(freeAP);
+            // printf("here is wright!42f\n");
+            free_bdd_rule(r_new);
+            mergesign = true;
+            
+            // printf("here is wright!42e\n");
+            break;
+          }
+        }
+      }
+      if (!mergesign) {
+        // printf("here is wright!5\n");
+        bdd_rules[rules_count] = r_new;
+        if (bdd_rules[rules_count]->mask)
+          bdd_rules[rules_count]->mf_out = bdd_rw_BDD(r_new->mf_in, r_new->mask, r_new->rewrite);
+        else
+          bdd_rules[rules_count]->mf_out = bdd_rules[rules_count]->mf_in;
+        bdd_addref(bdd_rules[rules_count]->mf_in);
+        bdd_addref(bdd_rules[rules_count]->mf_out);
+        bdd_rules[rules_count]->sw_idx = sw_idx;
+        bdd_rules[rules_count]->idx = rules_count;
+        freeAP = tmpAP;
+        tmpAP = get_APs_simple_astep(tmpAP, bdd_rules[rules_count]->mf_in);
+        rules_count++;
+        free(freeAP);
+        // printf("here is wright!5e\n");
+      }
+    }
+  }
+  free(content);
+
+  // struct switch_bdd_rs *sw = NULL;
+  // if (rules_count) {
+  //   sw = xmalloc(2*sizeof(uint32_t)+rules_count*sizeof(struct bdd_rule *));
+  //   sw->sw_idx = sw_idx;
+  //   sw->nrules = rules_count;
+  //   for (int i = 0; i < rules_count; i++) 
+  //     sw->rules[i] = bdd_rules[i];
+  // }
+
+  return tmpAP; //在一个交换机中保存的规则和关系
+}
+
+struct APs *
+get_network_bdd_jsondata_inc_APs(const char *tfdir, const char *name){
+  printf ("Parsing: \n");
+  fflush (stdout);
+  struct network_bdd *netmp;
+  // struct parse_tf *ttf;
+  // int stages;
+
+  char buf[255 + 1];
+  snprintf (buf, sizeof buf, "../%s/%s", tfdir, name);
+  char *base = buf + strlen (buf); //base指向buf后面的部分
+  // strcpy (base, "/stages");//buf后面接上"/stages"
+  // printf("%s\n", buf);
+
+  // FILE *f = fopen (buf, "r");//打开"/stages"
+  // if (!f) err (1, "Can't open %s", buf);//stanford为3
+  // if (!fscanf (f, "%d", &stages)) errx (1, "Can't read NTF stages from %s", buf);
+  // fclose (f);
+
+  *base = 0;
+  strcpy (base , "/");
+  // printf("base:%s\n", base);
+  // printf("buf:%s\n", buf);
+  struct dirent **tfs;//#include<dirent.h>，为了获取某文件夹目录内容
+  //成功则返回复制到tfs数组中的数据结构数目，每读取一个传给filter_json，过滤掉不想要的，这里要.json
+  int n = scandir (buf, &tfs, filter_json, alphasort);//为了获取某文件夹目录内容，按字母排序
+  if (n <= 0) err (1, "Couldn't find .json files in %s", buf);
+  // n = 1;//控制只取一个来实验
+  // printf("n:%d\n", n);
+
+  netmp = xmalloc(sizeof(uint32_t)+n*sizeof(struct switch_bdd_rs *));
+  netmp->nsws =  n;
+  uint32_t nmergerules_sum = 0;
+  struct APs *tmpAP = xmalloc(sizeof(uint32_t)+sizeof(BDD));
+  tmpAP->nAPs = 1;
+  tmpAP->AP_bdds[0] = 1;
+  for (int i = 0; i < n; i++) {//对找到的 .json 文件处理 0到n-1
+      strcpy (base + 1, tfs[i]->d_name); //文件名，base+1写文件名，记录文件名,也就是要读取的名字
+      free (tfs[i]);
+
+      tmpAP = parse_tf_json_to_bddsw_inc_APs (buf, i, tmpAP);//解析 .json
+      // nmergerules_sum += netmp->sws[i]->nrules;
+      // assert (sw);
+      // printf("the num of nmerged rules of table %d is: %d\n", i, netmp->sws[i]->nrules);
+  }
+  // check_mf(nsw);
+  free (tfs);
+  // printf("the num of nmerged rules is: %d\n", nmergerules_sum);
+
+
+  return tmpAP;
+}
+
+struct network_bdd *
+get_network_bdd_jsondata(const char *tfdir, const char *name){
+  printf ("Parsing: \n");
+  fflush (stdout);
+  struct network_bdd *netmp;
+  // struct parse_tf *ttf;
+  // int stages;
+
+  char buf[255 + 1];
+  snprintf (buf, sizeof buf, "../%s/%s", tfdir, name);
+  char *base = buf + strlen (buf); //base指向buf后面的部分
+  // strcpy (base, "/stages");//buf后面接上"/stages"
+  // printf("%s\n", buf);
+
+  // FILE *f = fopen (buf, "r");//打开"/stages"
+  // if (!f) err (1, "Can't open %s", buf);//stanford为3
+  // if (!fscanf (f, "%d", &stages)) errx (1, "Can't read NTF stages from %s", buf);
+  // fclose (f);
+
+  *base = 0;
+  strcpy (base , "/");
+  // printf("base:%s\n", base);
+  // printf("buf:%s\n", buf);
+  struct dirent **tfs;//#include<dirent.h>，为了获取某文件夹目录内容
+  //成功则返回复制到tfs数组中的数据结构数目，每读取一个传给filter_json，过滤掉不想要的，这里要.json
+  int n = scandir (buf, &tfs, filter_json, alphasort);//为了获取某文件夹目录内容，按字母排序
+  if (n <= 0) err (1, "Couldn't find .json files in %s", buf);
+  // n = 1;//控制只取一个来实验
+  // printf("n:%d\n", n);
+
+  netmp = xmalloc(sizeof(uint32_t)+n*sizeof(struct switch_bdd_rs *));
+  netmp->nsws =  n;
+  uint32_t nmergerules_sum = 0;
+  for (int i = 0; i < n; i++) {//对找到的 .json 文件处理 0到n-1
+      strcpy (base + 1, tfs[i]->d_name); //文件名，base+1写文件名，记录文件名,也就是要读取的名字
+      free (tfs[i]);
+
+      netmp->sws[i] = parse_tf_json_to_bddsw (buf, i);//解析 .json
+
+      nmergerules_sum += netmp->sws[i]->nrules;
+      // assert (sw);
+      printf("the num of nmerged rules of table %d is: %d\n", i, netmp->sws[i]->nrules);
+  }
+  // check_mf(nsw);
+  free (tfs);
+  printf("the num of nmerged rules is: %d\n", nmergerules_sum);
+
+  return netmp;
+}
+
+struct switch_bdd_rs *
+parse_tf_json_to_bddsw_noconf (const char *name, uint32_t sw_idx) {
+  FILE *in = fopen (name, "r");
+  fseek(in,0,SEEK_END);
+  long in_len = ftell(in);
+  fseek(in,0,SEEK_SET);
+  char *content = (char*)malloc(in_len+1);
+  fread(content,1,in_len,in);
+  fclose(in);
+
+  cJSON *root = cJSON_Parse(content);
+  if (!root) {
+      printf("Error before: [%s]\n",cJSON_GetErrorPtr());
+      return NULL;
+  }
+
+  cJSON *js_tableid = cJSON_GetObjectItem(root, "id"); 
+  if (!js_tableid) {
+      printf("No tableid!\n");
+      return NULL;
+  }
+
+  uint32_t tableid = js_tableid->valueint;
+  // printf("tableid: %d\n", js_tableid->valueint);
+  cJSON *js_rules = cJSON_GetObjectItem(root, "rules");
+  if (!js_rules) {
+      printf("No rules!\n");
+      return NULL;
+  }
+
+  uint32_t nrules = cJSON_GetArraySize(js_rules);
+  printf("the rule num = %d\n", nrules);
+  if (!nrules) {
+      printf("Empty rules!\n");
+      return NULL;
+  }
+  struct bdd_rule *bdd_rules[10000];
+  uint32_t rules_count = 0;
+  // struct switch_bdd_rs *sw = NULL;
+  // if(nrules)
+  //   sw = xmalloc(2*sizeof(uint32_t)+nrules*sizeof(struct bdd_rule *));
+  // printf("here is wright!2\n");
+  for (int i = 0; i < nrules; i++) {
+    cJSON *rule = cJSON_GetArrayItem(js_rules, nrules - i - 1);
+    // uint32_t re_i = nrules - i - 1;
+    struct bdd_rule *r_new = parse_js_rule(rule);
+    // printf("here is wright!3\n");
+    if (!rules_count) {
+      bdd_rules[rules_count] = r_new;
+      bdd_addref(bdd_rules[rules_count]->mf_in);
+      bdd_addref(bdd_rules[rules_count]->mf_out);
+      bdd_rules[rules_count]->sw_idx = sw_idx;
+      bdd_rules[rules_count]->idx = rules_count;
+      rules_count++;
+    }
+    else {
+      for (int j = 0; j < rules_count; j++) {
+        // printf("here is wright!4\n");
+        if (is_links_of_rule_same(r_new->lks_in, bdd_rules[j]->lks_in)) {
+          // printf("here is wright!41\n");
+          if (bdd_rules[j]->mask){
+            r_new->mf_out = bdd_rw_BDD(r_new->mf_in, r_new->mask, r_new->rewrite);
+          }
+          else{
+            r_new->mf_out = r_new->mf_in;
+          }
+          r_new->mf_in = bdd_apply(r_new->mf_in, bdd_rules[j]->mf_in, bddop_diff);
+        }
+
+      }
+
+      bdd_rules[rules_count] = r_new;
+      bdd_addref(bdd_rules[rules_count]->mf_in);
+      bdd_addref(bdd_rules[rules_count]->mf_out);
+      bdd_rules[rules_count]->sw_idx = sw_idx;
+      bdd_rules[rules_count]->idx = rules_count;
+      rules_count++;
+    }
+  }
+  free(content);
+
+  struct switch_bdd_rs *sw = NULL;
+  if (rules_count) {
+    sw = xmalloc(2*sizeof(uint32_t)+rules_count*sizeof(struct bdd_rule *));
+    sw->sw_idx = sw_idx;
+    sw->nrules = rules_count;
+    for (int i = 0; i < rules_count; i++) 
+      sw->rules[i] = bdd_rules[i];
+  }
+  return sw; //在一个交换机中保存的规则和关系
+}
+
+
+struct network_bdd *
+get_network_bdd_jsondata_noconf(const char *tfdir, const char *name){
+  printf ("Parsing: \n");
+  fflush (stdout);
+  struct network_bdd *netmp;
+  // struct parse_tf *ttf;
+  // int stages;
+
+  char buf[255 + 1];
+  snprintf (buf, sizeof buf, "../%s/%s", tfdir, name);
+  char *base = buf + strlen (buf); //base指向buf后面的部分
+  // strcpy (base, "/stages");//buf后面接上"/stages"
+  // printf("%s\n", buf);
+
+  // FILE *f = fopen (buf, "r");//打开"/stages"
+  // if (!f) err (1, "Can't open %s", buf);//stanford为3
+  // if (!fscanf (f, "%d", &stages)) errx (1, "Can't read NTF stages from %s", buf);
+  // fclose (f);
+
+  *base = 0;
+  strcpy (base , "/");
+  // printf("base:%s\n", base);
+  // printf("buf:%s\n", buf);
+  struct dirent **tfs;//#include<dirent.h>，为了获取某文件夹目录内容
+  //成功则返回复制到tfs数组中的数据结构数目，每读取一个传给filter_json，过滤掉不想要的，这里要.json
+  int n = scandir (buf, &tfs, filter_json, alphasort);//为了获取某文件夹目录内容，按字母排序
+  if (n <= 0) err (1, "Couldn't find .json files in %s", buf);
+  // n = 1;//控制只取一个来实验
+  // printf("n:%d\n", n);
+
+  netmp = xmalloc(sizeof(uint32_t)+n*sizeof(struct switch_bdd_rs *));
+  netmp->nsws =  n;
+  uint32_t nmergerules_sum = 0;
+  for (int i = 0; i < n; i++) {//对找到的 .json 文件处理 0到n-1
+      strcpy (base + 1, tfs[i]->d_name); //文件名，base+1写文件名，记录文件名,也就是要读取的名字
+      free (tfs[i]);
+
+      netmp->sws[i] = parse_tf_json_to_bddsw_noconf (buf, i);//解析 .json
+
+      nmergerules_sum += netmp->sws[i]->nrules;
+      // assert (sw);
+      printf("the num of nmerged rules of table %d is: %d\n", i, netmp->sws[i]->nrules);
+  }
+  // check_mf(nsw);
+  free (tfs);
+  printf("the num of nmerged rules is: %d\n", nmergerules_sum);
+
+  return netmp;
+}
+
+void
+test_APs_simple( struct APs *aps, struct network_bdd *nt) {
+  for (int k = 0; k < SW_NUM; k++) {
+    // printf("the sw %d has been completed\n", k);
+    struct switch_bdd_rs *sw = nt->sws[k];
+    for (int i = 0; i < sw->nrules; i++) {
+      struct APs *freeap = get_APs_simple_astep(aps, sw->rules[i]->mf_in);
+      free(freeap);
+    }
+  }
+}
 
 
 
@@ -2394,6 +4153,10 @@ init_r_to_merge(void) {
 static int
 uint32_t_cmp (const void *a, const void *b)
 { return *(uint32_t *)a - *(uint32_t *)b; }
+
+static int
+uint16_t_cmp (const void *a, const void *b)
+{ return *(uint16_t *)a - *(uint16_t *)b; }
 
 struct wc_uint16_t *
 wc_uint16_t_insc(struct wc_uint16_t *a, struct wc_uint16_t *b){
@@ -3087,6 +4850,8 @@ is_wc_uint16_t_same(struct wc_uint16_t *a, struct wc_uint16_t *b) {
   if (!a || !b)
     return false;
   if (a->v != b->v )
+    return false;
+  if (a->w != b->w )
     return false;
   return true;
 }
@@ -5772,3 +7537,5 @@ get_transformer(void) {
     }
   }
 }
+
+

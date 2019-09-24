@@ -221,7 +221,8 @@ gen_arrs (const struct parse_nsw *nsw, uint32_t *n) {
 
 static int
 uint16_t_cmp (const void *a, const void *b)
-{ return *(uint16_t *)a - *(uint16_t *)b; }//升序
+{ return *(uint16_t *)a - *(uint16_t *)b; }//升序/usr/include/unistd.h:367:16: 附注： 需要类型‘int’，但实参的类型为‘uint32_t *’
+
 
 static uint32_t
 linkwc_gen (uint32_t *arr, uint32_t n, FILE *f_links) {//调用parr = ARR (r->in)，n = r->in.n;
@@ -238,19 +239,38 @@ linkwc_gen (uint32_t *arr, uint32_t n, FILE *f_links) {//调用parr = ARR (r->in
 	if (n == 1) {
 		fwrite (&n, sizeof n, 1, f_links);//第一个
 		fwrite (&w_all0, sizeof w_all0, 1, f_links);
-		fwrite (arr_idx, sizeof *arr_idx, n, f_links);
+		fwrite (arr_idx, sizeof *arr_idx, 1, f_links);
 		return ret;
 	}
+
+	// if (n <= 2) {
+	// 	fwrite (&n, sizeof n, 1, f_links);//第一个
+	// 	for (int i = 0; i < n; i++){	
+	// 		fwrite (&w_all0, sizeof w_all0, 1, f_links);
+	// 		fwrite (&arr_idx[i], sizeof *arr_idx, 1, f_links);
+	// 	}
+	// 	return ret;
+	// }
+
 	qsort(arr_idx, n, 2, uint16_t_cmp);
 
-	// for (int j = 0; j < n; j++, parr++) {
-	// 	printf("%d, ", arr_idx[j]);
+	// if (ret == 14596)
+	// {
+	// 	for (int j = 0; j < n; j++, parr++) {
+	// 		printf("%x, ", arr_idx[j]);
+	// 	}
+	// 	printf("\n");
 	// }
-	// printf("\n");
+	
 	
 	struct wc_uint16_t links_wc[n];
 	uint16_t begin = arr_idx[0];
 	uint16_t tmp = begin;
+	// if (ret == 14596)
+	// {
+	// 	printf("%x, ", begin);		
+	// 	printf("\n");
+	// }
 	uint32_t wc_nums = 0;
 
 	for (int i = 1; i < n; i++)
@@ -264,11 +284,31 @@ linkwc_gen (uint32_t *arr, uint32_t n, FILE *f_links) {//调用parr = ARR (r->in
 				tmp = begin;
 				continue;
 			}
+			if (tmp != arr_idx[i]) {
+				tmp--;
+				if (i == n-1) {
+					links_wc[wc_nums].w = w_all0;
+					links_wc[wc_nums].v = arr_idx[i];
+					wc_nums++;
+				}
+			}
+
+
+			// if ((tmp - 1 == begin)&&(i != n-1)) {
+			// 	links_wc[wc_nums].w = w_all0;
+			// 	links_wc[wc_nums].v = begin;
+			// 	wc_nums++;
+			// 	begin = arr_idx[i];
+			// 	tmp = begin;
+			// 	continue;
+			// }
+
 			char v_h, v_l;
 			uint16_t vh_arr = 0, vl_arr = 0;
 			uint16_t v_sign = 0x8000;
 			char first_sign = 1;
-			// printf("%d - %d\n", begin,tmp);
+			// if (ret == 8776)
+			// 	printf("begin%x - %x\n", begin,tmp);
 			for (int j = 0; j < 15; j++)//sizeof tmp
 			{
 				v_h = (tmp & v_sign) && 1;
@@ -276,11 +316,12 @@ linkwc_gen (uint32_t *arr, uint32_t n, FILE *f_links) {//调用parr = ARR (r->in
 				if (first_sign) {
 					if (v_h == v_l)	{
 						if (v_h == 1) {
-							vh_arr += v_sign;						
+							vh_arr += v_sign;
+							vl_arr += v_sign;						
 						}						
 					}
 					else {
-						vl_arr = vh_arr;
+						// vl_arr = vh_arr;
 						first_sign = 0;
 						vh_arr += v_sign;
 					}
@@ -323,7 +364,7 @@ linkwc_gen (uint32_t *arr, uint32_t n, FILE *f_links) {//调用parr = ARR (r->in
 					wc_nums++;
 				}
 			}
-				else{
+			else{
 				if (v_l) {
 					links_wc[wc_nums].w = 0;
 					links_wc[wc_nums].v = vl_arr + v_sign;
@@ -345,28 +386,36 @@ linkwc_gen (uint32_t *arr, uint32_t n, FILE *f_links) {//调用parr = ARR (r->in
 					links_wc[wc_nums].v = vh_arr;
 					wc_nums++;
 				}
-				// wc_nums++;
-				begin = arr_idx[i];
-				tmp = begin;
+				// wc_nums++;	
 			}
+			begin = arr_idx[i];
+			tmp = begin;
 
 
 		}
 	}
+	// printf("%d num;", n);
 	// for (int i = 0; i < wc_nums; i++)
 	// {	
 	// 	printf("%d - %d", links_wc[i].w, links_wc[i].v);
 	// 	printf(", ");
 	// }
 	// printf("\n");
-
-	// for (int i = 0; i < wc_nums; i++)
-	// {	
-	// 	print_wc(&links_wc[i].w, &links_wc[i].v);
-	// 	printf(", ");
+	// if (ret == 46396){
+	// 	for (int i = 0; i < n; i++)
+	// 		printf("%x, ", arr_idx[i]);
+	// 	printf("\n");
+	// 	for (int i = 0; i < wc_nums; i++)
+	// 	{	
+	// 		print_wc(&links_wc[i].w, &links_wc[i].v);
+	// 		printf(", ");
+	// 	}
+	// 	printf("ret is %d", ret);
+	// 	// printf("ret is %d", ret);
+	// 	printf("\n");
 	// }
-	// printf("ret is %d", ret);
-	// printf("\n");
+		
+	
 	fwrite (&wc_nums, sizeof wc_nums, 1, f_links);
 	fwrite (links_wc, sizeof *links_wc, wc_nums, f_links);
 	return ret;
@@ -396,6 +445,7 @@ gen_sw (const struct parse_sw *sw, FILE *out, FILE *f_strs, const uint16_t *arrs
 	struct of_rule rules[hdr.nrules];//hdr.nrules个rule空间指向各自rules
 	// //构体指针变量一般用”->”，非结构体指针变量，也就是一般结构体变量，一般用”.”。
 	memset (rules, 0, sizeof rules);//初始化0
+
 	// uint16_t *mf_c;
 	int i = 0;
 	for (struct parse_rule *r = sw->rules.head; r; r = r->next, i++) {//选取链表中所有r,从链表转到数组
@@ -429,15 +479,23 @@ gen_sw (const struct parse_sw *sw, FILE *out, FILE *f_strs, const uint16_t *arrs
 		// 	tmp->in_link = linkwc_gen (ARR (r->in), r->in.n, f_ports);
 		// }
 		tmp->in_link = linkwc_gen (ARR (r->in_link), r->in_link.n, f_ports);
-		if(r->idx==1){
-			printf("in_link is %x;\n",tmp->in_link);
-			printf("%d\n", ARR (r->in_link)[0]);
-		}
+		// if(r->idx==1){
+		// 	printf("in_link.n is %d\n",r->in_link.n );
+		// 	printf("in_link is %x;\n",tmp->in_link);
+		// 	printf("%d\n", ARR (r->in_link)[0]);
+		// }
 		tmp->out_link = linkwc_gen (ARR (r->out_link), r->out_link.n, f_ports);
-		if(r->idx==1){
-			printf("out_link is %x;\n",tmp->out_link);
-			printf("%d\n", ARR (r->out_link)[0]);
-		}
+		// if(r->idx==325){
+		// 	printf("out_link.n %d is %d\n",r->idx, r->out_link.n );
+		// 	uint32_t *parr = ARR (r->out_link);
+		// 	for (int i = 0; i < r->out_link.n; parr++, i++)
+		// 	{
+		// 		printf("%x; ",*parr);
+		// 		// printf("out_link is %d;\n",*parr);
+		// 	}
+		// 	printf("out_link position is %d;\n",tmp->out_link);
+		// 	printf("%d\n", ARR (r->out_link)[0]);
+		// }
 		// struct rule_links *rl_out = linkwc_gen (r);
 		// tmp->out_link = 0;
 		
@@ -1137,6 +1195,8 @@ arule_PtoL(struct parse_rule *r, uint16_t *links, const uint32_t *nlinks, const 
 	if (io_sign) {//RULE_LINK_IN 0, RULE_LINK_OUT 1,
 		lk->port_out = 0;
 		uint32_t n = r->out.n;
+		// if (r->idx == 1)
+		// 	printf("r1->out.n = %d\n", n);
 		uint32_t *parr = ARR (r->out);
 		for (uint32_t i = 0; i < n; i++, parr++) {
 			lk->port_in = *parr;
@@ -1203,6 +1263,8 @@ arule_PtoL(struct parse_rule *r, uint16_t *links, const uint32_t *nlinks, const 
 	}
 	struct arr_ptr_uint32_t tmp = {0};
 	tmp.n = count;
+	// if (r->idx == 156)
+	// 	printf("tmp.n = %d\n", tmp.n);
 	//这里port不相同link一定不相同，那么就先不用检测重复的问题
 	if (count){
 		ARR_ALLOC (tmp, count);
@@ -1219,15 +1281,19 @@ arule_PtoL(struct parse_rule *r, uint16_t *links, const uint32_t *nlinks, const 
 			r->in_link = tmp;
 	}
 	
-	// if (r->idx == 1)
-	// {
-	// 	uint32_t n = r->in_link.n;
-	// 	uint32_t *parr = ARR (r->in_link);
-	// 	for (uint32_t j = 0; j < n; j++, parr++)
-	// 		printf("%d - %d; ", buf[j], *parr);
-	// 	printf("%d", len_lk_u8);
-	// 	printf("\n");
-	// }
+	if (r->idx == 156)
+	{
+		if (io_sign){
+			printf("begin the %d-th rule============\n", r->idx);
+			printf("tmp.n = %d\n", tmp.n);
+			uint32_t n = r->out_link.n;
+			uint32_t *parr = ARR (r->out_link);
+			for (uint32_t j = 0; j < n; j++, parr++)
+				printf("%d - %d; ", buf[j], *parr);
+			printf("len_lk_u8: %d\n", len_lk_u8);
+			printf("end=======================\n");
+		}
+	}
 	// uint32_t *parr = ARR (tmp);
 	// if ((r->idx == 201) && io_sign){
 	// 	printf("%d:", count);
@@ -1266,15 +1332,17 @@ rules_ports_to_links(uint16_t *links, const uint32_t *nlinks, const uint32_t *sw
 		assert (sw);
 		for (struct parse_rule *r = sw->rules.head; r; r = r->next) {
 			arule_PtoL(r, links, nlinks, RULE_LINK_IN);
-			// if (r->idx == 1)
+			
+			r_idx = (uint32_t)r->idx;
+			// if (r_idx == 156)
 			// {
 			// 	uint32_t n = r->in_link.n;
 			// 	uint32_t *parr = ARR (r->in_link);
+			// 	printf("the start==========");
 			// 	for (uint32_t j = 0; j < n; j++, parr++)
 			// 		printf("%d #", *parr);
 			// 	printf("\n");
 			// }
-			r_idx = (uint32_t)r->idx;
 			uint32_t n = r->in_link.n;
 			uint32_t *parr = ARR (r->in_link);
 			for (uint32_t j = 0; j < n; j++, parr++){				
@@ -1351,6 +1419,15 @@ rules_ports_to_links(uint16_t *links, const uint32_t *nlinks, const uint32_t *sw
 			arule_PtoL(r, links, nlinks, RULE_LINK_OUT);
 			r_idx = (uint32_t)r->idx;
 			uint32_t n = r->out_link.n;
+			// if (r_idx == 156)
+			// {
+			// 	uint32_t n = r->out_link.n;
+			// 	uint32_t *parr = ARR (r->out_link);
+			// 	printf("the start==========");
+			// 	for (uint32_t j = 0; j < n; j++, parr++)
+			// 		printf("%d #", *parr);
+			// 	printf("\n");
+			// }
 			uint32_t *parr = ARR (r->out_link);
 			for (uint32_t j = 0; j < n; j++, parr++){				
 				fwrite (parr, 4, 1, f);

@@ -21,12 +21,12 @@
 
 //结构体或变量定义
 //自定义
-// #define FIELD_LEN 2 //48位bit i2
-#define FIELD_LEN 1 //32位bit
+#define FIELD_LEN 2 //48位bit i2
+// #define FIELD_LEN 1 //32位bit
 // #define FIELD_LEN 7 //128位bit
 // #define MF_LEN 8 //128位bit， 8×16 standford whole
-#define MF_LEN 2 //32位bit standf ord simple
-// #define MF_LEN 3 //48位bit i2
+// #define MF_LEN 2 //32位bit standf ord simple
+#define MF_LEN 3 //48位bit i2
 #define NW_DST_H 0
 #define NW_DST_L 1
 #define VALID_OFS 1
@@ -4336,7 +4336,6 @@ get_terminal_by_r(struct trie_node *root, struct ex_rule *r) {
 /*MTBDD结构*/
 /*========================================================================*/
 
-
 BDD
 ex_rule_to_MTBDD(struct ex_rule *r) {
   BDD root, tmp;
@@ -4425,8 +4424,6 @@ switch_rs_to_bdd_rs(struct switch_rs *sw){
   return tmp;
 }
 
-
-
 void
 switch_bddrs_getinscbdd_test_diff1(struct switch_bdd_rs *sw, uint32_t idx) {
   BDD self_final = sw->rules[idx-1]->mf_in;
@@ -4473,7 +4470,6 @@ switch_bddrs_getinscbdd_test_diff1(struct switch_bdd_rs *sw, uint32_t idx) {
   //     BDD diff = bdd_apply(sw->rules[i]->mf_in, insc, bddop_diff);
   //   }
   // }
-  
 }
 
 void
@@ -4504,8 +4500,6 @@ switch_bddrs_getinscbdd_test_all(struct switch_bdd_rs *sw) {
     // printf("get diff the rule idx %d: %lld us\n", i+1, T_for_add);
   }
 }
-
-
 
 void
 switch_bddrs_AP_test_lastdiff1(struct switch_bdd_rs *sw, uint32_t idx) {
@@ -4593,7 +4587,6 @@ struct AP_record {
   struct bdd_rule *r;
 };
 
-
 bool
 is_action_same(struct bdd_rule *a, struct bdd_rule *b){
   if (!is_mask_uint16_t_same(a->mask, b->mask))
@@ -4607,9 +4600,6 @@ is_action_same(struct bdd_rule *a, struct bdd_rule *b){
   return true;
 }
 
-
-
-
 void
 switch_bddrs_mergeAP_count(struct switch_bdd_rs *sw) {
   struct timeval start,stop;
@@ -4618,7 +4608,6 @@ switch_bddrs_mergeAP_count(struct switch_bdd_rs *sw) {
   struct AP_record *AP_record_rw = xmalloc(maxnum*sizeof(struct AP_record));
   uint32_t AP_count_fw = 0;
   uint32_t AP_count_rw = 0;
-
 
   for (int i = 0; i < sw->nrules; i++) {
     gettimeofday(&start,NULL);
@@ -4633,12 +4622,9 @@ switch_bddrs_mergeAP_count(struct switch_bdd_rs *sw) {
       AP_record = AP_record_fw;
       AP_record_count = AP_count_fw;
     }
-
     for (int j = 0; j < i; j++)
       if ((sw->rules[i]->mask && sw->rules[j]->mask) || (!(sw->rules[i]->mask) && !(sw->rules[j]->mask)))
         diff_bdd = bdd_apply(diff_bdd, sw->rules[j]->mf_in, bddop_diff);
-
-
     if (diff_bdd) {
       bool merge = false;
       for (int j = 0; j < AP_record_count; j++) {
@@ -4668,6 +4654,10 @@ switch_bddrs_mergeAP_count(struct switch_bdd_rs *sw) {
   free(AP_record_fw);
   free(AP_record_rw);
 }
+
+
+
+
 
 
 BDD
@@ -4728,7 +4718,7 @@ BDD
 switch_bddrs_to_mtbdd_test_alltogether(struct switch_bdd_rs *sw, BDD root) {
   struct timeval start,stop;
   // BDD root = 0;
-  // uint32_t arr[SW_NUM] = {29, 94, 23, 40, 34, 49, 26, 28, 68};
+  uint32_t arr[SW_NUM] = {29, 94, 23, 40, 34, 49, 26, 28, 68};
   // uint32_t arr[SW_NUM] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
   uint32_t order[sw->nrules];
   // root = mtbdd_add_r(root, sw->rules[sw->nrules - 1]->mtbdd_in, 0);
@@ -4744,8 +4734,8 @@ switch_bddrs_to_mtbdd_test_alltogether(struct switch_bdd_rs *sw, BDD root) {
   // order[idx-1] = sw->nrules - 1;
   // order[sw->nrules - 1] = idx-1;
 
-  for (int i = 0; i < sw->nrules-1; i++) {
-  // for (int i = arr[sw->sw_idx]; i < sw->nrules-1; i++) {
+  // for (int i = 0; i < sw->nrules-1; i++) {
+  for (int i = arr[sw->sw_idx]; i < sw->nrules-1; i++) {
     mtbddvaluevaluecount = 0;
     gettimeofday(&start,NULL);
     bdd_delref(root);
@@ -4754,7 +4744,7 @@ switch_bddrs_to_mtbdd_test_alltogether(struct switch_bdd_rs *sw, BDD root) {
     gettimeofday(&stop,NULL);
     long long int T_for_add = diff(&stop, &start);
     // if (i > 100 && i < 150) {
-    printf("Test the rule idx %d: %lld us\n", i+1, T_for_add);
+    // printf("Test the rule idx %d: %lld us\n", i+1, T_for_add);
     // printf("the root has %d nodes\n", bdd_nodecount(root));
     // printf("the real new node time is %d nodes\n", mtbddvaluevaluecount);
     // }

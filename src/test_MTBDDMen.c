@@ -151,9 +151,8 @@ main (int argc, char **argv)
 
   //made trie and updating rulesarr
   /*==============================================================================*/
-  struct trie_node *trie_root = crate_trie_node_init();
-
-  trie_add_rules_for_nt_test_all(trie_root, nt_wc);
+  // struct trie_node *trie_root = crate_trie_node_init();
+  // trie_add_rules_for_nt_test_all(trie_root, nt_wc);
   // trie_add_rules_for_sw_test_difflast1(trie_root, swr0, test_r_idx);
   printf("-------------------------------------------------------\n");
 
@@ -211,12 +210,14 @@ main (int argc, char **argv)
   // switch_bddrs_getinscbdd_test_all(nt_bdd);
   printf("-------------------------------------------------------\n");
 
+  /*--------------------------------------------------APs part--------------------------------------------------------------------*/
   // switch_bddrs_AP_test_lastdiff1(sw_tmp, test_r_idx);
   printf("-------------------------------------------------------\n");
   // get_APs(nt_bdd);
   // switch_bddrs_mergeAP_count(sw_tmp);
   printf("-------------------------------------------------------\n");
 
+  /*--------------------------------------------------MTBDD part--------------------------------------------------------------------*/
   // BDD *fn_mtbdd = switch_bddrs_to_mtbdd_test_difflast1(sw_tmp, test_r_idx);
   printf("-------------------------------------------------------\n");
 

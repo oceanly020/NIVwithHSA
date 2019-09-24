@@ -168,7 +168,7 @@ main (int argc, char **argv)
   // char *net = "stanford";
   // char *net = "stanford_32";
   // char *net = "stanford_whole";
-  // char *net = "i2";
+  char *net = "i2";
   // bool one_step = false;
   load (net);
   // struct sw *sw0 = sw_get(0);
@@ -191,7 +191,7 @@ main (int argc, char **argv)
   // print_rule(rule1);
 
   // uint32_t test_sw_idx = 0;
-  uint32_t swsnum = 16;
+  uint32_t swsnum = 9;
   struct switch_rs *sws[swsnum];
 
   for (int i = 0; i < swsnum; i++){
@@ -200,7 +200,6 @@ main (int argc, char **argv)
   }
 
   // struct switch_rs *swr0 = gen_sw_rules(test_sw_idx);
-
   // uint32_t test_r_idx = swr0->nrules;
   // printf("sw %d has %d rules.\n", swr0->sw_idx, swr0->nrules);
   // struct ex_rule *ex_rule1 = ex_rule_get(swr0, 22);
@@ -211,7 +210,7 @@ main (int argc, char **argv)
 
   //made trie and updating rules
   /*==============================================================================*/
-  struct trie_node *trie_root = crate_trie_node_init();
+  // struct trie_node *trie_root = crate_trie_node_init();
 
   // trie_add_rules_for_sw_test_all(trie_root, swr0, test_r_idx);
   // trie_add_rules_for_sw_test_difflast1(trie_root, swr0, test_r_idx);
@@ -272,7 +271,7 @@ main (int argc, char **argv)
     // switch_bddrs_AP_test_lastdiff1(sws_bdd[i], sws_bdd[i]->nrules);
     // switch_bddrs_getinscbdd_test_all(sws_bdd[i]);
   printf("-------------------------------------------------------\n");
-
+/*--------------------------AP generation and test--------------------------*/
   // for (int i = 0; i < swsnum; i++)
   //   switch_bddrs_AP_test_lastdiff1(sws_bdd[i], sws_bdd[i]->nrules);
   // switch_bddrs_AP_test_lastdiff1(sw_tmp, test_r_idx);
@@ -285,6 +284,7 @@ main (int argc, char **argv)
 
   // switch_bddrs_mergeAP_count(sw_tmp);
   printf("-------------------------------------------------------\n");
+/*--------------------------MTBDD update--------------------------*/
   // BDD fn_mtbdd = 0;
   // for (int i = 0; i < swsnum; i++)
   //   fn_mtbdd = switch_bddrs_to_mtbdd_test_difflast1(sws_bdd[i], sws_bdd[i]->nrules);
