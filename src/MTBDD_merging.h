@@ -1012,9 +1012,6 @@ typedef struct s_BddNode {/* Node table entry */
   // struct rule_records_arr *rule_records;
 } BddNode;
 
-
-
-
 typedef struct s_MTBddValue {/* Node table entry */
   int hash;
   int next;

@@ -26,14 +26,14 @@
 //结构体或变量定义
 //自定义
 // #define STANDFORD_W 1
-#define Table_NUM 3
+#define Table_NUM 2
 #define STANDFORD_W 0 // standford 和 i2 时为 0，standford whole 时为1
-#define MF_LEN 8 //128位bit， 8×16
+// #define MF_LEN 8 //128位bit， 8×16  json数据中的简单也为8
 // #define MF_LEN 2 //32位bit standford
-// #define MF_LEN 3 //48位bit i2
+#define MF_LEN 3 //48位bit i2
 // #define SW_NUM 9
-#define SW_NUM 16
-// #define SW_NUM 18 //json数据中，18个表对i2，每个 sw 2个表
+// #define SW_NUM 16
+#define SW_NUM 18 //json数据中，18个表对i2，每个 sw 2个表
 // #define SW_NUM 48 //json数据中，48个表对stanfotd，每个 sw 3个表
 
 #define NW_DST_H 0
@@ -430,6 +430,8 @@ struct res {
 #define mtbddop_apply  13
 #define mtbddop_addr   14
 #define mtbddop_delr   15
+#define bddtomtbdd   16
+#define mtbdd_2pr_addr   17
 
 /*=== User BDD types ===*/
 typedef int BDD;
@@ -656,7 +658,6 @@ extern const BDD bddtrue;
 
 #define BDD_ERRNUM 24
 
-
 /* In file kernel.h */
 /*=====================================================================================================*/
 /*=== SANITY CHECKS ===*/
@@ -746,7 +747,19 @@ static uint16_t var2sign[16] = {
 #define FRA2INT(a) ((int) (a))
 #define REF(a)    (bddnodes[a].refcou)
 #define BDDSIZE     100000000
-#define BDDOPCHCHE  4000000 
+#define MTBDDSIZE     1000000
+#define BDDOPCHCHE  1000000 
+
+struct probe {
+  BDD bdd_mf;
+  struct bdd_rule *override;
+};
+
+struct probeset {
+  uint32_t nprobes;
+  BDD bdd_hit;
+  struct probe *probes[0];
+};
 
 struct bdd_rule {
   uint32_t sw_idx;
@@ -759,6 +772,7 @@ struct bdd_rule {
   struct mask_uint16_t *rewrite; 
   struct links_of_rule *lks_in;
   struct links_of_rule *lks_out;
+  struct probeset *pbset;
   // struct port_arr *port_in;
   // struct port_arr *port_out;
 };
@@ -940,6 +954,19 @@ struct rule_records_arr {
   struct rule_record rules[0];
 };
 
+struct APs {
+  uint32_t nAPs;
+  BDD AP_bdds[0];
+  // struct mask_uint16_t *mask;
+  // struct mask_uint16_t *rewrite; 
+};
+
+struct AP_rw {
+  BDD apbdd;
+  uint32_t n;
+  struct bdd_rule *rwrules[SW_NUM];
+};
+
 typedef struct s_BddNode {/* Node table entry */
   unsigned int refcou : 10;
   unsigned int level  : 22;
@@ -956,20 +983,24 @@ typedef struct s_MTBddValue {/* Node table entry */
   int next;
   // int test_count;
   // BDD original_bdd;
-  // BDD self_bdd;
+  BDD self_bdd;
   // BDD coveredby_bdd;
   // BDD covering_bdd;
   // struct rule_record *main_rule;
   // struct sw_r_record *sws_main_rule;
   int table_id;
   // struct bdd_rule *main_rule;
-  struct bdd_rule *paths[Table_NUM];
-  struct nf_space_pair *nf_pair
+  struct bdd_rule *path[Table_NUM];
+  struct nf_space_pair *nf_pair_pre;
+  struct nf_space_pair *nf_pair_cur;
   // struct bdd_rule *main_rule;
   // struct rule_records_arr *rule_records;
 } MTBddValue;
 
-
+struct network_mtbdd {
+  uint32_t nsws;
+  BDD mtbdd_sws[SW_NUM];
+};
 //BDD sw 全局数组
 struct switch_bdd_rs *bdd_sws_arr[SW_NUM];
 struct r_to_merge *r_to_merge_arr[SW_NUM]; //原来的r到新合并的r之间的映射
@@ -1021,6 +1052,7 @@ struct links_of_rule *rule_links_get_2idx(struct sw *sw, const uint32_t idx, con
 struct links_of_rule *rule_links_get(const struct of_rule *rule, const uint32_t sign);
 struct link *link_get(const uint32_t idx);
 struct link_to_rule *get_link_rules(struct link_to_rule_file *lr_file, uint32_t *rule_nums, const uint32_t idx);//通过idx查找link
+struct link_to_rule *get_inoutlink_rules (struct link_to_rule_file *lr_file, uint32_t *rule_nums, const uint32_t idx);
 struct u32_arrs *get_link_idx_from_inport (const uint32_t inport);
 struct u32_arrs *get_outrules_idx_from_inport (const uint32_t inport);
 struct mf_uint16_t *get_r_out_mf(const struct of_rule *rule);
@@ -1030,6 +1062,9 @@ uint32_t matrix_idx_get_r(struct of_rule *r);
 uint32_t matrix_idx_get_2idx(const uint32_t sw_idx, const uint32_t r_idx);
 struct of_rule *matrix_idx_to_r(const uint32_t *matrix_idx);
 struct bdd_rule *matrix_idx_to_bddr(const uint32_t *matrix_idx);
+uint32_t get_num_of_rules_innet(struct network_bdd *net);
+struct mf_uint16_t *mf_from_str (const char *s);
+struct mask_uint16_t *mask_from_str (const char *s);
 
 /*打印结构数据*/
 /*========================================================================*/
@@ -1065,6 +1100,9 @@ void init_mf(struct mf_uint16_t *mf);
 void init_mf_allx(struct mf_uint16_t *mf);
 uint32_t *matrix_idx_init(void);
 struct matrix_buf *matrix_init(void);
+//BDD
+void bdd_sw_load(void);
+void init_r_to_merge(void);
 
 /*释放结构体*/
 /*========================================================================*/
@@ -1078,6 +1116,12 @@ void free_matrix_buf(struct matrix_buf *matrix_buf);
 void free_CS_matrix_idx_v(struct CS_matrix_idx_v *idx_v);
 void free_CS_matrix_idx_v_arr(struct CS_matrix_idx_v_arr *idx_v_arr);
 void free_matrix_CSC_fr_CSR(struct matrix_CSC *matrix_CSC);
+void free_matrix_CSC(struct matrix_CSC *matrix_CSC);
+void free_matrix_CSR(struct matrix_CSR *matrix_CSR);
+//BDD
+void free_bdd_rule(struct bdd_rule *r);
+void free_switch_bdd_rs(struct switch_bdd_rs *sw);
+void bdd_sw_unload(void);
 
 /*矩阵操作*/
 /*========================================================================*/
@@ -1112,6 +1156,10 @@ bool Tri_is_eq(struct matrix_Tri_express *latter, struct matrix_Tri_express *for
 bool mf_can_merge(struct mf_uint16_t *a, struct mf_uint16_t *b);
 //BDD使用
 int cmp_bdd_by_var(const void *a, const void *b);
+//action
+bool is_r_action_same(struct bdd_rule *a, struct bdd_rule *b);
+bool is_r_rw_same(struct bdd_rule *a, struct bdd_rule *b);
+
 
 /*复制各个结构*/
 /*========================================================================*/
@@ -1139,6 +1187,21 @@ struct bdd_saved_arr *bdd_rw_back(struct bdd_saved_arr *bdd_arr, struct bdd_save
 BDD bdd_rw_BDD(BDD a, struct mask_uint16_t *mask, struct mask_uint16_t *rw);
 BDD bdd_rw_back_BDD(BDD a, BDD a_IN, struct mask_uint16_t *mask);
 
+//生成BDD rule
+struct bdd_rule *gen_bdd_rule_from_of(struct of_rule *of_r);
+struct switch_bdd_rs *gen_sw_rules(uint32_t sw_idx);
+struct network_bdd *get_bdd_sws_uncover(void);
+struct network_bdd *get_bdd_sws_merge(struct network_bdd *nt);
+//JSON 生成BDD rule
+static int filter_json (const struct dirent *ent);
+struct bdd_rule *parse_js_rule(cJSON *r);
+struct switch_bdd_rs *parse_tf_json_to_bddsw (const char *name, uint32_t sw_idx);
+struct network_bdd *get_network_bdd_jsondata(const char *tfdir, const char *name);
+struct switch_bdd_rs *parse_tf_json_to_bddsw_noconf (const char *name, uint32_t sw_idx);
+struct network_bdd *get_network_bdd_jsondata_noconf(const char *tfdir, const char *name);
+
+
+
 /*普通矩阵处理及其计算*/
 /*========================================================================*/
 
@@ -1161,6 +1224,8 @@ int get_value_num_matrix_CSR(struct matrix_CSR *matrix_CSR);
 struct matrix_CSR *selected_rs_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix_CSC, struct u32_arrs *rs);
 struct matrix_CSR *sparse_matrix_multiply_nsqure(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix_CSC);
 
+/*MTBDD结构*/
+/*========================================================================*/
 
 
 //data.h
@@ -2088,7 +2153,8 @@ static void   varprofile_rec(int);
 static double bdd_pathcount_rec(BDD);
 static int    varset2vartable(BDD);
 static int    varset2svartable(BDD);
-
+BDD mtbdd_maketnode_fr_2tn_with2pr_addr(BDD tnode1, BDD tnode2);
+BDD mtbdd_maketnode_fr_2tn_add_simple(BDD tnode1, BDD tnode2);
 
    /* Hashvalues */
 #define NOTHASH(r)           (r)
@@ -2654,6 +2720,101 @@ mtbdd_add_r(BDD a, BDD b, uint32_t sign) {
     // printf("b has %d nodes\n", bdd_nodecount(b));
     // printf("res has %d nodes\n", bdd_nodecount(res));
   }
+  return res;   
+}
+
+BDD
+bdd_to_mtbdd_rec(BDD l, BDD r) { 
+  BddCacheData *entry;
+  BDD res;
+  if (l == 1)
+    return r;
+  if (l < 1)
+    return l;
+  
+  // if (LOW(l) == 2 && LOW(r) == 2)
+  //   res = mtbdd_maketnode_fr_2tn_add(l, r);
+  // if (LOW(a) == 1 && LOW(b) == 1)
+  //   return mtbdd_maketnode_fr2spec(a, b);
+  if (r == 1 || l == 1){
+    printf("the wrong %d - %d\n", l, r);
+    bdd_error(BDD_ILLBDD);
+  }
+
+  entry = BddCache_lookup(&applycache, APPLYHASH(l,r,16));
+  if (entry->a == l  &&  entry->b == r  &&  entry->c == 16) {
+    // hit_cache_counter++;
+    return entry->r.res;
+  }
+  
+  res = bdd_makenode(LEVEL(l), bdd_to_mtbdd_rec(LOW(l), r), bdd_to_mtbdd_rec(HIGH(l), r));
+
+  // POPREF(2);
+  entry->a = l;
+  entry->b = r;
+  entry->c = 16;
+  entry->r.res = res;
+
+  return res;
+}
+
+BDD
+mtbdd_2pr_add_r_rec(BDD l, BDD r) { 
+  BddCacheData *entry;
+  BDD res;
+  if (r < 1)
+    return l;
+  if (l < 1)
+    return r;
+  
+  // if (LOW(l) == 2 && LOW(r) == 2)
+  //   res = mtbdd_maketnode_fr_2tn_add(l, r);
+  // if (LOW(a) == 1 && LOW(b) == 1)
+  //   return mtbdd_maketnode_fr2spec(a, b);
+  if (r == 1 || l == 1){
+    printf("the wrong %d - %d\n", l, r);
+    bdd_error(BDD_ILLBDD);
+  }
+
+  entry = BddCache_lookup(&applycache, APPLYHASH(l,r,17));
+  if (entry->a == l  &&  entry->b == r  &&  entry->c == 17) {
+    // hit_cache_counter++;
+    return entry->r.res;
+  }
+  
+  // if ((LOW(l) == 2) && (LOW(r) == 2))
+  //   return mtbdd_maketnode_fr_2tn_add(l, r);
+
+  if (LOW(l) == 2) {
+    if ((LOW(r) == 2)) {
+  // if ((LOW(l) == 2) && (LOW(r) == 2)) {
+      res = mtbdd_maketnode_fr_2tn_with2pr_addr(l, r);
+    }
+    else{
+      res = bdd_makenode(LEVEL(r), mtbdd_2pr_add_r_rec(l, LOW(r)), mtbdd_2pr_add_r_rec(l, HIGH(r)));
+    }
+  }
+  else if(LOW(r) == 2) {
+    res = bdd_makenode(LEVEL(l), mtbdd_2pr_add_r_rec(LOW(l), r), mtbdd_2pr_add_r_rec(HIGH(l), r));
+  }
+  else{
+    if (LEVEL(l) == LEVEL(r)) {
+      res = bdd_makenode(LEVEL(l), mtbdd_2pr_add_r_rec(LOW(l), LOW(r)), mtbdd_2pr_add_r_rec(HIGH(l), HIGH(r)));
+    }
+    else if (LEVEL(l) < LEVEL(r)) {
+      res = bdd_makenode(LEVEL(l), mtbdd_2pr_add_r_rec(LOW(l), r), mtbdd_2pr_add_r_rec(HIGH(l), r));
+    }
+    else {
+      res = bdd_makenode(LEVEL(r), mtbdd_2pr_add_r_rec(l, LOW(r)), mtbdd_2pr_add_r_rec(l, HIGH(r)));
+    }
+  }
+
+  // POPREF(2);
+  entry->a = l;
+  entry->b = r;
+  entry->c = 17;
+  entry->r.res = res;
+
   return res;
 }
 
@@ -3226,7 +3387,7 @@ static BDD veccompose_rec(BDD f) {
 
   return res;
 }
-
+                          
 /*=== SIMPLIFY ===*/
 BDD bdd_simplify(BDD f, BDD d)
 {
@@ -6368,24 +6529,20 @@ int bdd_init(int initnodesize, int initvaluesize, int cs) {
   LOW(0) = HIGH(0) = 0;
   LOW(1) = HIGH(1) = 0;
   LOW(2) = HIGH(2) = 0;
-
   for (n=0 ; n<mtbddvaluesize ; n++) {
     // mtbddvalues[n].refcou = 0;
     mtbddvalues[n].hash = 0;
-    mtbddvalues[n].test_count = 0;
+    // mtbddvalues[n].test_count = 0;
     // LEVEL(n) = 0;
     // mtbddvalues[n].level = 0;
-    
     mtbddvalues[n].next = n+1;
-    mtbddvalues[n].original_bdd = BDDZERO;
     mtbddvalues[n].self_bdd = BDDZERO;
-    mtbddvalues[n].coveredby_bdd = BDDZERO;
-    mtbddvalues[n].covering_bdd = BDDZERO;
-    mtbddvalues[n].main_rule = NULL;
-    for (int i = 0; i < SW_NUM; i++)
-      mtbddvalues[n].main_rule_sws[i] = NULL;
+    mtbddvalues[n].table_id = 100;
+    for (int i = 0; i < Table_NUM; i++)
+      mtbddvalues[n].path[i] = NULL;
     // mtbddvalues[n].main_rule = NULL;
-    mtbddvalues[n].rule_records = NULL;
+    mtbddvalues[n].nf_pair_pre = NULL;
+    mtbddvalues[n].nf_pair_cur = NULL;
   }
   mtbddvalues[mtbddvaluesize-1].next = -1;
   // bddnodes[0].refcou = MAXREF;
@@ -6438,7 +6595,10 @@ void bdd_done(void) {
   bdd_pairs_done();
 
   for (int i = 0; i < mtbddvaluesize; i++){
-    free(mtbddvalues[i].rule_records);
+    if (mtbddvalues[i].nf_pair_pre)
+      free(mtbddvalues[i].nf_pair_pre);
+    if (mtbddvalues[i].nf_pair_cur)
+      free(mtbddvalues[i].nf_pair_cur);
   }
   free(mtbddvalues);
   free(bddnodes);
@@ -6446,10 +6606,12 @@ void bdd_done(void) {
   free(bddvarset);
   free(bddvar2level);
   free(bddlevel2var);
-
+  mtbddvalues = NULL;
   bddnodes = NULL;
   bddrefstack = NULL;
   bddvarset = NULL;
+  bddvar2level = NULL;
+  bddlevel2var = NULL;
 
   bdd_operator_done();
 
@@ -7201,10 +7363,10 @@ mtbdd_maketnode_1r(struct rule_records_arr *rule_records){
   res = mtbddvalues[hash].hash;
   while(res != 0) {
     // if (LEVEL(res) == level  &&  LOW(res) == low  &&  HIGH(res) == high)
-    if (isame_rule_records_arr(rule_records, mtbddvalues[res].rule_records)){
-      free(rule_records);
-      return res;
-    }
+    // if (isame_rule_records_arr(rule_records, mtbddvalues[res].rule_records)){
+    //   free(rule_records);
+    //   return res;
+    // }
     res = mtbddvalues[res].next;
   }
 
@@ -7224,7 +7386,7 @@ mtbdd_maketnode_1r(struct rule_records_arr *rule_records){
   mtbddfreenum--;
   // bddproduced++;
   node = &mtbddvalues[res];
-  node->rule_records = rule_records;
+  // node->rule_records = rule_records;
 
   node->next = mtbddvalues[hash].hash;
   mtbddvalues[hash].hash = res;
@@ -7245,11 +7407,11 @@ mtbdd_maketnode_fr_pofr(BDD bdd_ofr, uint32_t sw_idx, uint32_t idx){
   /* Try to find an existing node of this kind */
   hash = VALUEHASH_K(1, sw_idx, idx);
   res = mtbddvalues[hash].hash;
-  while(res != 0) {
-    if (sw_idx == mtbddvalues[res].main_rule->sw_idx  &&  idx == mtbddvalues[res].main_rule->idx)
-      return res;
-    res = mtbddvalues[res].next;
-  }
+  // while(res != 0) {
+  //   if (sw_idx == mtbddvalues[res].main_rule->sw_idx  &&  idx == mtbddvalues[res].main_rule->idx)
+  //     return res;
+  //   res = mtbddvalues[res].next;
+  // }
 
   /* No existing node -> build one */
   /* Any free nodes to use ? */
@@ -7271,12 +7433,12 @@ mtbdd_maketnode_fr_pofr(BDD bdd_ofr, uint32_t sw_idx, uint32_t idx){
   /* Fullfill the new node */
   node->self_bdd = bdd_ofr;
   bdd_addref(node->self_bdd);
-  node->coveredby_bdd = BDDZERO;
-  node->covering_bdd = BDDZERO;
-  node->main_rule = malloc(sizeof(*(node->main_rule)));
-  node->main_rule->sw_idx = sw_idx;
-  node->main_rule->idx = idx;
-  node->rule_records = NULL;
+  // node->coveredby_bdd = BDDZERO;
+  // node->covering_bdd = BDDZERO;
+  // node->main_rule = malloc(sizeof(*(node->main_rule)));
+  // node->main_rule->sw_idx = sw_idx;
+  // node->main_rule->idx = idx;
+  // node->rule_records = NULL;
   // node->rule_records = rule_records;
 
   /* Insert new node to hashtable */
@@ -7295,28 +7457,22 @@ mtbdd_maketnode_from_r(struct bdd_rule *r){
   register unsigned int hash;
   register int res;
 
-
   /* Try to find an existing node of this kind */
-  hash = VALUEHASH_K(1, r->sw_idx, r->idx);
+  hash = VALUEHASH_K(r->sw_idx, r->sw_idx, r->idx);
   res = mtbddvalues[hash].hash;
   while(res != 0) {
     bool issame = true;
-    for (int i = 0; i < SW_NUM; i++){
-      if (i == r->sw_idx){
-        if (mtbddvalues[res].main_rule_sws[i]!=r){
-          issame = false;
-          break;
-        }
-      }
-      else{
-        if (mtbddvalues[res].main_rule_sws[i]!=NULL){
-          issame = false;
-          break;
-        }
-      }
+    if (mtbddvalues[res].table_id != r->sw_idx){
+      issame = false;
+    }
+    if (mtbddvalues[res].path[0] != r) {
+      issame = false;
+    }
+    else if (mtbddvalues[res].path[1] != NULL) {
+      issame = false;
     }
     if (issame)
-      return bdd_makenode(0, 2, res);;
+      return bdd_makenode(0, 2, res);
     res = mtbddvalues[res].next;
   }
 
@@ -7338,20 +7494,28 @@ mtbdd_maketnode_from_r(struct bdd_rule *r){
   node = &mtbddvalues[res];
 
   /* Fullfill the new node */
-  // node->self_bdd = bdd_ofr;
   node->self_bdd = r->mf_in;
   bdd_addref(node->self_bdd);
-  node->coveredby_bdd = BDDZERO;
-  node->covering_bdd = BDDZERO;
-  node->main_rule = r;
-  // node->main_rule = malloc(sizeof(*(node->main_rule)));
-  // node->main_rule->sw_idx = sw_idx;
-  // node->main_rule->idx = idx;
-  for (int i = 0; i < SW_NUM; i++)
-    node->main_rule_sws[i] = NULL;
-  node->main_rule_sws[r->sw_idx] = r;
-  node->rule_records = NULL;
-  // node->rule_records = rule_records;
+  node->table_id = r->sw_idx;
+  // for (int i = 0; i < Table_NUM; i++)
+  //   node->path[i] = NULL;
+  node->path[r->sw_idx % Table_NUM] = r;
+  node->path[0] = r;
+  node->path[1] = NULL;
+  node->nf_pair_pre = NULL;
+  node->nf_pair_cur = NULL;
+  // node.nf_pair_cur = xmalloc(sizeof(struct nf_space_pair));
+  // node.nf_pair_cur->in = xmalloc(sizeof(struct nf_space));
+  // node.nf_pair_cur->in->mf = r->mf_in;
+  // bdd_addref(node.nf_pair_cur->in->mf);
+  // node.nf_pair_cur->in->->lks = NULL;
+  // node.nf_pair_cur->out = xmalloc(sizeof(struct nf_space));
+  // node.nf_pair_cur->out->mf = r->mf_out;
+  // bdd_addref(node.nf_pair_cur->out->mf);
+  // node.nf_pair_cur->out->->lks = NULL;
+  // node.nf_pair_cur->r_arr = NULL;
+  // node.nf_pair_cur->mask = copy_mask_uint16_t(r->mask);
+  // node.nf_pair_cur->rewrite = copy_mask_uint16_t(r->rewrite);
 
   /* Insert new node to hashtable */
   node->next = mtbddvalues[hash].hash;
@@ -7367,12 +7531,12 @@ mtbdd_maketnode_from_r(struct bdd_rule *r){
 BDD 
 mtbdd_maketnode_fr2spec(BDD tnode1, BDD tnode2){
   int rule_records_sign = 0;
-  struct rule_records_arr *tmp = gen_rule_records_arr_fr2spec(mtbddvalues[(bddnodes[tnode1].high)].rule_records, mtbddvalues[(bddnodes[tnode2].high)].rule_records, &rule_records_sign);
+  // struct rule_records_arr *tmp = gen_rule_records_arr_fr2spec(mtbddvalues[(bddnodes[tnode1].high)].rule_records, mtbddvalues[(bddnodes[tnode2].high)].rule_records, &rule_records_sign);
   // struct rule_records_arr *tmp = gen_rule_records_arr_fr2spec_simple(mtbddvalues[(bddnodes[tnode1].high)].rule_records, mtbddvalues[(bddnodes[tnode2].high)].rule_records, &rule_records_sign);
   if (!rule_records_sign) 
     return tnode1;
-  // return tnode2;
-  return mtbdd_maketnode_1r(tmp);
+  return tnode2;
+  // return mtbdd_maketnode_1r(tmp);
 }
 
 BDD
@@ -7383,12 +7547,12 @@ mtbdd_maketnode_from_v(MTBddValue *v1, struct bdd_rule *r){
 
   uint32_t sum_sw_idx = 0;
   uint32_t sum_idx = 0;
-  for (int i = 0; i < SW_NUM; i++){
-    if ((v1->main_rule_sws[i]) && (i != r->sw_idx)){
-      sum_sw_idx += i;
-      sum_idx += v1->main_rule_sws[i]->idx;
-    }
-  }
+  // for (int i = 0; i < SW_NUM; i++){
+  //   if ((v1->main_rule_sws[i]) && (i != r->sw_idx)){
+  //     sum_sw_idx += i;
+  //     sum_idx += v1->main_rule_sws[i]->idx;
+  //   }
+  // }
   sum_sw_idx += r->sw_idx;
   sum_idx += r->idx;
 
@@ -7399,30 +7563,30 @@ mtbdd_maketnode_from_v(MTBddValue *v1, struct bdd_rule *r){
   res = mtbddvalues[hash].hash;
   while(res != 0) {
     bool issame = true;
-    for (int i = 0; i < SW_NUM; i++){
-      if (i != r->sw_idx){
-        if (v1->main_rule_sws[i] != mtbddvalues[res].main_rule_sws[i]){
-          issame = false;
-          break;
-        }
-      }
-      else{
-        if (r != mtbddvalues[res].main_rule_sws[i]){
-          issame = false;
-          break;
-        }
-      }
-    }
-    if (issame){
-      // if (LOW(res) != 2){
-      //   for (int i = 0; i < SW_NUM; i++) {
-      //     printf("%d;", mtbddvalues[res].main_rule_sws[i]);
+    // for (int i = 0; i < SW_NUM; i++){
+    //   if (i != r->sw_idx){
+    //     if (v1->main_rule_sws[i] != mtbddvalues[res].main_rule_sws[i]){
+    //       issame = false;
+    //       break;
+    //     }
+    //   }
+    //   else{
+    //     if (r != mtbddvalues[res].main_rule_sws[i]){
+    //       issame = false;
+    //       break;
+    //     }
+    //   }
+    // }
+    // if (issame){
+    //   // if (LOW(res) != 2){
+    //   //   for (int i = 0; i < SW_NUM; i++) {
+    //   //     printf("%d;", mtbddvalues[res].main_rule_sws[i]);
 
-      //   }
-      //   printf("mtbdd_maketnodehash %d\n", res);
-      // }
-      return bdd_makenode(0, 2, res);
-    }
+    //   //   }
+    //   //   printf("mtbdd_maketnodehash %d\n", res);
+    //   // }
+    //   return bdd_makenode(0, 2, res);
+    // }
 
     res = mtbddvalues[res].next;
   }
@@ -7447,18 +7611,18 @@ mtbdd_maketnode_from_v(MTBddValue *v1, struct bdd_rule *r){
   /* Fullfill the new node */
   node->self_bdd = BDDZERO;
   // bdd_addref(node->self_bdd);
-  node->coveredby_bdd = BDDZERO;
-  node->covering_bdd = BDDZERO;
-  node->main_rule = NULL;
+  // node->coveredby_bdd = BDDZERO;
+  // node->covering_bdd = BDDZERO;
+  // node->main_rule = NULL;
 
-  for (int i = 0; i < SW_NUM; i++)
-    node->main_rule_sws[i] = v1->main_rule_sws[i];
-  node->main_rule_sws[r->sw_idx] = r;
+  // for (int i = 0; i < SW_NUM; i++)
+  //   node->main_rule_sws[i] = v1->main_rule_sws[i];
+  // node->main_rule_sws[r->sw_idx] = r;
 
   // node->main_rule = malloc(sizeof(*(node->main_rule)));
   // node->main_rule->sw_idx = sw_idx;
   // node->main_rule->idx = idx;
-  node->rule_records = NULL;
+  // node->rule_records = NULL;
   // node->rule_records = rule_records;
 
   /* Insert new node to hashtable */
@@ -7488,11 +7652,11 @@ mtbdd_maketnode_fr_2tn_add_simple(BDD tnode1, BDD tnode2){
   /*先留sw_idx不同的问题，在这里先不考虑来实验，只考虑rule 的idx来区分节点
   也就是，在同一个bdd下会发现生成了两个不同的mtbddvalue，那么怎样放到同一个中
   先默认sw_idx相同*/
-  if (v1->main_rule_sws[v2->main_rule->sw_idx]) {
-    // if (v1->main_rule_sws[v2->main_rule->sw_idx]->idx <= v2->main_rule->idx)
-      return tnode1;
-  }
-  BDD tmp = mtbdd_maketnode_from_v(v1, v2->main_rule);
+  // if (v1->main_rule_sws[v2->main_rule->sw_idx]) {
+  //   // if (v1->main_rule_sws[v2->main_rule->sw_idx]->idx <= v2->main_rule->idx)
+  //     return tnode1;
+  // }
+  // BDD tmp = mtbdd_maketnode_from_v(v1, v2->main_rule);
 
   // if (tmp == 1 || LOW(tmp) == 1 || HIGH(tmp)  == 1 || LOW(tmp) != 2)
   // {
@@ -7500,8 +7664,109 @@ mtbdd_maketnode_fr_2tn_add_simple(BDD tnode1, BDD tnode2){
   // }
   
   // return mtbdd_maketnode_from_v(v1, v2->main_rule);
-  return tmp;
+  // return tmp;
+  return 1;
+}
 
+BDD
+mtbdd_maketnode_fr_2v_addr(MTBddValue *v1, MTBddValue *v2){
+  register MTBddValue *node;
+  register unsigned int hash;
+  register int res;
+
+  struct bdd_rule *rhigh = NULL;
+  struct bdd_rule *rlow = NULL;
+  if (v1->path[0]->idx < v2->path[0]->idx) {
+    rhigh = v1->path[0];
+    rlow = v2->path[0];
+  }
+  else {
+    rhigh = v2->path[0];
+    rlow = v1->path[0];
+  }
+
+  uint32_t sum_sw_idx = rhigh->sw_idx +  rlow->sw_idx;
+  uint32_t sum_idx  = rhigh->idx +  rlow->idx;
+
+  /* Try to find an existing node of this kind */
+  hash = VALUEHASH_K(v1->table_id, sum_sw_idx, sum_idx);
+  res = mtbddvalues[hash].hash;
+  while(res != 0) {
+    bool issame = true;
+    if (mtbddvalues[res].table_id != v1->table_id){
+      issame = false;
+    }
+    if (mtbddvalues[res].path[0] != rhigh) {
+      issame = false;
+    }
+    else if (mtbddvalues[res].path[1] != rlow) {
+      issame = false;
+    }
+    if (issame){                     
+      // mtbddvalues[res].self_bdd = 
+      return bdd_makenode(0, 2, res);
+    }
+    res = mtbddvalues[res].next;
+  }
+
+  /* No existing node -> build one */
+  /* Any free nodes to use ? */
+  // if (bddfreepos == 0)
+
+  if (mtbddfreepos == -1) {
+    bdd_error(BDD_NODENUM);
+    bdderrorcond = abs(BDD_NODENUM);
+    return 0;
+  }
+
+  /* Build new node */
+  res = mtbddfreepos;
+  mtbddfreepos = mtbddvalues[mtbddfreepos].next;
+  mtbddfreenum--;
+  // bddproduced++;
+  node = &mtbddvalues[res];
+
+  /* Fullfill the new node */
+  // node->self_bdd = r->mf_in;
+  // bdd_addref(node->self_bdd);
+  node->table_id = rhigh->sw_idx;
+  node->self_bdd = 0;
+  // for (int i = 0; i < Table_NUM; i++)
+  //   node->path[i] = NULL;
+  // node->path[r->sw_idx % Table_NUM] = r;
+  node->path[0] = rhigh;
+  node->path[1] = rlow;
+  node->nf_pair_pre = NULL;
+  node->nf_pair_cur = NULL;
+
+  /* Insert new node to hashtable */
+  node->next = mtbddvalues[hash].hash;
+  mtbddvalues[hash].hash = res;
+
+  res = bdd_makenode(0, 2, res);
+
+  if (LOW(res) != 2)
+  {
+    printf("mtbdd_maketnodev %d\n", res);
+  }
+
+  // mtbddvaluevaluecount ++;
+  return res;
+}
+
+BDD
+mtbdd_maketnode_fr_2tn_with2pr_addr(BDD tnode1, BDD tnode2) {
+  if (tnode1 == tnode2) 
+    return tnode1;
+  MTBddValue *v1 = &mtbddvalues[(bddnodes[tnode1].high)];
+  MTBddValue *v2 = &mtbddvalues[(bddnodes[tnode2].high)];
+  if (v1->path[0] == v2->path[0])
+    return tnode1;
+  if ((v1->path[1]) && (v2->path[0]->idx > v1->path[1]->idx))
+    return tnode1;
+  // printf("make mtbdd nodes\n");
+  BDD tnode = mtbdd_maketnode_fr_2v_addr(v1, v2);
+  return tnode;
 }
 
 int bdd_noderesize(int doRehash) {
@@ -10455,29 +10720,15 @@ free_switch_bdd_rs(struct switch_bdd_rs *sw) {
 void
 bdd_sw_unload(void) {
   for (int i = 0; i < SW_NUM; i++) {
-    free_switch_bdd_rs(bdd_sws_arr[i]);
+    if (bdd_sws_arr[i])  {
+      free_switch_bdd_rs(bdd_sws_arr[i]);
+    }
+    
   }
 }
 
 /*生成合并的规则*/
 /*------------------------------------------------*/
-// struct r_to_merge {
-//   uint32_t nrules;
-//   uint32_t rules[0];
-// };
-// struct r_to_merge *r_to_merge_arr[SW_NUM];
-// r_merge_num_arr
-
-// struct bdd_sws {
-//   uint32_t nsws;
-//   struct switch_bdd_rs *sws_arr[0];
-// };
-
-// //BDD sw 全局数组
-// struct switch_bdd_rs *bdd_sws_arr[SW_NUM];
-// struct r_to_merge *r_to_merge_arr[SW_NUM]; //原来的r到新合并的r之间的映射
-// struct r_to_merge *merged_arr[SW_NUM];
-// uint32_t r_merge_num_arr[SW_NUM];
 
 bool
 is_r_action_same(struct bdd_rule *a, struct bdd_rule *b){
@@ -10612,13 +10863,6 @@ get_bdd_sws_merge(struct network_bdd *nt){
   }
   return tmp;
 }
-
-struct APs {
-  uint32_t nAPs;
-  BDD AP_bdds[0];
-  // struct mask_uint16_t *mask;
-  // struct mask_uint16_t *rewrite; 
-};
 
 struct APs *
 get_APs_simple(struct network_bdd *nt){
@@ -11032,12 +11276,6 @@ get_APs(struct network_bdd *nt){
   return tmp;
 }
 
-
-struct AP_rw {
-  BDD apbdd;
-  uint32_t n;
-  struct bdd_rule *rwrules[SW_NUM];
-};
 struct APs *
 get_APs_bounding(struct network_bdd *nt){
   struct timeval start,stop;  //计算时间差 usec
@@ -11480,7 +11718,6 @@ get_APs_bounding(struct network_bdd *nt){
   return tmp;
 }
 
-
 int
 test_AP_generation(struct APs *AP_base, struct network_bdd *nt){
   struct timeval start,stop;  //计算时间差 usec
@@ -11517,11 +11754,6 @@ test_AP_generation(struct APs *AP_base, struct network_bdd *nt){
   // printf("there has been the %d aps\n", count);
   return 0;
 }
-
-// int
-// test_generation (struct APs *AP_base, struct network_bdd *nt){
-
-// }
 
 /*处理JSON数据并生成相应net*/
 /*========================================================================*/
@@ -11611,17 +11843,6 @@ mask_from_str (const char *s) {//每个数组的数都为一组uint32_t的匹配
   return mf;
 }
 
-
-// struct bdd_rule {
-//   uint32_t sw_idx;
-//   uint32_t idx;
-//   BDD mf_in;
-//   BDD mf_out;
-//   struct mask_uint16_t *mask;
-//   struct mask_uint16_t *rewrite; 
-//   struct links_of_rule *lks_in;
-//   struct links_of_rule *lks_out;
-// };
 struct bdd_rule *
 parse_js_rule(cJSON *r) {
   if (!r)
@@ -11629,6 +11850,8 @@ parse_js_rule(cJSON *r) {
   struct bdd_rule *r_new = xmalloc(sizeof(struct bdd_rule));
   r_new->sw_idx = 0;
   r_new->idx = 0;
+  r_new->vtnode_in = BDDZERO;
+  r_new->mtbdd_in = BDDZERO;
 
   cJSON *ac = cJSON_GetObjectItem(r, "action");
   // printf("%s\n", ac->valuestring);
@@ -11694,6 +11917,7 @@ parse_js_rule(cJSON *r) {
     }
     // printf("\n");
   }
+  r_new->pbset = NULL;
   return r_new;
 }
 
@@ -11749,7 +11973,7 @@ parse_tf_json_to_bddsw (const char *name, uint32_t sw_idx) {
       bdd_addref(bdd_rules[rules_count]->mf_in);
       bdd_addref(bdd_rules[rules_count]->mf_out);
       bdd_rules[rules_count]->sw_idx = sw_idx;
-      bdd_rules[rules_count]->idx = rules_count;
+      bdd_rules[rules_count]->idx = rules_count;//idx从0开始
       rules_count++;
     }
     else {
@@ -11823,7 +12047,73 @@ parse_tf_json_to_bddsw (const char *name, uint32_t sw_idx) {
   return sw; //在一个交换机中保存的规则和关系
 }
 
+struct switch_bdd_rs *
+parse_tf_json_to_bddsw_nomerge (const char *name, uint32_t sw_idx) {
+  FILE *in = fopen (name, "r");
+  fseek(in,0,SEEK_END);
+  long in_len = ftell(in);
+  fseek(in,0,SEEK_SET);
+  char *content = (char*)malloc(in_len+1);
+  fread(content,1,in_len,in);
+  fclose(in);
 
+  cJSON *root = cJSON_Parse(content);
+  if (!root) {
+      printf("Error before: [%s]\n",cJSON_GetErrorPtr());
+      return NULL;
+  }
+
+  cJSON *js_tableid = cJSON_GetObjectItem(root, "id"); 
+  if (!js_tableid) {
+      printf("No tableid!\n");
+      return NULL;
+  }
+
+  uint32_t tableid = js_tableid->valueint;
+  // printf("tableid: %d\n", js_tableid->valueint);
+  cJSON *js_rules = cJSON_GetObjectItem(root, "rules");
+  if (!js_rules) {
+      printf("No rules!\n");
+      return NULL;
+  }
+
+  uint32_t nrules = cJSON_GetArraySize(js_rules);
+  printf("the rule num = %d\n", nrules);
+  if (!nrules) {
+      printf("Empty rules!\n");
+      return NULL;
+  }
+  struct bdd_rule *bdd_rules[10000];
+  uint32_t rules_count = 0;
+  // struct switch_bdd_rs *sw = NULL;
+  // if(nrules)
+  //   sw = xmalloc(2*sizeof(uint32_t)+nrules*sizeof(struct bdd_rule *));
+  // printf("here is wright!2\n");
+  for (int i = 0; i < nrules; i++) {
+    cJSON *rule = cJSON_GetArrayItem(js_rules, nrules - i - 1);
+    // uint32_t re_i = nrules - i - 1;
+    struct bdd_rule *r_new = parse_js_rule(rule);
+    // printf("here is wright!3\n");
+    bdd_rules[rules_count] = r_new;
+    bdd_addref(bdd_rules[rules_count]->mf_in);
+    bdd_addref(bdd_rules[rules_count]->mf_out);
+    bdd_rules[rules_count]->sw_idx = sw_idx;
+    bdd_rules[rules_count]->idx = rules_count;
+    rules_count++;
+  }
+
+  free(content);
+
+  struct switch_bdd_rs *sw = NULL;
+  if (rules_count) {
+    sw = xmalloc(2*sizeof(uint32_t)+rules_count*sizeof(struct bdd_rule *));
+    sw->sw_idx = sw_idx;
+    sw->nrules = rules_count;
+    for (int i = 0; i < rules_count; i++) 
+      sw->rules[i] = bdd_rules[i];
+  }
+  return sw; //在一个交换机中保存的规则和关系
+}
 
 struct APs *
 get_APs_simple_astep(struct APs *input, BDD calcone){
@@ -12086,7 +12376,9 @@ get_network_bdd_jsondata(const char *tfdir, const char *name){
       strcpy (base + 1, tfs[i]->d_name); //文件名，base+1写文件名，记录文件名,也就是要读取的名字
       free (tfs[i]);
 
-      netmp->sws[i] = parse_tf_json_to_bddsw (buf, i);//解析 .json
+      // netmp->sws[i] = parse_tf_json_to_bddsw (buf, i);//解析 .json
+      netmp->sws[i] = parse_tf_json_to_bddsw_nomerge(buf, i);
+
 
       nmergerules_sum += netmp->sws[i]->nrules;
       // assert (sw);
@@ -12167,7 +12459,6 @@ parse_tf_json_to_bddsw_noconf (const char *name, uint32_t sw_idx) {
           }
           r_new->mf_in = bdd_apply(r_new->mf_in, bdd_rules[j]->mf_in, bddop_diff);
         }
-
       }
 
       bdd_rules[rules_count] = r_new;
@@ -12175,6 +12466,10 @@ parse_tf_json_to_bddsw_noconf (const char *name, uint32_t sw_idx) {
       bdd_addref(bdd_rules[rules_count]->mf_out);
       bdd_rules[rules_count]->sw_idx = sw_idx;
       bdd_rules[rules_count]->idx = rules_count;
+//   bdd_r->vtnode_in = mtbdd_maketnode_from_r(bdd_r);
+//   bdd_addref(bdd_r->vtnode_in);
+//   bdd_r->mtbdd_in = bdd_rule_get_mtbdd_in(r, bdd_r->vtnode_in); 
+//   bdd_addref(bdd_r->mtbdd_in);
       rules_count++;
     }
   }
@@ -14499,13 +14794,6 @@ sparse_matrix_plus(struct matrix_CSR *matrix_CSR1, struct matrix_CSR *matrix_CSR
   return tmp;
 }
 
-void
-BDD_init_matrix_multiply(void) {
-  bdd_init(BDDSIZE, BDDOPCHCHE);
-  bdd_setvarnum(16*MF_LEN);
-
-  bdd_done();
-}
 
 struct CS_matrix_idx_v_arr *
 gen_matrix_row_CSR_fr_Tris(struct Tri_arr *Tri_arr) {
@@ -14697,14 +14985,470 @@ print_CS_matrix_v_arr(struct CS_matrix_idx_v_arr *v_arr) {
 
 void
 BDD_init_multiply(void) {
-  bdd_init(BDDSIZE, BDDOPCHCHE);
+  bdd_init(BDDSIZE, MTBDDSIZE, BDDOPCHCHE);
   bdd_setvarnum(16*MF_LEN);
 }
 
 /*MTBDD结构*/
 /*========================================================================*/
+// struct bdd_rule {
+//   uint32_t sw_idx;
+//   uint32_t idx;
+//   BDD mf_in;
+//   BDD mf_out;
+//   BDD vtnode_in;
+//   BDD mtbdd_in;
+//   struct mask_uint16_t *mask;
+//   struct mask_uint16_t *rewrite; 
+//   struct links_of_rule *lks_in;
+//   struct links_of_rule *lks_out;
+// };
+bool
+is_action_same(struct bdd_rule *a, struct bdd_rule *b){
+  if (!is_mask_uint16_t_same(a->mask, b->mask))
+    return false;
+  if (!is_mask_uint16_t_same(a->rewrite, b->rewrite))
+    return false;
+  if (!is_links_of_rule_same(a->lks_out, b->lks_out))
+    return false;
+  if (!is_links_of_rule_same(a->lks_in, b->lks_in))
+    return false;
+  return true;
+}
+
 BDD
-bdd_rule_get_mtbdd_in(struct ex_rule *r, BDD tnode)
+bdd_to_mtbdd(BDD domain, BDD tnode) {
+  CHECKa(domain, bddfalse);
+  CHECKa(tnode, bddfalse);
+  // hit_cache_counter = 0;
+  // calc_node_counter = 0;
+  BDD res = bdd_to_mtbdd_rec(domain, tnode);
+  // if (sign == 1) {
+  //   printf("the hit_cache_counter is %d\n", hit_cache_counter);
+  //   printf("the calc_node_counter is %d\n", calc_node_counter);
+  //   // printf("a has %d nodes\n", bdd_nodecount(a));
+  //   // printf("b has %d nodes\n", bdd_nodecount(b));
+  //   // printf("res has %d nodes\n", bdd_nodecount(res));
+  // }
+  return res;
+}
+
+void
+generate_mtbddrules(struct network_bdd *net) {
+  for (int sw_i = 0; sw_i < net->nsws; sw_i++) {
+    struct switch_bdd_rs *sw = net->sws[sw_i];
+    for (int r_i = 0; r_i < sw->nrules; r_i++) {
+       sw->rules[r_i]->vtnode_in = mtbdd_maketnode_from_r(sw->rules[r_i]);
+       sw->rules[r_i]->mtbdd_in = bdd_to_mtbdd(sw->rules[r_i]->mf_in, sw->rules[r_i]->vtnode_in);
+     }
+  }
+  printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum());
+}
+
+// struct network_mtbdd {
+  // uint32_t nsws;
+//   BDD mtbdd_sws[SW_NUM];
+// };
+BDD
+mtbdd_2pr_add_r(BDD a, BDD b) {
+  CHECKa(a, bddfalse);
+  CHECKa(b, bddfalse);
+  // hit_cache_counter = 0;
+  // calc_node_counter = 0;
+  BDD res = mtbdd_2pr_add_r_rec(a, b);
+  // if (sign == 1) {
+  //   printf("the hit_cache_counter is %d\n", hit_cache_counter);
+  //   printf("the calc_node_counter is %d\n", calc_node_counter);
+  //   // printf("a has %d nodes\n", bdd_nodecount(a));
+  //   // printf("b has %d nodes\n", bdd_nodecount(b));
+  //   // printf("res has %d nodes\n", bdd_nodecount(res));
+  // }
+  return res;
+}
+
+struct network_mtbdd *
+generate_mtbdd_foreach_table(struct network_bdd *net) {
+  struct timeval start,stop;
+  BDD tmp_mtbdd_sws[net->nsws];
+  for (int i = 0; i < net->nsws; i++) {
+    tmp_mtbdd_sws[i] = BDDZERO;
+  }
+
+  for (int sw_i = 0; sw_i < net->nsws; sw_i++) {
+    struct switch_bdd_rs *sw = net->sws[sw_i];
+    for (int r_i = 0; r_i < sw->nrules; r_i++) {
+      gettimeofday(&start,NULL);
+      tmp_mtbdd_sws[sw_i] = mtbdd_2pr_add_r(tmp_mtbdd_sws[sw_i], sw->rules[r_i]->mtbdd_in);
+      gettimeofday(&stop,NULL);
+      long long int rupdate = diff(&stop, &start);
+      printf("rupdate %d - %d for each table: %lld us\n", sw_i, r_i, rupdate);
+     }
+  }
+  printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum());
+  struct network_mtbdd *tmp = xmalloc(sizeof(struct network_mtbdd));
+  tmp->nsws = net->nsws;
+  for (int i = 0; i < net->nsws; i++)
+    tmp->mtbdd_sws[i] = tmp_mtbdd_sws[i];
+  return tmp;
+}
+
+uint32_t
+get_mtbdd_probes_num(struct network_mtbdd *net){
+  uint32_t sum_v_num = 0;
+  for (int i = 0; i < net->nsws; i++){
+    bdd_nodecount(net->mtbdd_sws[i]);
+    sum_v_num +=  test_counter;
+  }
+  printf("MTBDD get %d probes for the network\n", sum_v_num);
+  return sum_v_num;
+}
+
+// struct probe {
+//   BDD bdd_mf;
+//   struct bdd_rule *override;
+// }
+
+// struct probeset {
+//   uint32_t nprobes;
+//   struct probe probes[0];
+// }
+
+// struct bdd_rule {
+//   uint32_t sw_idx;
+//   uint32_t idx;
+//   BDD mf_in;
+//   BDD mf_out;
+//   BDD vtnode_in;
+//   BDD mtbdd_in;
+//   struct mask_uint16_t *mask;
+//   struct mask_uint16_t *rewrite; 
+//   struct links_of_rule *lks_in;
+//   struct links_of_rule *lks_out;
+//   struct probeset *pbset;
+//   // struct port_arr *port_in;
+//   // struct port_arr *port_out;
+// };
+// struct switch_bdd_rs {
+//   uint32_t sw_idx;
+//   uint32_t nrules;
+//   struct bdd_rule *rules[0];
+// };
+// struct network_bdd {
+//   uint32_t nsws;
+//   struct switch_bdd_rs *sws[SW_NUM];
+// };
+struct network_bdd *
+generate_empty_net(struct network_bdd *net) {
+  if (!net)
+    return NULL;
+  struct network_bdd *tmp = xmalloc(sizeof(struct network_bdd));
+  tmp->nsws = net->nsws;
+  for (int i = 0; i < tmp->nsws; i++) {
+    if (net->sws[i]) {
+      tmp->sws[i] = xmalloc(2*sizeof(uint32_t)+(net->sws[i]->nrules)*sizeof(struct bdd_rule *));
+      tmp->sws[i]->sw_idx = net->sws[i]->sw_idx;
+      tmp->sws[i]->nrules = net->sws[i]->nrules;
+      for (int r_i = 0; r_i < tmp->sws[i]->nrules; r_i++)
+        tmp->sws[i]->rules[r_i] = NULL;
+    }
+    else
+      tmp->sws[i] = NULL;
+  }
+  return tmp;
+}
+
+struct network_bdd *
+UpdateProbesInsert(struct network_bdd *net, struct bdd_rule *r) {
+  if (!net)
+    return NULL;
+  if(!r)
+    return net;
+  struct switch_bdd_rs *sw = net->sws[r->sw_idx];
+  sw->rules[r->idx] = r;
+  // printf("ridx %d\n", r->idx);
+  r->pbset = xmalloc(sizeof(struct probeset));
+  r->pbset->nprobes = 1;
+  r->pbset->bdd_hit = r->mf_in;
+  r->pbset->probes[0] = xmalloc(sizeof(struct probe));
+  r->pbset->probes[0]->bdd_mf = r->mf_in;
+  r->pbset->probes[0]->override = NULL;
+  for (int r_i = 0; r_i < r->idx; r_i++){
+    if (sw->rules[r_i]){
+      struct bdd_rule *rt = sw->rules[r_i];
+      // bool actionsame = is_action_same(rt, r);
+      bool changedsign = false;
+      struct probe *pbs_tmp[1000];
+      uint32_t pbs_tmp_count = 0;
+      struct probe *newpb = xmalloc(sizeof(struct probe));
+      newpb->bdd_mf = BDDZERO;
+      newpb->override = r;
+
+      if (r->pbset) {
+        r->pbset->bdd_hit = bdd_apply(r->pbset->bdd_hit, rt->mf_in, bddop_diff);
+        r->pbset->probes[0]->bdd_mf = r->pbset->bdd_hit;
+        if (!(r->pbset->bdd_hit)){
+          free(r->pbset->probes[0]);
+          free(r->pbset);
+          r->pbset = NULL;
+        }     
+      }
+
+      if (sw->rules[r_i]->pbset) {
+        for (int pb_i = 0; pb_i < rt->pbset->nprobes; pb_i++) {
+          struct probe *pb = rt->pbset->probes[pb_i];
+          if (pb) {
+            if (pb->override) {
+              if (pb->override->idx < r->idx) {
+                pbs_tmp[pbs_tmp_count] = pb;
+                pbs_tmp_count++;
+              }
+              else {
+                BDD insc = bdd_apply(pb->bdd_mf, r->mf_in, bddop_and);
+                if (insc){
+                  newpb->bdd_mf = bdd_apply(newpb->bdd_mf, insc, bddop_or);
+                  changedsign = true;
+                  BDD diff = bdd_apply(pb->bdd_mf, insc, bddop_diff);
+                  if(diff) {
+                    pb->bdd_mf = diff;
+                    pbs_tmp[pbs_tmp_count] = pb;
+                    pbs_tmp_count++;
+                  }
+                  else {
+                    free(pb);
+                  }
+                }
+                else {
+                  pbs_tmp[pbs_tmp_count] = pb;
+                  pbs_tmp_count++;
+                }
+              }
+            } 
+            else {
+              BDD insc = bdd_apply(pb->bdd_mf, r->mf_in, bddop_and);
+              if (insc){
+                newpb->bdd_mf = bdd_apply(newpb->bdd_mf, insc, bddop_or);
+                changedsign = true;
+                BDD diff = bdd_apply(pb->bdd_mf, insc, bddop_diff);
+                if(diff) {
+                  pb->bdd_mf = diff;
+                  pbs_tmp[pbs_tmp_count] = pb;
+                  pbs_tmp_count++;
+                }
+                else {
+                  free(pb);
+                }
+              }
+              else {
+                pbs_tmp[pbs_tmp_count] = pb;
+                pbs_tmp_count++;
+              }
+            } 
+          }
+        }
+      }
+      // else{
+      //   printf("there has something wrong with the probe of rule %d - %d\n", rt->sw_idx, rt->idx);
+      // }
+      if (changedsign){
+        BDD hit_tmp = rt->pbset->bdd_hit;
+        free(rt->pbset);
+        rt->pbset = xmalloc(sizeof(uint32_t)+(pbs_tmp_count+1)*sizeof(struct probe *));
+        rt->pbset->nprobes = pbs_tmp_count + 1;
+        rt->pbset->bdd_hit = hit_tmp;
+        for (int pb_i = 0; pb_i < pbs_tmp_count; pb_i++)
+          rt->pbset->probes[pb_i] = pbs_tmp[pb_i];
+        rt->pbset->probes[pbs_tmp_count] = newpb;
+      }
+      else{
+        free(newpb);
+      }
+    }
+  }
+
+  for (int r_i = r->idx+1; r_i < sw->nrules; r_i++) {
+    if (sw->rules[r_i]){
+      struct bdd_rule *rt = sw->rules[r_i];
+      if ((r->pbset) && (rt->pbset)) {
+        BDD inschit = bdd_apply(rt->pbset->bdd_hit, r->pbset->bdd_hit, bddop_and);
+        if (inschit) {
+          bool changedsign = false;
+          struct probe *pbs_tmp[1000];
+          uint32_t pbs_tmp_count = 0;
+          for (int pb_i = 0; pb_i < r->pbset->nprobes; pb_i++){
+            struct probe *pb = r->pbset->probes[pb_i];
+            if (pb->override == NULL){
+              BDD insc = bdd_apply(pb->bdd_mf, rt->pbset->bdd_hit, bddop_and);
+              if(insc) {
+                changedsign = true;
+                pbs_tmp[pbs_tmp_count] = xmalloc(sizeof(struct probe));
+                pbs_tmp[pbs_tmp_count]->bdd_mf = insc;
+                pbs_tmp[pbs_tmp_count]->override = rt;
+                pbs_tmp_count++;
+                BDD diff = bdd_apply(pb->bdd_mf, rt->pbset->bdd_hit, bddop_diff);
+                if(diff) {
+                  pb->bdd_mf = diff;
+                  pbs_tmp[pbs_tmp_count] = pb;
+                  pbs_tmp_count++;
+                }
+                else {
+                  free(pb);
+                }
+              }
+            }
+            else{
+              pbs_tmp[pbs_tmp_count] = pb;
+              pbs_tmp_count++;
+            }
+          }
+          if (changedsign) {
+            BDD hit_tmp = r->pbset->bdd_hit;
+            free(r->pbset);
+            r->pbset = xmalloc(sizeof(uint32_t)+pbs_tmp_count*sizeof(struct probe *));
+            r->pbset->nprobes = pbs_tmp_count;
+            r->pbset->bdd_hit = hit_tmp;
+            for (int pb_i = 0; pb_i < pbs_tmp_count; pb_i++)
+              r->pbset->probes[pb_i] = pbs_tmp[pb_i];
+          }
+          BDD diffhit = bdd_apply(rt->pbset->bdd_hit, inschit, bddop_diff);
+          if (diffhit) {
+            rt->pbset->bdd_hit = diffhit;
+            changedsign = false;
+            pbs_tmp_count = 0;
+            for (int pb_i = 0; pb_i < rt->pbset->nprobes; pb_i++) {
+              struct probe *pb = rt->pbset->probes[pb_i];
+              BDD diff = bdd_apply(pb->bdd_mf, r->mf_in, bddop_diff);
+              if(diff) {
+                pb->bdd_mf = diff;
+                pbs_tmp[pbs_tmp_count] = pb;
+                pbs_tmp_count++;
+              }
+              else{
+                changedsign = true;
+              }
+              if(changedsign) {
+                BDD hit_tmp = rt->pbset->bdd_hit;
+                free(rt->pbset);
+                rt->pbset = xmalloc(sizeof(uint32_t)+pbs_tmp_count*sizeof(struct probe *));
+                rt->pbset->nprobes = pbs_tmp_count;
+                rt->pbset->bdd_hit = hit_tmp;
+                for (int pb_i = 0; pb_i < pbs_tmp_count; pb_i++)
+                  rt->pbset->probes[pb_i] = pbs_tmp[pb_i];
+              }
+            }
+          }
+          else {
+            for (int pb_i = 0; pb_i < rt->pbset->nprobes; pb_i++)
+              free(rt->pbset->probes[pb_i]);
+            free(rt->pbset);
+            rt->pbset = NULL;
+          }
+        }  
+      }
+    }
+  }
+  return net;
+}
+
+struct network_bdd *
+UpdateProbesInsert_forall(struct network_bdd *netempty, struct network_bdd *net){
+  if (!net)
+    return netempty;
+  struct timeval start,stop;
+
+  for (int i = 0; i < net->nsws; i++) {
+    for (int j = 0; j < net->sws[i]->nrules; j++){
+      gettimeofday(&start,NULL);
+      netempty = UpdateProbesInsert(netempty, net->sws[i]->rules[j]);
+      gettimeofday(&stop,NULL);
+      long long int rupdate = diff(&stop, &start);
+      printf("RuleChecker rupdate %d - %d for each table: %lld us\n", i, j, rupdate);
+    }
+  }
+  return netempty;
+}
+
+uint32_t
+get_rc_probes_num(struct network_bdd *net){
+  if (!net)
+    return 0;
+  uint32_t sum_pbs_num = 0;
+  for (int i = 0; i < net->nsws; i++) {
+    for (int j = 0; j < net->sws[i]->nrules; j++){
+      if (net->sws[i]->rules[j]->pbset){
+        sum_pbs_num += net->sws[i]->rules[j]->pbset->nprobes;
+      }
+    }
+  }
+  printf("RuleChecker get %d probes for the network\n", sum_pbs_num);
+  return sum_pbs_num;
+}
+
+void
+count_RuleChecker_result(struct network_bdd *net){
+  uint32_t sum_all_pbs_num = 0;
+  uint32_t sum_untestable_pbs_num = 0;
+  uint32_t sum_testable_rs_num = 0;
+  uint32_t sum_untestable_rs_num = 0;
+  uint32_t sum_covered_rs_num = 0;
+
+  for (int i = 0; i < net->nsws; i++) {
+    for (int j = 0; j < net->sws[i]->nrules; j++){
+      bool rtestable_sign = false;
+      if (net->sws[i]->rules[j]->pbset){
+        sum_all_pbs_num += net->sws[i]->rules[j]->pbset->nprobes;
+        for (int pb_i = 0; pb_i < net->sws[i]->rules[j]->pbset->nprobes; pb_i++) {
+          struct probe *pb = net->sws[i]->rules[j]->pbset->probes[pb_i];
+          if (pb->override){
+            if(is_action_same(net->sws[i]->rules[j], pb->override))
+              sum_untestable_pbs_num++;
+            else
+              rtestable_sign = true;    
+          }
+          else
+            sum_untestable_pbs_num++;
+        }
+        if (rtestable_sign)
+          sum_testable_rs_num++;
+        else
+          sum_untestable_rs_num++;
+      }
+      else{
+        sum_covered_rs_num++;
+      }
+    }
+  }
+  printf("RuleChecker totally get %d probes for the network\n", sum_all_pbs_num);
+  printf("%d probes are untestable\n", sum_untestable_pbs_num);
+  printf("The testable rule number is %d \n", sum_testable_rs_num);
+  printf("The untestable rule number is %d \n", sum_untestable_rs_num);
+  printf("The covered rule number is %d \n", sum_covered_rs_num);
+}
+
+
+// BDD
+// bdd_rule_get_mtbdd_in(struct bdd_rule *r) {
+//   BDD root, tmp;
+//   tmp = tnode;
+//   root = tmp;
+//   for (int i = 0; i < MF_LEN; i++){
+//     int reverse_i = MF_LEN - i - 1;
+//     uint16_t sign = 0x0001;
+//     for (int j = 0; j < 16; j++){
+//       if (!(sign & r->mf_in->mf_w[reverse_i])){
+//         int level = bdd_var2level(16*MF_LEN - 16*i - j - 1);//生成相应变量的一个节点
+//         if (sign & r->mf_in->mf_v[reverse_i]){
+//           root = bdd_makenode(level, 0, tmp);
+//         }
+//         else{
+//           root = bdd_makenode(level, tmp, 0);//生成相应变量的一个节点
+//         }
+//         tmp = root;
+//       }
+//       sign <<= 1;
+//     }
+//   }
+//   return root;
+// }
 
 
 // struct network_bdd {
@@ -14765,18 +15509,7 @@ bdd_rule_get_mtbdd_in(struct ex_rule *r, BDD tnode)
 //   return root;
 // }
 
-// bool
-// is_action_same(struct bdd_rule *a, struct bdd_rule *b){
-//   if (!is_mask_uint16_t_same(a->mask, b->mask))
-//     return false;
-//   if (!is_mask_uint16_t_same(a->rewrite, b->rewrite))
-//     return false;
-//   if (!is_links_of_rule_same(a->lks_out, b->lks_out))
-//     return false;
-//   if (!is_links_of_rule_same(a->lks_in, b->lks_in))
-//     return false;
-//   return true;
-// }
+
 
 // bool
 // is_inport_same_rwc(struct bdd_rule *a, struct bdd_rule *b){
