@@ -2,6 +2,7 @@ sudo apt-get install gcc
 sudo apt-get install g++
 sudo apt-get install python
 sudo apt-get install make
+sudo apt-get install gdb
 
 //generate the data base of diff net
 gcc -std=c99 -Wall -lpthread test_base.c -fexec-charset=gbk -lm -o test_base
@@ -19,7 +20,10 @@ gcc -std=c99 -Wall -lpthread test_MTBDDMen.c -fexec-charset=gbk -lm -o test_MTBD
 gcc -std=c99 -Wall -lpthread test_MTBDDen.c -fexec-charset=gbk -lm -o test_MTBDDen
 ./test_MTBDDen
 
+//test_deltar
+gcc -std=c99 -Wall -lpthread test_deltar.c -fexec-charset=gbk -lm -o test_deltar
+./test_deltar
+
 git clone https://github.com/oceanly020/NIVwithHSA.git
 git clone https://github.com/oceanly020/hassel-public.git
 
-sudo apt-get install gdb
