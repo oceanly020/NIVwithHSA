@@ -28,13 +28,13 @@
 // #define STANDFORD_W 1
 #define Table_NUM 2
 #define STANDFORD_W 0 // standford 和 i2 时为 0，standford whole 时为1
-// #define MF_LEN 8 //128位bit， 8×16  json数据中的简单也为8
+#define MF_LEN 8 //128位bit， 8×16  json数据中的简单也为8
 // #define MF_LEN 2 //32位bit standford
-#define MF_LEN 3 //48位bit i2
+// #define MF_LEN 3 //48位bit i2
 // #define SW_NUM 9
 // #define SW_NUM 16
-#define SW_NUM 18 //json数据中，18个表对i2，每个 sw 2个表
-// #define SW_NUM 48 //json数据中，48个表对stanfotd，每个 sw 3个表
+// #define SW_NUM 18 //json数据中，18个表对i2，每个 sw 2个表
+#define SW_NUM 48 //json数据中，48个表对stanfotd，每个 sw 3个表
 
 #define NW_DST_H 0
 #define NW_DST_L 1

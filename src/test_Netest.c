@@ -39,8 +39,8 @@ main (int argc, char **argv)
 
 /*================================初始化加载数据使用json数据======================================*/ 
   // char *jsonet = "json_stanford_fwd";
-  // char *jsonet = "json_stanford";
-  char *jsonet = "json_i2";
+  char *jsonet = "json_stanford";
+  // char *jsonet = "json_i2";
   struct network_bdd *sws_json = get_network_bdd_jsondata("tfs", jsonet);
   // struct network_bdd *sws_json_noconf = get_network_bdd_jsondata_noconf("tfs", jsonet);
   // struct APs *APs = get_network_bdd_jsondata_inc_APs("tfs", jsonet);
@@ -50,14 +50,14 @@ main (int argc, char **argv)
 
   
 /*================================测试RuleChecker======================================*/
-// struct network_bdd *sws_rc = generate_empty_net(sws_json);
-// sws_rc = UpdateProbesInsert_forall(sws_rc, sws_json);
-// count_RuleChecker_result(sws_rc);
+struct network_bdd *sws_rc = generate_empty_net(sws_json);
+sws_rc = UpdateProbesInsert_forall(sws_rc, sws_json);
+count_RuleChecker_result(sws_rc);
 
 /*================================测试RuleChecker改======================================*/
-generate_mtbddrules(sws_json);
-struct network_mtbdd *net_mt = generate_mtbdd_foreach_table(sws_json);
-uint32_t probes_num = get_mtbdd_probes_num(net_mt);
+// generate_mtbddrules(sws_json);
+// struct network_mtbdd *net_mt = generate_mtbdd_foreach_table(sws_json);
+// uint32_t probes_num = get_mtbdd_probes_num(net_mt);
 
 /*================================测试APV======================================*/
   // struct network_bdd *sws_uncover =  get_bdd_sws_uncover();

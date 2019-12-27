@@ -1,6 +1,6 @@
 #define _GNU_SOURCE 1
 
-#include "all_deltar.h"
+#include "all_testpk.h"
 #include <libgen.h>
 #include <linux/limits.h>
 #include <unistd.h>
@@ -34,23 +34,28 @@ main (int argc, char **argv) {
 
 /*================================初始化加载数据使用json数据======================================*/ 
   // char *jsonet = "json_stanford_fwd";
-  // char *jsonet = "json_stanford";
-  char *jsonet = "json_i2";
-  init_sw_port_relations(jsonet);
-  init_bdd_merged_sws();
+  char *jsonet = "json_stanford";
+  // char *jsonet = "json_i2";
+  // init_sw_port_relations(jsonet);
+  // init_bdd_merged_sws();
   struct network_bdd *sws_json = get_network_bdd_jsondata("tfs", jsonet);
   // struct network_bdd *sws_json_noconf = get_network_bdd_jsondata_noconf("tfs", jsonet);
   // struct APs *APs = get_network_bdd_jsondata_inc_APs("tfs", jsonet);
   // for (int i = 0; i < sws_json->sws[0]->nrules; i++)
   //   print_links_of_rule(sws_json->sws[0]->rules[i]->lks_out);
 
-/*================================测试MTBDD增量生成Delta R======================================*/
-  // init_r_to_merge(sws_json);
-  
+/*================================测试MTBDD维持对级联流表======================================*/
+  init_mtbdd_sws();
   generate_mtbddrules(sws_json);
   build_network_by_update_rules(sws_json);
+  get_mtbdd_probes_num();
   test_remove_then_readd_rules(sws_json);
   
+
+/*================================测试MTBDD生成测试数据包头对单一流表======================================*/
+  // generate_mtbddrules(sws_json);
+  // build_network_by_update_rules(sws_json);
+  // test_remove_then_readd_rules(sws_json);
   // test_mtbdd_get_right_dominant(sws_json_noconf, sws_json);
  
 /*================================测试RuleChecker======================================*/
