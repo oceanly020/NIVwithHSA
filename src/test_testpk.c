@@ -1,5 +1,5 @@
 #define _GNU_SOURCE 1
-
+//network test secong vision,
 #include "all_testpk.h"
 #include <libgen.h>
 #include <linux/limits.h>
@@ -34,11 +34,12 @@ main (int argc, char **argv) {
 
 /*================================初始化加载数据使用json数据======================================*/ 
   // char *jsonet = "json_stanford_fwd";
-  char *jsonet = "json_stanford";
-  // char *jsonet = "json_i2";
+  // char *jsonet = "json_stanford";
+  char *jsonet = "json_i2";
   // init_sw_port_relations(jsonet);
   // init_bdd_merged_sws();
-  struct network_bdd *sws_json = get_network_bdd_jsondata("tfs", jsonet);
+  // struct network_bdd *sws_json = get_network_bdd_jsondata("tfs", jsonet);
+  netbase = get_network_bdd_jsondata("tfs", jsonet);
   // struct network_bdd *sws_json_noconf = get_network_bdd_jsondata_noconf("tfs", jsonet);
   // struct APs *APs = get_network_bdd_jsondata_inc_APs("tfs", jsonet);
   // for (int i = 0; i < sws_json->sws[0]->nrules; i++)
@@ -46,10 +47,11 @@ main (int argc, char **argv) {
 
 /*================================测试MTBDD维持对级联流表======================================*/
   init_mtbdd_sws();
-  generate_mtbddrules(sws_json);
-  build_network_by_update_rules(sws_json);
+  generate_mtbddrules(netbase);
+  build_network_by_update_rules(netbase);
   get_mtbdd_probes_num();
-  test_remove_then_readd_rules(sws_json);
+  test_remove_then_readd_rules(netbase);
+  bdd_operator_reset();
   
 
 /*================================测试MTBDD生成测试数据包头对单一流表======================================*/
@@ -59,9 +61,11 @@ main (int argc, char **argv) {
   // test_mtbdd_get_right_dominant(sws_json_noconf, sws_json);
  
 /*================================测试RuleChecker======================================*/
-// struct network_bdd *sws_rc = generate_empty_net(sws_json);
-// sws_rc = UpdateProbesInsert_forall(sws_rc, sws_json);
-// count_RuleChecker_result(sws_rc);
+struct network_bdd *sws_rc = generate_empty_net(netbase);
+sws_rc = UpdateProbesInsert_forall(sws_rc, netbase);
+count_RuleChecker_result(sws_rc);
+sws_rc = UpdateProbes_remove_then_readd(sws_rc, netbase);
+count_RuleChecker_result(sws_rc);
 
 /*================================测试RuleChecker改======================================*/
 // generate_mtbddrules(sws_json);

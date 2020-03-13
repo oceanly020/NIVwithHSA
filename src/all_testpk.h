@@ -26,19 +26,19 @@
 //结构体或变量定义
 //自定义
 // #define Table_NUM 1//standford fwd
-// #define Table_NUM 2//i2
-#define Table_NUM 3//standford whole
+#define Table_NUM 2//i2
+// #define Table_NUM 3//standford whole
 
 #define STANDFORD_W 1
 #define LINK_LEN 6 //link 编码后所占位数，2^n, 2^6 = 64
 // #define STANDFORD_W 0 // standford 和 i2 时为 0，standford whole 时为1
-#define MF_LEN 8 //128位bit， 8×16  json数据中的简单也为8
+// #define MF_LEN 8 //128位bit， 8×16  json数据中的简单也为8
 // #define MF_LEN 2 //32位bit standford
-// #define MF_LEN 3 //48位bit i2
+#define MF_LEN 3 //48位bit i2
 // #define SW_NUM 9
 // #define SW_NUM 16
-// #define SW_NUM 18 //json数据中，18个表对i2，每个 sw 2个表
-#define SW_NUM 16 //json数据中，48个表对stanfotd，每个 sw 3个表
+#define SW_NUM 18 //json数据中，18个表对i2，每个 sw 2个表
+// #define SW_NUM 48 //json数据中，48个表对stanfotd，每个 sw 3个表
 
 #define NW_DST_H 0
 #define NW_DST_L 1
@@ -442,6 +442,7 @@ struct res {
 #define mtbdd_2pr_addr   17
 
 uint32_t mtbddop_count;
+uint32_t coveringop_count;
 
 /*=== User BDD types ===*/
 typedef int BDD;
@@ -756,8 +757,8 @@ static uint16_t var2sign[16] = {
 #define REF(a)    (bddnodes[a].refcou)
 #define BDDSIZE     100000000
 #define MTBDDSIZE     1000000
-// #define BDDOPCHCHE  1000000 
-#define BDDOPCHCHE  10000 
+#define BDDOPCHCHE  1000000 
+// #define BDDOPCHCHE  10000 
 
 struct PACKED of_rule {
   uint32_t sw_idx;
@@ -869,7 +870,7 @@ struct bdd_rule {
   BDD lks_in;
   BDD lks_out;
 
-  // struct probeset *pbset;
+  struct probeset *pbset;
   // struct port_arr *port_in;
   // struct port_arr *port_out;
 };
@@ -1105,8 +1106,14 @@ uint32_t mgr_change_count;
 struct switch_bdd_rs *bdd_merged_sws[SW_NUM];
 
 BDD mtbdd_sws[SW_NUM];
+struct network_bdd *netbase;
 
+BDD changedtnodes[10000];
+uint32_t changedtnodes_count;
 
+uint32_t makenode_testcount;
+uint32_t makenode_bddchange_testcount;
+uint32_t makenewnode_testcount;
 //函数声明
 //time
 static inline int64_t
@@ -2255,6 +2262,7 @@ BDD mtbdd_maketnode_fr_2tn_with2pr_addr(BDD tnode1, BDD tnode2);
 BDD mtbdd_maketnode_fr_2tn_add_simple(BDD tnode1, BDD tnode2);
 BDD mtbdd_maketnode_mtbdd_1tb_r_add(BDD tnode1, BDD tnode2);
 BDD mtbdd_maketnode_mtbdd_1tb_r_remove(BDD tnode1, BDD tnode2);
+BDD mtbdd_maketnode_mtbdd_1tb_r_add_changenode(BDD tnode1, BDD tnode2);
 
    /* Hashvalues */
 #define NOTHASH(r)           (r)
@@ -2919,6 +2927,52 @@ mtbdd_2pr_add_r_rec(BDD l, BDD r) {
 }
 
 BDD
+mtbdd_update_achangedt_rec(BDD l, BDD r){
+  BddCacheData *entry;
+  BDD res;
+  if (l < 1)
+    return l;
+  // if (l < 1)
+  //   return r;
+  
+  // if (LOW(l) == 2 && LOW(r) == 2)
+  //   res = mtbdd_maketnode_fr_2tn_add(l, r);
+  // if (LOW(a) == 1 && LOW(b) == 1)
+  //   return mtbdd_maketnode_fr2spec(a, b);
+  if (r == 1 || l == 1){
+    printf("the wrong %d - %d\n", l, r);
+    bdd_error(BDD_ILLBDD);
+  }
+
+  entry = BddCache_lookup(&applycache, APPLYHASH(l,r,mtbddop_count));
+  if (entry->a == l  &&  entry->b == r  &&  entry->c == mtbddop_count) {
+    // hit_cache_counter++;
+    return entry->r.res;
+  }
+  
+  // if ((LOW(l) == 2) && (LOW(r) == 2))
+  //   return mtbdd_maketnode_fr_2tn_add(l, r);
+
+  if (LOW(l) == 2) {
+    if (l != r)
+      return BDDZERO;
+    else
+      return BDDONE;
+  }
+  else{
+    res = bdd_makenode(LEVEL(l), mtbdd_update_achangedt_rec(LOW(l), r), mtbdd_update_achangedt_rec(HIGH(l), r));
+  }
+
+  // POPREF(2);
+  entry->a = l;
+  entry->b = r;
+  entry->c = mtbddop_count;
+  entry->r.res = res;
+
+  return res;
+}
+
+BDD
 mtbdd_r_add_1tb_rec(BDD l, BDD r) { 
   BddCacheData *entry;
   BDD res;
@@ -2948,7 +3002,9 @@ mtbdd_r_add_1tb_rec(BDD l, BDD r) {
   if (LOW(l) == 2) {
     if ((LOW(r) == 2)) {
   // if ((LOW(l) == 2) && (LOW(r) == 2)) {
+      // res = mtbdd_maketnode_mtbdd_1tb_r_add_simple(l, r);
       res = mtbdd_maketnode_mtbdd_1tb_r_add(l, r);
+      // res = mtbdd_maketnode_mtbdd_1tb_r_add_changenode(l, r);
     }
     else{
       res = bdd_makenode(LEVEL(r), mtbdd_r_add_1tb_rec(l, LOW(r)), mtbdd_r_add_1tb_rec(l, HIGH(r)));
@@ -2981,6 +3037,7 @@ mtbdd_r_add_1tb_rec(BDD l, BDD r) {
 BDD
 mtbdd_r_remove_1tb_rec(BDD l, BDD r){ 
   BddCacheData *entry;
+  // BddCacheData *entry_cover;
   BDD res;
   if (r < 1)
     return l;
@@ -3002,6 +3059,8 @@ mtbdd_r_remove_1tb_rec(BDD l, BDD r){
     return entry->r.res;
   }
   
+
+
   // if ((LOW(l) == 2) && (LOW(r) == 2))
   //   return mtbdd_maketnode_fr_2tn_add(l, r);
 
@@ -8177,7 +8236,7 @@ mtbdd_maketnode_fr_2tn_with2pr_addr(BDD tnode1, BDD tnode2) {
 // }
 
 BDD
-mtbdd_maketnode_mtbdd_1tb_r_add(BDD tnode1, BDD tnode2) {
+mtbdd_maketnode_mtbdd_1tb_r_add_simple(BDD tnode1, BDD tnode2) {
   if (tnode1 == tnode2) 
     return tnode1;
   MTBddValue *v1 = &mtbddvalues[(bddnodes[tnode1].high)];
@@ -8186,67 +8245,92 @@ mtbdd_maketnode_mtbdd_1tb_r_add(BDD tnode1, BDD tnode2) {
   struct bdd_rule *rl1 = v1->rule_pair[1];
   struct bdd_rule *rh2 = v2->rule_pair[0];
   struct bdd_rule *rl2 = v2->rule_pair[1];
+  // struct bdd_rule *rh2notv = netbase->sws[rh2->sw_idx]->rules[rh2->idx];
   if (v1->table_id != v2->table_id){
     printf("there is wrong in mtbdd_maketnode_portin_mtbdd_r_add when adding %d - %d\n", rh2->sw_idx, rh2->idx);
     return tnode1;
   }
   if (!rh1){
-    bdd_delref(v1->self_bdd);
-    v1->self_bdd = bdd_apply(v1->self_bdd, v2->self_bdd, bddop_diff);
-    bdd_addref(v1->self_bdd);
+    // bdd_delref(v1->self_bdd);
+    // v1->self_bdd = bdd_apply(v1->self_bdd, v2->self_bdd, bddop_diff);
+    // bdd_addref(v1->self_bdd);
     return tnode2;
   }
   if (!rh2){
-    bdd_delref(v2->self_bdd);
-    v2->self_bdd = bdd_apply(v2->self_bdd, v1->self_bdd, bddop_diff);
-    bdd_addref(v2->self_bdd);
+    // bdd_delref(v2->self_bdd);
+    // v2->self_bdd = bdd_apply(v2->self_bdd, v1->self_bdd, bddop_diff);
+    // bdd_addref(v2->self_bdd);
     return tnode1;
   }
+
+  if (rh2!=netbase->sws[rh2->sw_idx]->rules[rh2->idx])
+    printf("there is wrong that virtual r != r\n");
+  // rh2 = netbase->sws[rh2->sw_idx]->rules[rh2->idx];
   struct bdd_rule *rhigh = NULL;
   struct bdd_rule *rlow = NULL;
   // BDD self_bdd_tmp = 0;
   BDD insc = 0;
   if (rh1->idx <= rh2->idx) {
+    BddCacheData *entry;
+    entry = BddCache_lookup(&misccache, APPLYHASH(rh1->idx, rh2->idx, coveringop_count));
+    if (!(entry->a == rh1->idx  &&  entry->b == rh2->idx  &&  entry->c == coveringop_count)) {
+      // printf("%lld-%d-%d-%d\n", entry, entry->a, entry->b, entry->c);
+      rh1->covering = covering_r_add(rh1->covering, rh2);
+      entry->a = rh1->idx;
+      entry->b = rh2->idx;
+      entry->c = coveringop_count;
+    }
+    // rh1->covering = covering_r_add(rh1->covering, rh2);
     if (!rl1 || (rl1->idx > rh2->idx)) {
       rhigh = rh1;
       rlow = rh2;
-      insc = bdd_apply(v2->self_bdd, v1->self_bdd, bddop_and);
-      bdd_delref(v2->self_bdd);
-      v2->self_bdd = bdd_apply(v2->self_bdd, insc, bddop_diff);
-      bdd_addref(v2->self_bdd);
-      bdd_delref(v1->self_bdd);
-      v1->self_bdd = bdd_apply(v1->self_bdd, insc, bddop_diff);
-      bdd_addref(v1->self_bdd);
-      if(rl1)
-        rh1->covering = covering_r_add(rh1->covering, rh2);
+      // insc = bdd_apply(v2->self_bdd, v1->self_bdd, bddop_and);
+      // bdd_delref(v2->self_bdd);
+      // v2->self_bdd = bdd_apply(v2->self_bdd, insc, bddop_diff);
+      // bdd_addref(v2->self_bdd);
+      // bdd_delref(v1->self_bdd);
+      // v1->self_bdd = bdd_apply(v1->self_bdd, insc, bddop_diff);
+      // bdd_addref(v1->self_bdd);
+      // if(rl1)
+      //   rh1->covering = covering_r_add(rh1->covering, rh2);
     }
     else {
-      bdd_delref(v2->self_bdd);
-      v2->self_bdd = bdd_apply(v2->self_bdd, v1->self_bdd, bddop_diff);
-      bdd_addref(v2->self_bdd);
-      rh1->covering = covering_r_add(rh1->covering, rh2);
+      // bdd_delref(v2->self_bdd);
+      // v2->self_bdd = bdd_apply(v2->self_bdd, v1->self_bdd, bddop_diff);
+      // bdd_addref(v2->self_bdd);
+      // rh1->covering = covering_r_add(rh1->covering, rh2);
       return tnode1;
     }
   }
   else {
+    BddCacheData *entry;
+    entry = BddCache_lookup(&misccache, APPLYHASH(rh2->idx,rh1->idx,coveringop_count));
+    if (!(entry->a == rh2->idx  &&  entry->b == rh1->idx  &&  entry->c == coveringop_count)) {
+      // printf("covering_r_add\n" );
+      rh2->covering = covering_r_add(rh2->covering, rh1);
+      entry->a = rh2->idx;
+      entry->b = rh1->idx;
+      entry->c = coveringop_count;
+    }
+    // rh2->covering = covering_r_add(rh2->covering, rh1);
     if (!rl2 || (rl2->idx > rh1->idx)) {
       rhigh = rh2;
       rlow = rh1;
-      insc = bdd_apply(v2->self_bdd, v1->self_bdd, bddop_and);
-      bdd_delref(v2->self_bdd);
-      v2->self_bdd = bdd_apply(v2->self_bdd, insc, bddop_diff);
-      bdd_addref(v2->self_bdd);
-      bdd_delref(v1->self_bdd);
-      v1->self_bdd = bdd_apply(v1->self_bdd, insc, bddop_diff);
-      bdd_addref(v1->self_bdd);
-      if(rl2)
-        rh2->covering = covering_r_add(rh2->covering, rh1);
+      // insc = bdd_apply(v2->self_bdd, v1->self_bdd, bddop_and);
+      // bdd_delref(v2->self_bdd);
+      // v2->self_bdd = bdd_apply(v2->self_bdd, insc, bddop_diff);
+      // bdd_addref(v2->self_bdd);
+      // bdd_delref(v1->self_bdd);
+      // v1->self_bdd = bdd_apply(v1->self_bdd, insc, bddop_diff);
+      // bdd_addref(v1->self_bdd);
+      // if(rl2)
+      //   rh2->covering = covering_r_add(rh2->covering, rh1);
     }
     else {
-      bdd_delref(v1->self_bdd);
-      v1->self_bdd = bdd_apply(v1->self_bdd, v2->self_bdd, bddop_diff);
-      bdd_addref(v1->self_bdd);
-      rh2->covering = covering_r_add(rh2->covering, rh1);
+      // bdd_delref(v1->self_bdd);
+      // v1->self_bdd = bdd_apply(v1->self_bdd, v2->self_bdd, bddop_diff);
+      // bdd_addref(v1->self_bdd);
+      // rh2->covering = covering_r_add(rh2->covering, rh1);
       return tnode2;
     }
   }
@@ -8271,6 +8355,364 @@ mtbdd_maketnode_mtbdd_1tb_r_add(BDD tnode1, BDD tnode2) {
       issame = false;
     }
     if (issame){ 
+      // bdd_delref(mtbddvalues[res].self_bdd);                    
+      // mtbddvalues[res].self_bdd = bdd_apply(mtbddvalues[res].self_bdd, insc, bddop_or);
+      // bdd_addref(mtbddvalues[res].self_bdd);
+      return bdd_makenode(0, 2, res);
+    }
+    res = mtbddvalues[res].next;
+  }
+
+  /* No existing node -> build one */
+  /* Any free nodes to use ? */
+  // if (bddfreepos == 0)
+  if (mtbddfreepos == -1) {
+    bdd_error(BDD_NODENUM);
+    bdderrorcond = abs(BDD_NODENUM);
+    return 0;
+  }
+
+  /* Build new node */
+  res = mtbddfreepos;
+  mtbddfreepos = mtbddvalues[mtbddfreepos].next;
+  mtbddfreenum--;
+  // bddproduced++;
+  node = &mtbddvalues[res];
+
+  /* Fullfill the new node */
+  node->table_id = v1->table_id;
+  node->self_bdd = insc;
+  bdd_addref(node->self_bdd);
+  node->rule_pair[0] = rhigh;
+  node->rule_pair[1] = rlow;
+  node->path_arr = NULL;
+  // node->covering = NULL;
+
+  /* Insert new node to hashtable */
+  node->next = mtbddvalues[hash].hash;
+  mtbddvalues[hash].hash = res;
+
+  res = bdd_makenode(0, 2, res);
+
+  if (LOW(res) != 2)
+  {
+    printf("mtbdd_maketnodev %d\n", res);
+  }
+
+  // mtbddvaluevaluecount ++;
+  return res;
+}
+
+BDD
+mtbdd_maketnode_mtbdd_1tb_r_add_changenode(BDD tnode1, BDD tnode2) {
+  if (tnode1 == tnode2) 
+    return tnode1;
+  MTBddValue *v1 = &mtbddvalues[(bddnodes[tnode1].high)];
+  MTBddValue *v2 = &mtbddvalues[(bddnodes[tnode2].high)];
+  struct bdd_rule *rh1 = v1->rule_pair[0];
+  struct bdd_rule *rl1 = v1->rule_pair[1];
+  struct bdd_rule *rh2 = v2->rule_pair[0];
+  struct bdd_rule *rl2 = v2->rule_pair[1];
+  // struct bdd_rule *rh2notv = netbase->sws[rh2->sw_idx]->rules[rh2->idx];
+  if (v1->table_id != v2->table_id){
+    printf("there is wrong in mtbdd_maketnode_portin_mtbdd_r_add when adding %d - %d\n", rh2->sw_idx, rh2->idx);
+    return tnode1;
+  }
+
+  if (!rh1){
+    // bdd_delref(v1->self_bdd);
+    // v1->self_bdd = bdd_apply(v1->self_bdd, v2->self_bdd, bddop_diff);
+    // bdd_addref(v1->self_bdd);
+    changedtnodes[changedtnodes_count] = tnode1;
+    changedtnodes_count++;
+    return tnode2;
+  }
+  if (!rh2){
+    // bdd_delref(v2->self_bdd);
+    // v2->self_bdd = bdd_apply(v2->self_bdd, v1->self_bdd, bddop_diff);
+    // bdd_addref(v2->self_bdd);
+    return tnode1;
+  }
+
+  if (rh2!=netbase->sws[rh2->sw_idx]->rules[rh2->idx])
+    printf("there is wrong that virtual r != r\n");
+  // rh2 = netbase->sws[rh2->sw_idx]->rules[rh2->idx];
+  struct bdd_rule *rhigh = NULL;
+  struct bdd_rule *rlow = NULL;
+  // BDD self_bdd_tmp = 0;
+  BDD insc = 0;
+  if (rh1->idx <= rh2->idx) {
+    BddCacheData *entry;
+    entry = BddCache_lookup(&misccache, APPLYHASH(rh1->idx, rh2->idx, coveringop_count));
+    if (!(entry->a == rh1->idx  &&  entry->b == rh2->idx  &&  entry->c == coveringop_count)) {
+      // printf("%lld-%d-%d-%d\n", entry, entry->a, entry->b, entry->c);
+      rh1->covering = covering_r_add(rh1->covering, rh2);
+      entry->a = rh1->idx;
+      entry->b = rh2->idx;
+      entry->c = coveringop_count;
+    }
+    // rh1->covering = covering_r_add(rh1->covering, rh2);
+    if (!rl1 || (rl1->idx > rh2->idx)) {
+      rhigh = rh1;
+      rlow = rh2;
+      // insc = bdd_apply(v2->self_bdd, v1->self_bdd, bddop_and);
+      // bdd_delref(v2->self_bdd);
+      // v2->self_bdd = bdd_apply(v2->self_bdd, insc, bddop_diff);
+      // bdd_addref(v2->self_bdd);
+      // bdd_delref(v1->self_bdd);
+      // v1->self_bdd = bdd_apply(v1->self_bdd, insc, bddop_diff);
+      // bdd_addref(v1->self_bdd);
+      // if(rl1)
+      //   rh1->covering = covering_r_add(rh1->covering, rh2);
+      changedtnodes[changedtnodes_count] = tnode1;
+      changedtnodes_count++;
+    }
+    else {
+      // bdd_delref(v2->self_bdd);
+      // v2->self_bdd = bdd_apply(v2->self_bdd, v1->self_bdd, bddop_diff);
+      // bdd_addref(v2->self_bdd);
+      // rh1->covering = covering_r_add(rh1->covering, rh2);
+      return tnode1;
+    }
+  }
+  else {
+    BddCacheData *entry;
+    entry = BddCache_lookup(&misccache, APPLYHASH(rh2->idx,rh1->idx,coveringop_count));
+    if (!(entry->a == rh2->idx  &&  entry->b == rh1->idx  &&  entry->c == coveringop_count)) {
+      // printf("covering_r_add\n" );
+      rh2->covering = covering_r_add(rh2->covering, rh1);
+      entry->a = rh2->idx;
+      entry->b = rh1->idx;
+      entry->c = coveringop_count;
+    }
+    // rh2->covering = covering_r_add(rh2->covering, rh1);
+    if (!rl2 || (rl2->idx > rh1->idx)) {
+      rhigh = rh2;
+      rlow = rh1;
+      // insc = bdd_apply(v2->self_bdd, v1->self_bdd, bddop_and);
+      // bdd_delref(v2->self_bdd);
+      // v2->self_bdd = bdd_apply(v2->self_bdd, insc, bddop_diff);
+      // bdd_addref(v2->self_bdd);
+      // bdd_delref(v1->self_bdd);
+      // v1->self_bdd = bdd_apply(v1->self_bdd, insc, bddop_diff);
+      // bdd_addref(v1->self_bdd);
+      // if(rl2)
+      //   rh2->covering = covering_r_add(rh2->covering, rh1);
+      changedtnodes[changedtnodes_count] = tnode1;
+      changedtnodes_count++;
+    }
+    else {
+      // bdd_delref(v1->self_bdd);
+      // v1->self_bdd = bdd_apply(v1->self_bdd, v2->self_bdd, bddop_diff);
+      // bdd_addref(v1->self_bdd);
+      // rh2->covering = covering_r_add(rh2->covering, rh1);
+      changedtnodes[changedtnodes_count] = tnode1;
+      changedtnodes_count++;
+      return tnode2;
+    }
+  }
+
+  register MTBddValue *node;
+  register unsigned int hash;
+  register int res;
+  hash = 1;
+
+  /* Try to find an existing node of this kind */
+  hash = VALUEHASH_K(v1->table_id, rhigh->idx + 1, rlow->idx + 1);
+  res = mtbddvalues[hash].hash;
+  while(res != 0) {
+    bool issame = true;
+    if (mtbddvalues[res].table_id != v1->table_id){
+      issame = false;
+    }
+    if (mtbddvalues[res].rule_pair[0] != rhigh) {
+      issame = false;
+    }
+    else if (mtbddvalues[res].rule_pair[1] != rlow) {
+      issame = false;
+    }
+    if (issame){ 
+      // bdd_delref(mtbddvalues[res].self_bdd);                    
+      // mtbddvalues[res].self_bdd = bdd_apply(mtbddvalues[res].self_bdd, insc, bddop_or);
+      // bdd_addref(mtbddvalues[res].self_bdd);
+      res = bdd_makenode(0, 2, res);
+      changedtnodes[changedtnodes_count] = res;
+      changedtnodes_count++;
+      return res;
+
+    }
+    res = mtbddvalues[res].next;
+  }
+
+  /* No existing node -> build one */
+  /* Any free nodes to use ? */
+  // if (bddfreepos == 0)
+  if (mtbddfreepos == -1) {
+    bdd_error(BDD_NODENUM);
+    bdderrorcond = abs(BDD_NODENUM);
+    return 0;
+  }
+
+  /* Build new node */
+  res = mtbddfreepos;
+  mtbddfreepos = mtbddvalues[mtbddfreepos].next;
+  mtbddfreenum--;
+  // bddproduced++;
+  node = &mtbddvalues[res];
+
+  /* Fullfill the new node */
+  node->table_id = v1->table_id;
+  node->self_bdd = insc;
+  bdd_addref(node->self_bdd);
+  node->rule_pair[0] = rhigh;
+  node->rule_pair[1] = rlow;
+  node->path_arr = NULL;
+  // node->covering = NULL;
+
+  /* Insert new node to hashtable */
+  node->next = mtbddvalues[hash].hash;
+  mtbddvalues[hash].hash = res;
+
+  res = bdd_makenode(0, 2, res);
+  changedtnodes[changedtnodes_count] = res;
+  changedtnodes_count++;
+  if (LOW(res) != 2)
+  {
+    printf("mtbdd_maketnodev %d\n", res);
+  }
+
+  // mtbddvaluevaluecount ++;
+  return res;
+}
+
+BDD
+mtbdd_maketnode_mtbdd_1tb_r_add(BDD tnode1, BDD tnode2) {
+  if (tnode1 == tnode2) 
+    return tnode1;
+  MTBddValue *v1 = &mtbddvalues[(bddnodes[tnode1].high)];
+  MTBddValue *v2 = &mtbddvalues[(bddnodes[tnode2].high)];
+  struct bdd_rule *rh1 = v1->rule_pair[0];
+  struct bdd_rule *rl1 = v1->rule_pair[1];
+  struct bdd_rule *rh2 = v2->rule_pair[0];
+  struct bdd_rule *rl2 = v2->rule_pair[1];
+  // struct bdd_rule *rh2notv = netbase->sws[rh2->sw_idx]->rules[rh2->idx];
+  makenode_testcount++;
+
+  if (v1->table_id != v2->table_id){
+    printf("there is wrong in mtbdd_maketnode_portin_mtbdd_r_add when adding %d - %d\n", rh2->sw_idx, rh2->idx);
+    return tnode1;
+  }
+  if (!rh1){
+    makenode_bddchange_testcount++;
+    bdd_delref(v1->self_bdd);
+    v1->self_bdd = bdd_apply(v1->self_bdd, v2->self_bdd, bddop_diff);
+    bdd_addref(v1->self_bdd);
+    return tnode2;
+  }
+  if (!rh2){
+    makenode_bddchange_testcount++;
+    bdd_delref(v2->self_bdd);
+    v2->self_bdd = bdd_apply(v2->self_bdd, v1->self_bdd, bddop_diff);
+    bdd_addref(v2->self_bdd);
+    return tnode1;
+  }
+
+  if (rh2!=netbase->sws[rh2->sw_idx]->rules[rh2->idx])
+    printf("there is wrong that virtual r != r\n");
+  // rh2 = netbase->sws[rh2->sw_idx]->rules[rh2->idx];
+  struct bdd_rule *rhigh = NULL;
+  struct bdd_rule *rlow = NULL;
+  // BDD self_bdd_tmp = 0;
+  BDD insc = 0;
+  if (rh1->idx <= rh2->idx) {
+    BddCacheData *entry;
+    entry = BddCache_lookup(&misccache, APPLYHASH(rh1->idx,rh2->idx,coveringop_count));
+    if (!(entry->a == rh1->idx  &&  entry->b == rh2->idx  &&  entry->c == coveringop_count)) {
+      rh1->covering = covering_r_add(rh1->covering, rh2);
+      entry->a = rh1->idx;
+      entry->b = rh2->idx;
+      entry->c = coveringop_count;
+    }
+    // rh1->covering = covering_r_add(rh1->covering, rh2);
+    if (!rl1 || (rl1->idx > rh2->idx)) {
+      rhigh = rh1;
+      rlow = rh2;
+      makenode_bddchange_testcount+=3;
+      insc = bdd_apply(v2->self_bdd, v1->self_bdd, bddop_and);
+      bdd_delref(v2->self_bdd);
+      v2->self_bdd = bdd_apply(v2->self_bdd, insc, bddop_diff);
+      bdd_addref(v2->self_bdd);
+      bdd_delref(v1->self_bdd);
+      v1->self_bdd = bdd_apply(v1->self_bdd, insc, bddop_diff);
+      bdd_addref(v1->self_bdd);
+      // if(rl1)
+      //   rh1->covering = covering_r_add(rh1->covering, rh2);
+    }
+    else {
+      makenode_bddchange_testcount++;
+      bdd_delref(v2->self_bdd);
+      v2->self_bdd = bdd_apply(v2->self_bdd, v1->self_bdd, bddop_diff);
+      bdd_addref(v2->self_bdd);
+      // rh1->covering = covering_r_add(rh1->covering, rh2);
+      return tnode1;
+    }
+  }
+  else {
+    BddCacheData *entry;
+    entry = BddCache_lookup(&misccache, APPLYHASH(rh2->idx,rh1->idx,coveringop_count));
+    if (!(entry->a == rh2->idx  &&  entry->b == rh1->idx  &&  entry->c == coveringop_count)) {
+      // printf("covering_r_add\n" );
+      rh2->covering = covering_r_add(rh2->covering, rh1);
+      entry->a = rh2->idx;
+      entry->b = rh1->idx;
+      entry->c = coveringop_count;
+    }
+    // rh2->covering = covering_r_add(rh2->covering, rh1);
+    if (!rl2 || (rl2->idx > rh1->idx)) {
+      rhigh = rh2;
+      rlow = rh1;
+      makenode_bddchange_testcount+=3;
+      insc = bdd_apply(v2->self_bdd, v1->self_bdd, bddop_and);
+      bdd_delref(v2->self_bdd);
+      v2->self_bdd = bdd_apply(v2->self_bdd, insc, bddop_diff);
+      bdd_addref(v2->self_bdd);
+      bdd_delref(v1->self_bdd);
+      v1->self_bdd = bdd_apply(v1->self_bdd, insc, bddop_diff);
+      bdd_addref(v1->self_bdd);
+      // if(rl2)
+      //   rh2->covering = covering_r_add(rh2->covering, rh1);
+    }
+    else {
+      makenode_bddchange_testcount++;
+      bdd_delref(v1->self_bdd);
+      v1->self_bdd = bdd_apply(v1->self_bdd, v2->self_bdd, bddop_diff);
+      bdd_addref(v1->self_bdd);
+      // rh2->covering = covering_r_add(rh2->covering, rh1);
+      return tnode2;
+    }
+  }
+
+  register MTBddValue *node;
+  register unsigned int hash;
+  register int res;
+  hash = 1;
+
+  /* Try to find an existing node of this kind */
+  hash = VALUEHASH_K(v1->table_id, rhigh->idx + 1, rlow->idx + 1);
+  res = mtbddvalues[hash].hash;
+  while(res != 0) {
+    bool issame = true;
+    if (mtbddvalues[res].table_id != v1->table_id){
+      issame = false;
+    }
+    if (mtbddvalues[res].rule_pair[0] != rhigh) {
+      issame = false;
+    }
+    else if (mtbddvalues[res].rule_pair[1] != rlow) {
+      issame = false;
+    }
+    if (issame){ 
+      makenode_bddchange_testcount++;
       bdd_delref(mtbddvalues[res].self_bdd);                    
       mtbddvalues[res].self_bdd = bdd_apply(mtbddvalues[res].self_bdd, insc, bddop_or);
       bdd_addref(mtbddvalues[res].self_bdd);
@@ -8288,6 +8730,7 @@ mtbdd_maketnode_mtbdd_1tb_r_add(BDD tnode1, BDD tnode2) {
     return 0;
   }
 
+  makenewnode_testcount++;
   /* Build new node */
   res = mtbddfreepos;
   mtbddfreepos = mtbddvalues[mtbddfreepos].next;
@@ -8339,7 +8782,15 @@ mtbdd_maketnode_mtbdd_1tb_r_remove(BDD tnode1, BDD tnode2) {
     return tnode1;
   }
   else {
-    rh1->covering = covering_r_remove(rh1->covering, rh2);
+    BddCacheData *entry;
+    entry = BddCache_lookup(&misccache, APPLYHASH(rh1->idx,rh2->idx,coveringop_count));
+    if (!(entry->a == rh1->idx  &&  entry->b == rh2->idx  &&  entry->c == coveringop_count)) {
+      rh1->covering = covering_r_remove(rh1->covering, rh2);
+      entry->a = rh1->idx;
+      entry->b = rh2->idx;
+      entry->c = coveringop_count;
+    }
+    // rh1->covering = covering_r_remove(rh1->covering, rh2);
     return tnode1;
   }
   return tnode1;
@@ -11248,79 +11699,7 @@ load_saved_bddarr(struct bdd_saved_arr *bdd_arr) {
 
 /*生成 BDD 描述的 rules*/
 /*------------------------------------------------*/
-// struct bdd_rule *
-// gen_bdd_rule_from_of(struct of_rule *of_r) {
-//   if (!of_r)
-//     return NULL;
-//   int add_len = sizeof(uint16_t);
-//   struct bdd_rule *tmp = xcalloc(1, sizeof *tmp);
-//   tmp->sw_idx = of_r->sw_idx;
-//   tmp->idx = of_r->idx;
-//   struct links_of_rule *lks_out = rule_links_get(of_r, OUT_LINK);
-//   struct links_of_rule *lks_in = rule_links_get(of_r, IN_LINK);
-//   tmp->lks_in = copy_links_of_rule(lks_in);
-//   tmp->lks_out = copy_links_of_rule(lks_out);
-//   struct mf_uint16_t *mf_in = get_r_out_mf(of_r);
-//   struct mf_uint16_t *mf_out = get_r_in_mf(of_r);
-//   tmp->mf_in = mf2bdd(mf_in);
-//   bdd_addref(tmp->mf_in);
-//   tmp->mf_out = mf2bdd(mf_out);
-//   bdd_addref(tmp->mf_out);
-//   // tmp->mf_in = get_r_out_mf(of_r);
-//   // tmp->mf_out = get_r_in_mf(of_r);
-//   if (of_r->mask) {
-//     tmp->mask = xcalloc(1,sizeof(struct mask_uint16_t));
-//     tmp->rewrite = xcalloc(1,sizeof(struct mask_uint16_t));
-//     for (uint32_t j = 0; j < MF_LEN; j++) {
-//       tmp->mask->v[j] = *(uint16_t *)((uint8_t *)data_arrs+j*add_len+of_r->mask);
-//       tmp->rewrite->v[j] = *(uint16_t *)((uint8_t *)data_arrs+j*add_len+of_r->rewrite);
-//     }
-//   }
-//   else {
-//     tmp->mask = NULL;
-//     tmp->rewrite = NULL;
-//   }
-//   free(mf_in);
-//   free(mf_out);
-//   return tmp;
-// }
 
-// struct switch_bdd_rs *
-// gen_sw_rules(uint32_t sw_idx) {
-//   struct sw *sw = sw_get(sw_idx);
-//   if(!sw)
-//     return NULL;
-//   struct switch_bdd_rs *tmp = xmalloc(2*sizeof(uint32_t)+(sw->nrules)*sizeof(struct bdd_rule *));
-//   tmp->sw_idx = sw->sw_idx;
-//   tmp->nrules = sw->nrules;
-//   // struct of_rule *of_r = rule_get(sw, 1);
-//   // tmp->rules[0] = gen_bdd_rule_from_of(of_r);
-//   for (int i = 0; i < tmp->nrules; i++) {
-//     struct of_rule *of_r = rule_get(sw, i+1);
-//     tmp->rules[i] = gen_bdd_rule_from_of(of_r);
-//     for (int j = 0; j < tmp->rules[i]->idx - 1; j++){
-//       if (is_links_of_rule_same(tmp->rules[i]->lks_in, tmp->rules[j]->lks_in)){
-//         BDD bddtmp = tmp->rules[i]->mf_in;
-//         tmp->rules[i]->mf_in = bdd_apply(tmp->rules[i]->mf_in, tmp->rules[j]->mf_in, bddop_diff);
-//         if (tmp->rules[i]->mf_in != bddtmp) {
-//           bdd_delref(bddtmp);
-//           bdd_addref(tmp->rules[i]->mf_in);
-//           if (tmp->rules[i]->mask){
-//             bdd_delref(tmp->rules[i]->mf_out);
-//             tmp->rules[i]->mf_out = bdd_rw_BDD(tmp->rules[i]->mf_in, tmp->rules[i]->mask, tmp->rules[i]->rewrite);
-//             bdd_addref(tmp->rules[i]->mf_out);
-//           }
-//           else{
-//             bdd_delref(tmp->rules[i]->mf_out);
-//             tmp->rules[i]->mf_out = tmp->rules[i]->mf_in;
-//             bdd_addref(tmp->rules[i]->mf_out);
-//           }
-//         }
-//       }
-//     }
-//   }
-//   return tmp;
-// }
 
 void
 free_bdd_rule(struct bdd_rule *r) {
@@ -11393,1009 +11772,6 @@ is_r_rw_same(struct bdd_rule *a, struct bdd_rule *b) {
 }
 
 uint32_t same_num;
-// void
-// init_r_to_merge(struct network_bdd *nt) {
-//   same_num = 0;
-//   uint32_t num_merged_rules = 0;
-//   for (int i = 0; i < SW_NUM; i++) {
-//     r_to_merge_arr[i] = xmalloc((nt->sws[i]->nrules+1)*sizeof(uint32_t));
-//     r_to_merge_arr[i]->nrules = nt->sws[i]->nrules;
-
-//     uint32_t arr_tmp[nt->sws[i]->nrules];
-//     arr_tmp[0] = 0;
-//     uint32_t count = 1;
-    
-//     for (int j = 1; j < nt->sws[i]->nrules; j++) {
-//       bool issame = false;
-//       for (int k = 0; k < count; k++) {
-        
-//         if (is_r_action_same(nt->sws[i]->rules[arr_tmp[k]], nt->sws[i]->rules[j])) {
-//           r_to_merge_arr[i]->rules[j] = k;
-//           issame = true;
-//           same_num ++;
-//           break;
-//         }
-//       }
-//       if(!issame) {
-//         arr_tmp[count] = j;
-//         r_to_merge_arr[i]->rules[j] = count;
-//         count++;
-//       }
-//     }
-//     merged_arr[i] = xmalloc((count+1)*sizeof(uint32_t));
-//     merged_arr[i]->nrules = count;
-//     num_merged_rules += count;
-//     for (int j = 0; j < count; j++)
-//       merged_arr[i]->rules[j] = arr_tmp[j];
-//   }
-//   printf("the merged rules num = %d, with init_r_to_merge\n",  num_merged_rules);
-// }
-
-// uint32_t
-// get_num_of_rules_innet(struct network_bdd *net) {
-//   uint32_t sumnum = 0;
-//   for (int i = 0; i < net->nsws; i++) {
-//     sumnum += net->sws[i]->nrules;
-//   }
-//   return sumnum;
-// }
-
-// struct network_bdd *
-// get_bdd_sws_uncover(void) {
-//   struct network_bdd *tmp = xmalloc(sizeof(uint32_t)+SW_NUM*sizeof(struct switch_bdd_rs *));
-//   tmp->nsws = SW_NUM;
-//   for (int i = 0; i < SW_NUM; i++) {
-//     tmp->sws[i] = xmalloc(2*sizeof(uint32_t)+bdd_sws_arr[i]->nrules*sizeof(struct bdd_rule *));
-//     tmp->sws[i]->sw_idx = i;
-//     tmp->sws[i]->nrules = bdd_sws_arr[i]->nrules;
-//     BDD minus_tmp = 0;
-//     for (int j = 0; j < tmp->sws[i]->nrules; j++){
-//       tmp->sws[i]->rules[j] = xmalloc(sizeof(struct bdd_rule));
-//       struct bdd_rule *r_tmp = tmp->sws[i]->rules[j];
-//       struct bdd_rule *r = bdd_sws_arr[i]->rules[j];
-//       r_tmp->sw_idx = r->sw_idx;
-//       r_tmp->idx = r->idx;
-//       r_tmp->mask = r->mask;
-//       r_tmp->rewrite = r->rewrite;
-//       r_tmp->lks_in = r->lks_in;
-//       r_tmp->lks_out = r->lks_out;
-
-//       r_tmp->mf_in = bdd_apply(r->mf_in, minus_tmp, bddop_diff);
-//       r_tmp->mf_out = r->mf_out;
-//       if (r_tmp->mask)
-//         if (r_tmp->mf_in != r->mf_in)
-//           r_tmp->mf_out = bdd_rw_BDD(r_tmp->mf_in, r_tmp->mask, r_tmp->rewrite);
-//       minus_tmp = bdd_apply(minus_tmp, r->mf_out, bddop_or);
-//     }
-//   }
-//   return tmp;
-// }
-
-// struct network_bdd *
-// get_bdd_sws_merge(struct network_bdd *nt) {
-//   struct network_bdd *tmp = xmalloc(sizeof(uint32_t)+SW_NUM*sizeof(struct switch_bdd_rs *));
-//   tmp->nsws = SW_NUM;
-//   for (int i = 0; i < SW_NUM; i++){
-//     tmp->sws[i] = xmalloc(2*sizeof(uint32_t)+merged_arr[i]->nrules*sizeof(struct bdd_rule *));
-//     tmp->sws[i]->nrules = merged_arr[i]->nrules;
-//     tmp->sws[i]->sw_idx = i;
-//     for (int r_i = 0; r_i < merged_arr[i]->nrules; r_i++)
-//       tmp->sws[i]->rules[r_i] = NULL;
-//     for (int r_i = 0; r_i < r_to_merge_arr[i]->nrules; r_i++){
-//       if (tmp->sws[i]->rules[r_to_merge_arr[i]->rules[r_i]]){
-//         struct bdd_rule *r_tmp = tmp->sws[i]->rules[r_to_merge_arr[i]->rules[r_i]];
-//         // struct bdd_rule *r = merged_arr[i]->rules[r_to_merge_arr[i]->nrule[r_i]];
-//         r_tmp->mf_in = bdd_apply(nt->sws[i]->rules[r_i]->mf_in, r_tmp->mf_in, bddop_or);
-//         r_tmp->mf_out = bdd_apply(nt->sws[i]->rules[r_i]->mf_out, r_tmp->mf_out, bddop_or);
-//       }
-//       else{
-//         tmp->sws[i]->rules[r_to_merge_arr[i]->rules[r_i]] = xmalloc(sizeof(struct bdd_rule));
-//         struct bdd_rule *r_tmp = tmp->sws[i]->rules[r_to_merge_arr[i]->rules[r_i]];
-//         struct bdd_rule *r = nt->sws[i]->rules[r_i];
-//         r_tmp->sw_idx = r->sw_idx;
-//         r_tmp->idx = r_to_merge_arr[i]->rules[r_i];
-//         r_tmp->mf_in = r->mf_in;
-//         r_tmp->mf_out = r->mf_out;
-//         r_tmp->mask = r->mask;
-//         r_tmp->rewrite = r->rewrite;
-//         r_tmp->lks_in = r->lks_in;
-//         r_tmp->lks_out = r->lks_out;
-//       }
-//     }
-//   }
-//   return tmp;
-// }
-
-// struct APs *
-// get_APs_simple(struct network_bdd *nt) {
-//   struct timeval start,stop;  //计算时间差 usec
-//   BDD arr1[500000];
-//   arr1[0] = 1;
-//   uint32_t count1 = 1;
-//   BDD arr2[500000];
-//   uint32_t count2 = 0;
-//   bool sign = false;//if false means use arr1 as base
-
-//   for (int k = 0; k < SW_NUM; k++) {
-//     // printf("the sw %d has been completed\n", k);
-//     struct switch_bdd_rs *sw = nt->sws[k];
-//     for (int i = 0; i < sw->nrules; i++) {
-//       if (sign)
-//         printf("apcount = %d ", count2);
-//       else
-//         printf("apcount = %d ", count1);
-//       gettimeofday(&start,NULL);
-//       BDD in = sw->rules[i]->mf_in;
-//       BDD notin = bdd_not(in);
-//       if (sign) {
-//         for (int arr2_i = 0; arr2_i < count2; arr2_i++) {
-//           BDD insc = bdd_apply (arr2[arr2_i], in, bddop_and);
-//           if (insc) {
-//             arr1[count1] = insc;
-//             count1 ++;
-//           }
-//           insc= bdd_apply (arr2[arr2_i], notin, bddop_and);
-//           if (insc) {
-//             arr1[count1] = insc;
-//             count1 ++;
-//           }
-//         }
-//         count2 = 0;
-//         sign = false;
-//       }
-//       else {
-//         for (int arr1_i = 0; arr1_i < count1; arr1_i++) {
-//           BDD insc = bdd_apply (arr1[arr1_i], in, bddop_and);
-//           if (insc) {
-//             arr2[count2] = insc;
-//             count2 ++;
-//           }
-//           insc= bdd_apply (arr1[arr1_i], notin, bddop_and);
-//           if (insc) {
-//             arr2[count2] = insc;
-//             count2 ++;
-//           }
-//         }
-//       count1 = 0;
-//       sign = true;
-//       }
-//       gettimeofday(&stop,NULL);
-//       long long int update_T = diff(&stop, &start);
-//       // BddCache_reset(&applycache);
-//       printf("APs compute for all: %lld us;\n", update_T);
-//     }
-//   }
-//   uint32_t count = 0;
-//   if (sign)
-//     count = count2;
-//   else
-//     count = count1;
-//   struct APs *tmp = xmalloc(sizeof(uint32_t)+count*sizeof(BDD));
-//   tmp->nAPs = count;
-//   if (sign) {
-//     for (int i = 0; i < count; i++)
-//       tmp->AP_bdds[i] = arr2[i];
-//   }
-//   else {
-//     for (int i = 0; i < count; i++)
-//       tmp->AP_bdds[i] = arr1[i];
-//   }
-//   printf("there has been the %d aps\n", count);
-//   return tmp;
-// }
-
-// struct APs *
-// get_APs_simple_withdiff(struct network_bdd *nt) {
-//   struct timeval start,stop;  //计算时间差 usec
-//   BDD arr1[500000];
-//   arr1[0] = 1;
-//   uint32_t count1 = 1;
-//   BDD arr2[500000];
-//   uint32_t count2 = 0;
-//   bool sign = false;//if false means use arr1 as base
-
-//   for (int k = 0; k < SW_NUM; k++) {
-//     // printf("the sw %d has been completed\n", k);
-//     struct switch_bdd_rs *sw = nt->sws[k];
-//     for (int i = 0; i < sw->nrules; i++) {
-//       gettimeofday(&start,NULL);
-//       BDD in = sw->rules[i]->mf_in;
-//       BDD notin = bdd_not(in);
-//       if (sign) {
-//         for (int arr2_i = 0; arr2_i < count2; arr2_i++) {
-//           BDD insc = bdd_apply (arr2[arr2_i], in, bddop_and);
-//           if (insc) {
-//             arr1[count1] = insc;
-//             count1 ++;
-//             in = bdd_apply (in, insc, bddop_diff);
-//           }
-//           insc= bdd_apply (arr2[arr2_i], notin, bddop_and);
-//           if (insc) {
-//             arr1[count1] = insc;
-//             count1 ++;
-//             notin = bdd_apply (notin, insc, bddop_diff);
-//           }
-//           if ((!in)&&(!notin))
-//             break;
-//         }
-//         count2 = 0;
-//         sign = false;
-//       }
-//       else {
-//         for (int arr1_i = 0; arr1_i < count1; arr1_i++) {
-//           BDD insc = bdd_apply (arr1[arr1_i], in, bddop_and);
-//           if (insc) {
-//             arr2[count2] = insc;
-//             count2 ++;
-//             in = bdd_apply (in, insc, bddop_diff);
-//           }
-//           insc= bdd_apply (arr1[arr1_i], notin, bddop_and);
-//           if (insc) {
-//             arr2[count2] = insc;
-//             count2 ++;
-//             notin = bdd_apply (notin, insc, bddop_diff);
-//           }
-//           if ((!in)&&(!notin))
-//             break;
-//         }
-//       count1 = 0;
-//       sign = true;
-//       }
-//       gettimeofday(&stop,NULL);
-//       long long int update_T = diff(&stop, &start);
-//       // BddCache_reset(&applycache);
-//       printf("APs compute for all: %lld us\n", update_T);
-//     }
-//   }
-//   uint32_t count = 0;
-//   if (sign)
-//     count = count2;
-//   else
-//     count = count1;
-//   struct APs *tmp = xmalloc(sizeof(uint32_t)+count*sizeof(BDD));
-//   tmp->nAPs = count;
-//   if (sign) {
-//     for (int i = 0; i < count; i++)
-//       tmp->AP_bdds[i] = arr2[i];
-//   }
-//   else {
-//     for (int i = 0; i < count; i++)
-//       tmp->AP_bdds[i] = arr1[i];
-//   }
-//   printf("there has been the %d aps\n", count);
-//   return tmp;
-// }
-
-// struct APs *
-// get_APs(struct network_bdd *nt) {
-//   struct timeval start,stop;  //计算时间差 usec
-//   BDD arr1[500000];
-//   arr1[0] = 1;
-//   uint32_t count1 = 1;
-//   BDD arr2[500000];
-//   uint32_t count2 = 0; 
-
-//   BDD arr_need1[20000];
-//   uint32_t count_need1 = 0;
-//   BDD arr_need2[20000];
-//   uint32_t count_need2 = 0;
-
-//   bool sign = false;//if false means use arr1 as base
-//   bool need_sign = false;//if false means use arr_need1 as base
-//   struct bdd_rule *Transformers[2000];
-//   uint32_t tcount = 0;
-//   // bool while_sign = false;//if false means use arr1 as base
-//   for (int k = 0; k < SW_NUM; k++) {
-//     // printf("the sw %d has been completed\n", k);
-//     struct switch_bdd_rs *sw = nt->sws[k];
-//     for (int i = 0; i < sw->nrules; i++) {
-//       gettimeofday(&start,NULL);
-//       if (sw->rules[i]->mask) {
-//         Transformers[tcount] = sw->rules[i];
-//         tcount++;
-//         // printf(" this rule is rewrite\n");
-//       }
-//       // BDD in = sw->rules[i]->mf_in;
-//       // BDD notin = bdd_not(in);
-//       if (need_sign){
-//         arr_need2[0] = sw->rules[i]->mf_in;
-//         count_need2++;
-//         if (sw->rules[i]->mask) {
-//           arr_need2[1] = bdd_rw_BDD(sw->rules[i]->mf_in, sw->rules[i]->mask, sw->rules[i]->rewrite);
-//           count_need2++;
-//         }
-//       }
-//       else{
-//         arr_need1[0] = sw->rules[i]->mf_in;
-//         count_need1++;
-//         if (sw->rules[i]->mask) {
-//           arr_need1[1] = bdd_rw_BDD(sw->rules[i]->mf_in, sw->rules[i]->mask, sw->rules[i]->rewrite);
-//           count_need1++;
-//         }
-//       }
-//       // if (sw->rules[i]->mask) 
-//         // printf(" this rule is rewrite\n");
-
-//       while(1){
-//         // printf(" this rule is while\n");
-//         if (need_sign) {
-//           printf(" this rule %d - %d is while if1 %d - %d\n", k, i, count_need2, tcount);
-//           for (int n_i = 0; n_i < count_need2; n_i++){
-//             if (sign) {
-//               for (int arr2_i = 0; arr2_i < count2; arr2_i++) {
-//                 BDD insc = bdd_apply(arr2[arr2_i], arr_need2[n_i], bddop_and);
-//                 // printf(" this rule is while if2\n");
-//                 if (insc) {
-//                   arr1[count1] = insc;
-//                   count1++;
-//                   if(insc != arr2[arr2_i]){
-//                     for (int t_i = 0; t_i < tcount; t_i++) {
-//                       // printf(" this rule is while if3 %d\n",tcount);
-//                       BDD t_insc = bdd_apply(insc, Transformers[t_i]->mf_in, bddop_and);
-//                       if (t_insc) {
-//                         arr_need1[count_need1] = bdd_rw_BDD(t_insc, Transformers[t_i]->mask, Transformers[t_i]->rewrite);
-//                         count_need1++;
-//                       }
-//                     }
-//                   }
-//                 }
-//                 // printf(" this rule is while if3\n");
-//                 BDD not = bdd_not(arr_need2[n_i]);
-//                 insc = bdd_apply (arr2[arr2_i], not, bddop_and);
-//                 if (insc) {
-//                   arr1[count1] = insc;
-//                   count1 ++;
-//                   if(insc != arr2[arr2_i]){
-//                     for (int t_i = 0; t_i < tcount; t_i++) {
-//                       BDD t_insc = bdd_apply(insc, Transformers[t_i]->mf_in, bddop_and);
-//                       if (t_insc) {
-//                         arr_need1[count_need1] = bdd_rw_BDD(t_insc, Transformers[t_i]->mask, Transformers[t_i]->rewrite);
-//                         count_need1++;
-//                       }
-//                     }
-//                   }
-//                 }
-//               }
-//               count2 = 0;
-//               sign = false;
-//             }
-//             else {
-//               for (int arr1_i = 0; arr1_i < count1; arr1_i++) {
-//                 BDD insc = bdd_apply(arr1[arr1_i], arr_need2[n_i], bddop_and);
-//                 // printf(" this rule is while if2\n");
-//                 if (insc) {
-//                   arr2[count2] = insc;
-//                   count2++;
-//                   if(insc != arr1[arr1_i]){
-//                     for (int t_i = 0; t_i < tcount; t_i++) {
-//                       // printf(" this rule is while if3 %d\n",tcount);
-//                       BDD t_insc = bdd_apply(insc, Transformers[t_i]->mf_in, bddop_and);
-//                       if (t_insc) {
-//                         arr_need1[count_need1] = bdd_rw_BDD(t_insc, Transformers[t_i]->mask, Transformers[t_i]->rewrite);
-//                         count_need1++;
-//                       }
-//                     }
-//                   }
-//                 }
-//                 // printf(" this rule is while if3\n");
-//                 BDD not = bdd_not(arr_need2[n_i]);
-//                 insc = bdd_apply (arr1[arr1_i], not, bddop_and);
-//                 if (insc) {
-//                   arr2[count2] = insc;
-//                   count2 ++;
-//                   if(insc != arr1[arr1_i]){
-//                     for (int t_i = 0; t_i < tcount; t_i++) {
-//                       BDD t_insc = bdd_apply(insc, Transformers[t_i]->mf_in, bddop_and);
-//                       if (t_insc) {
-//                         arr_need1[count_need1] = bdd_rw_BDD(t_insc, Transformers[t_i]->mask, Transformers[t_i]->rewrite);
-//                         count_need1++;
-//                       }
-//                     }
-//                   }
-//                 }
-//               }
-//               count1 = 0;
-//               sign = true;
-//             }
-//           }
-//           count_need2 = 0;
-//           need_sign = false;
-//           // printf(" this rule %d - %d is while ifend %d - %d\n", k, i, count_need1, tcount);
-//           if (!count_need1)
-//             break;
-//         }
-//         else {
-//           printf(" this rule %d - %d is while else1 %d - %d\n", k, i, count_need1, tcount);
-//           for (int n_i = 0; n_i < count_need1; n_i++){
-//             if (sign) {
-//               for (int arr2_i = 0; arr2_i < count2; arr2_i++) {
-//                 BDD insc = bdd_apply(arr2[arr2_i], arr_need1[n_i], bddop_and);
-//                 // printf(" this rule is while if2\n");
-//                 if (insc) {
-//                   arr1[count1] = insc;
-//                   count1++;
-//                   if(insc != arr2[arr2_i]){
-//                     for (int t_i = 0; t_i < tcount; t_i++) {
-//                       // printf(" this rule is while if3 %d\n",tcount);
-//                       BDD t_insc = bdd_apply(insc, Transformers[t_i]->mf_in, bddop_and);
-//                       if (t_insc) {
-//                         arr_need2[count_need2] = bdd_rw_BDD(t_insc, Transformers[t_i]->mask, Transformers[t_i]->rewrite);
-//                         count_need2++;
-//                       }
-//                     }
-//                   }
-//                 }
-//                 // printf(" this rule is while if3\n");
-//                 BDD not = bdd_not(arr_need1[n_i]);
-//                 insc = bdd_apply (arr2[arr2_i], not, bddop_and);
-//                 if (insc) {
-//                   arr1[count1] = insc;
-//                   count1 ++;
-//                   if(insc != arr2[arr2_i]){
-//                     for (int t_i = 0; t_i < tcount; t_i++) {
-//                       BDD t_insc = bdd_apply(insc, Transformers[t_i]->mf_in, bddop_and);
-//                       if (t_insc) {
-//                         arr_need2[count_need2] = bdd_rw_BDD(t_insc, Transformers[t_i]->mask, Transformers[t_i]->rewrite);
-//                         count_need2++;
-//                       }
-//                     }
-//                   }
-//                 }
-//               }
-//               count2 = 0;
-//               sign = false;
-//             }
-//             else {
-//               for (int arr1_i = 0; arr1_i < count1; arr1_i++) {
-//                 BDD insc = bdd_apply(arr1[arr1_i], arr_need1[n_i], bddop_and);
-//                 // printf(" this rule is while if2\n");
-//                 if (insc) {
-//                   arr2[count2] = insc;
-//                   count2++;
-//                   if(insc != arr1[arr1_i]){
-//                     for (int t_i = 0; t_i < tcount; t_i++) {
-//                       // printf(" this rule is while if3 %d\n",tcount);
-//                       BDD t_insc = bdd_apply(insc, Transformers[t_i]->mf_in, bddop_and);
-//                       if (t_insc) {
-//                         arr_need2[count_need2] = bdd_rw_BDD(t_insc, Transformers[t_i]->mask, Transformers[t_i]->rewrite);
-//                         count_need2++;
-//                       }
-//                     }
-//                   }
-//                 }
-//                 // printf(" this rule is while if3\n");
-//                 BDD not = bdd_not(arr_need1[n_i]);
-//                 insc = bdd_apply (arr1[arr1_i], not, bddop_and);
-//                 if (insc) {
-//                   arr2[count2] = insc;
-//                   count2 ++;
-//                   if(insc != arr1[arr1_i]){
-//                     for (int t_i = 0; t_i < tcount; t_i++) {
-//                       BDD t_insc = bdd_apply(insc, Transformers[t_i]->mf_in, bddop_and);
-//                       if (t_insc) {
-//                         arr_need2[count_need2] = bdd_rw_BDD(t_insc, Transformers[t_i]->mask, Transformers[t_i]->rewrite);
-//                         count_need2++;
-//                       }
-//                     }
-//                   }
-//                 }
-//               }
-//               count1 = 0;
-//               sign = true;
-//             }
-//           }
-//           count_need1 = 0;
-//           need_sign = true;
-//           // printf(" this rule %d - %d is while ifend %d - %d\n", k, i, count_need2, tcount);
-//           if (!count_need2)
-//             break;
-//         }
-//       }
-
-
-//       gettimeofday(&stop,NULL);
-//       long long int update_T = diff(&stop, &start);
-//       // BddCache_reset(&applycache);
-//       printf("APs compute for all: %lld us\n", update_T);
-//     }
-//   }
-//   uint32_t count = 0;
-//   if (sign)
-//     count = count2;
-//   else
-//     count = count1;
-//   struct APs *tmp = xmalloc(sizeof(uint32_t)+count*sizeof(BDD));
-//   tmp->nAPs = count;
-//   if (sign) {
-//     for (int i = 0; i < count; i++)
-//       tmp->AP_bdds[i] = arr2[i];
-//   }
-//   else {
-//     for (int i = 0; i < count; i++)
-//       tmp->AP_bdds[i] = arr1[i];
-//   }
-//   printf("there has been the %d aps\n", count);
-//   return tmp;
-// }
-
-// struct APs *
-// get_APs_bounding(struct network_bdd *nt) {
-//   struct timeval start,stop;  //计算时间差 usec
-//   struct AP_rw *arr1[500000];
-//   arr1[0] = xmalloc(sizeof(struct AP_rw));
-//   arr1[0]->apbdd = 1;
-//   arr1[0]->n = 0;
-//   uint32_t count1 = 1;
-//   struct AP_rw *arr2[500000];
-//   uint32_t count2 = 0; 
-
-//   BDD arr_need1[20000];
-//   uint32_t count_need1 = 0;
-//   BDD arr_need2[20000];
-//   uint32_t count_need2 = 0;
-
-//   bool sign = false;//if false means use arr1 as base
-//   bool need_sign = false;//if false means use arr_need1 as base
-//   // struct bdd_rule *Transformers[2000];
-//   // uint32_t tcount = 0;
-//   // bool while_sign = false;//if false means use arr1 as base
-//   for (int k = 0; k < SW_NUM; k++) {
-//     // printf("the sw %d has been completed\n", k);
-//     struct switch_bdd_rs *sw = nt->sws[k];
-//     for (int i = 0; i < sw->nrules; i++) {
-//       gettimeofday(&start,NULL);
-//       // if (sw->rules[i]->mask) {
-//       //   Transformers[tcount] = sw->rules[i];
-//       //   tcount++;
-//       // }
-//       // BDD in = sw->rules[i]->mf_in;
-//       // BDD notin = bdd_not(in);
-//       bool isfirst = true;
-//       if (need_sign){
-//         arr_need2[0] = sw->rules[i]->mf_in;
-//         count_need2++;
-//         // if (sw->rules[i]->mask) {
-//         //   arr_need2[1] = bdd_rw_BDD(sw->rules[i]->mf_in, sw->rules[i]->mask, sw->rules[i]->rewrite);
-//         //   count_need2++;
-//         // }
-//       }
-//       else{
-//         arr_need1[0] = sw->rules[i]->mf_in;
-//         count_need1++;
-//         // if (sw->rules[i]->mask) {
-//         //   arr_need1[1] = bdd_rw_BDD(sw->rules[i]->mf_in, sw->rules[i]->mask, sw->rules[i]->rewrite);
-//         //   count_need1++;
-//         // }
-//       }
-//       // if (sw->rules[i]->mask) 
-//         // printf(" this rule is rewrite\n");
-
-//       while(1){
-//         // printf(" this rule is while\n");
-//         if (need_sign) {
-//           if (sign) 
-//             printf(" this rule %d - %d is while if-if %d - %d\n", k, i, count_need2, count2);
-//           else
-//             printf(" this rule %d - %d is while if-else %d - %d\n", k, i, count_need2, count1);
-//           for (int n_i = 0; n_i < count_need2; n_i++){
-//             if (sign) {
-//               for (int arr2_i = 0; arr2_i < count2; arr2_i++) {
-//                 BDD insc = bdd_apply(arr2[arr2_i]->apbdd, arr_need2[n_i], bddop_and);
-//                 // printf(" this rule is while if2\n");
-//                 if (insc) {
-//                   arr1[count1] = xmalloc(sizeof(struct AP_rw));
-//                   arr1[count1]->apbdd = insc;
-//                   arr1[count1]->n = arr2[arr2_i]->n;
-//                   for (int rwr_i = 0; rwr_i < arr2[arr2_i]->n; rwr_i++)
-//                     arr1[count1]->rwrules[rwr_i] = arr2[arr2_i]->rwrules[rwr_i];  
-//                   if ((isfirst)&&(n_i == 0)&&(sw->rules[i]->mask)){
-//                     bool isrwexist = false;
-//                     for (int rw_i = 0; rw_i < arr1[count1]->n; rw_i++) {
-//                       if (is_r_rw_same(arr1[count1]->rwrules[rw_i], sw->rules[i]))
-//                         isrwexist = true;
-//                     }
-//                     if (!isrwexist){
-//                       arr1[count1]->rwrules[arr1[count1]->n] = sw->rules[i];
-//                       arr1[count1]->n = arr1[count1]->n + 1;
-//                     }
-//                     if (arr2[arr2_i]->apbdd == arr_need2[n_i]){
-//                         arr_need1[count_need1] = bdd_rw_BDD(arr_need2[n_i], sw->rules[i]->mask, sw->rules[i]->rewrite);;
-//                         count_need1++;
-//                     }
-//                   }
-//                   if(insc != arr2[arr2_i]->apbdd){
-//                     for (int t_i = 0; t_i < arr1[count1]->n; t_i++) {
-//                       // printf(" this rule is while if3 %d\n",tcount);
-//                       BDD t_insc = bdd_apply(insc, arr1[count1]->rwrules[t_i]->mf_in, bddop_and);
-//                       if (t_insc) {
-//                         BDD rw_bdd =bdd_rw_BDD(t_insc, arr1[count1]->rwrules[t_i]->mask, arr1[count1]->rwrules[t_i]->rewrite);
-//                         bool isexist = false;
-//                         for (int need_i = 0; need_i < count_need1; need_i++) {
-//                           if (arr_need1[need_i] == rw_bdd)
-//                             isexist = true;
-//                         }
-//                         if (!isexist){
-//                           arr_need1[count_need1] = rw_bdd;
-//                           count_need1++;
-//                         }
-//                       }
-//                     }
-//                   }
-//                   count1++;
-//                 }
-//                 // printf(" this rule is while if3\n");
-//                 BDD not = bdd_not(arr_need2[n_i]);
-//                 insc = bdd_apply (arr2[arr2_i]->apbdd, not, bddop_and);
-//                 if (insc) {
-//                   arr1[count1] = xmalloc(sizeof(struct AP_rw));
-//                   arr1[count1]->apbdd = insc;
-//                   arr1[count1]->n = arr2[arr2_i]->n;
-//                   for (int rwr_i = 0; rwr_i < arr2[arr2_i]->n; rwr_i++)
-//                     arr1[count1]->rwrules[rwr_i] = arr2[arr2_i]->rwrules[rwr_i];
-//                   if(insc != arr2[arr2_i]->apbdd){
-//                     for (int t_i = 0; t_i <  arr1[count1]->n; t_i++) {
-//                       BDD t_insc = bdd_apply(insc, arr1[count1]->rwrules[t_i]->mf_in, bddop_and);
-//                       if (t_insc) {
-//                         BDD rw_bdd = bdd_rw_BDD(t_insc, arr1[count1]->rwrules[t_i]->mask, arr1[count1]->rwrules[t_i]->rewrite);
-//                         bool isexist = false;
-//                         for (int need_i = 0; need_i < count_need1; need_i++) {
-//                           if (arr_need1[need_i] == rw_bdd)
-//                             isexist = true;
-//                         }
-//                         if (!isexist){
-//                           arr_need1[count_need1] = rw_bdd;
-//                           count_need1++;
-//                         }
-//                       }
-//                     }
-//                   }
-//                   count1++;
-//                 }
-//               }
-//               for (int arr2_i = 0; arr2_i < count2; arr2_i++)
-//                 free(arr2[arr2_i]);
-//               count2 = 0;
-//               sign = false;
-//               isfirst = false;
-//             }
-//             else {
-//               for (int arr1_i = 0; arr1_i < count1; arr1_i++) {
-//                 BDD insc = bdd_apply(arr1[arr1_i]->apbdd, arr_need2[n_i], bddop_and);
-//                 // printf(" this rule is while if2\n");
-//                 if (insc) {
-//                   arr2[count2] = xmalloc(sizeof(struct AP_rw));
-//                   arr2[count2]->apbdd = insc;
-//                   arr2[count2]->n = arr1[arr1_i]->n;
-//                   for (int rwr_i = 0; rwr_i < arr1[arr1_i]->n; rwr_i++)
-//                     arr2[count2]->rwrules[rwr_i] = arr1[arr1_i]->rwrules[rwr_i];
-//                   if ((isfirst)&&(n_i == 0)&&(sw->rules[i]->mask)){
-//                     bool isrwexist = false;
-//                     for (int rw_i = 0; rw_i < arr2[count2]->n; rw_i++) {
-//                       if (is_r_rw_same(arr2[count2]->rwrules[rw_i], sw->rules[i]))
-//                         isrwexist = true;
-//                     }
-//                     if (!isrwexist){
-//                       arr2[count2]->rwrules[arr2[count2]->n] = sw->rules[i];
-//                       arr2[count2]->n = arr2[count2]->n + 1;
-//                     }  
-//                     if (arr1[arr1_i]->apbdd == arr_need2[n_i]){
-//                       arr_need1[count_need1] = bdd_rw_BDD(arr_need2[n_i], sw->rules[i]->mask, sw->rules[i]->rewrite);
-//                       count_need1++;
-//                     }
-//                   }
-//                   if(insc != arr1[arr1_i]->apbdd){
-//                     for (int t_i = 0; t_i < arr2[count2]->n; t_i++) {
-//                       // printf(" this rule is while if3 %d\n",tcount);
-//                       BDD t_insc = bdd_apply(insc, arr2[count2]->rwrules[t_i]->mf_in, bddop_and);
-//                       if (t_insc) {
-//                         BDD rw_bdd = bdd_rw_BDD(t_insc, arr2[count2]->rwrules[t_i]->mask, arr2[count2]->rwrules[t_i]->rewrite);
-//                         bool isexist = false;
-//                         for (int need_i = 0; need_i < count_need1; need_i++) {
-//                           if (arr_need1[need_i] == rw_bdd)
-//                             isexist = true;
-//                         }
-//                         if (!isexist){
-//                           arr_need1[count_need1] = rw_bdd;
-//                           count_need1++;
-//                         }
-//                       }
-//                     }
-//                   }             
-//                   count2++;
-//                 }
-//                 // printf(" this rule is while if3\n");
-//                 BDD not = bdd_not(arr_need2[n_i]);
-//                 insc = bdd_apply (arr1[arr1_i]->apbdd, not, bddop_and);
-//                 if (insc) {
-//                   arr2[count2] = xmalloc(sizeof(struct AP_rw));
-//                   arr2[count2]->apbdd = insc;
-//                   arr2[count2]->n = arr1[arr1_i]->n;
-//                   for (int rwr_i = 0; rwr_i < arr1[arr1_i]->n; rwr_i++)
-//                     arr2[count2]->rwrules[rwr_i] = arr1[arr1_i]->rwrules[rwr_i];
-//                   if(insc != arr1[arr1_i]->apbdd){
-//                     for (int t_i = 0; t_i <  arr2[count2]->n; t_i++) {
-//                       BDD t_insc = bdd_apply(insc,  arr2[count2]->rwrules[t_i]->mf_in, bddop_and);
-//                       if (t_insc) {
-//                         BDD rw_bdd = bdd_rw_BDD(t_insc,  arr2[count2]->rwrules[t_i]->mask,  arr2[count2]->rwrules[t_i]->rewrite);
-//                         bool isexist = false;
-//                         for (int need_i = 0; need_i < count_need1; need_i++) {
-//                           if (arr_need1[need_i] == rw_bdd)
-//                             isexist = true;
-//                         }
-//                         if (!isexist){
-//                           arr_need1[count_need1] = rw_bdd;
-//                           count_need1++;
-//                         }
-//                       }
-//                     }
-//                   }
-//                   count2++;
-//                 }
-//               }
-//               for (int arr1_i = 0; arr1_i < count1; arr1_i++)
-//                 free(arr1[arr1_i]);
-//               count1 = 0;
-//               sign = true;
-//               isfirst = false;
-//             }
-//           }
-//           count_need2 = 0;
-//           need_sign = false;
-//           // printf(" this rule %d - %d is while ifend %d - %d\n", k, i, count_need1, tcount);
-//           if (!count_need1)
-//             break;
-//         }
-//         else {
-//           if (sign) 
-//             printf(" this rule %d - %d is while else-if %d - %d\n", k, i, count_need1, count2);
-//           else
-//             printf(" this rule %d - %d is while else-else %d - %d\n", k, i, count_need1, count1);
-//           for (int n_i = 0; n_i < count_need1; n_i++){
-//             if (sign) {
-//               for (int arr2_i = 0; arr2_i < count2; arr2_i++) {
-//                 // printf(" this rule is while else-if for updating %d - %d - %d\n", arr2[arr2_i]->n, count_need2, count1);
-//                 BDD insc = bdd_apply(arr2[arr2_i]->apbdd, arr_need1[n_i], bddop_and);
-//                 // printf(" this rule is while if2\n");
-//                 if (insc) {
-//                   arr1[count1] = xmalloc(sizeof(struct AP_rw));
-//                   arr1[count1]->apbdd = insc;
-//                   arr1[count1]->n = arr2[arr2_i]->n;
-//                   for (int rwr_i = 0; rwr_i < arr2[arr2_i]->n; rwr_i++)
-//                     arr1[count1]->rwrules[rwr_i] = arr2[arr2_i]->rwrules[rwr_i];
-//                   if ((isfirst)&&(n_i == 0)&&(sw->rules[i]->mask)){
-//                     bool isrwexist = false;
-//                     for (int rw_i = 0; rw_i < arr1[count1]->n; rw_i++) {
-//                       if (is_r_rw_same(arr1[count1]->rwrules[rw_i], sw->rules[i]))
-//                         isrwexist = true;
-//                     }
-//                     if (!isrwexist){
-//                       arr1[count1]->rwrules[arr1[count1]->n] = sw->rules[i];
-//                       arr1[count1]->n = arr1[count1]->n + 1;
-//                     }  
-                    
-//                     if (arr2[arr2_i]->apbdd ==  arr_need1[n_i]){
-//                       arr_need2[count_need2] = bdd_rw_BDD(arr_need1[n_i], sw->rules[i]->mask, sw->rules[i]->rewrite);
-//                       count_need2++;
-//                     }
-//                   }     
-//                   if(insc != arr2[arr2_i]->apbdd){
-//                     for (int t_i = 0; t_i < arr1[count1]->n; t_i++) {
-//                       // printf(" this rule is while if3 %d\n",tcount);
-//                       BDD t_insc = bdd_apply(insc, arr1[count1]->rwrules[t_i]->mf_in, bddop_and);
-//                       if (t_insc) {
-//                         BDD rw_bdd = bdd_rw_BDD(t_insc, arr1[count1]->rwrules[t_i]->mask, arr1[count1]->rwrules[t_i]->rewrite);
-//                         bool isexist = false;
-//                         for (int need_i = 0; need_i < count_need2; need_i++) {
-//                           if (arr_need2[need_i] == rw_bdd)
-//                             isexist = true;
-//                         }
-//                         if (!isexist){
-//                           arr_need2[count_need2] = rw_bdd;
-//                           count_need2++;
-//                         }
-//                       }
-//                     }
-//                   }
-//                   count1++;
-//                 }
-                
-//                 BDD not = bdd_not(arr_need1[n_i]);
-//                 insc = bdd_apply (arr2[arr2_i]->apbdd, not, bddop_and);
-//                 if (insc) {
-//                   arr1[count1] = xmalloc(sizeof(struct AP_rw));
-//                   arr1[count1]->apbdd = insc;
-//                   arr1[count1]->n = arr2[arr2_i]->n;
-//                   for (int rwr_i = 0; rwr_i < arr2[arr2_i]->n; rwr_i++)
-//                     arr1[count1]->rwrules[rwr_i] = arr2[arr2_i]->rwrules[rwr_i];
-                  
-//                   if(insc != arr2[arr2_i]->apbdd){
-//                     for (int t_i = 0; t_i < arr1[count1]->n; t_i++) {
-//                       BDD t_insc = bdd_apply(insc,  arr1[count1]->rwrules[t_i]->mf_in, bddop_and);
-//                       if (t_insc) {
-//                         BDD rw_bdd = bdd_rw_BDD(t_insc,  arr1[count1]->rwrules[t_i]->mask,  arr1[count1]->rwrules[t_i]->rewrite);
-//                         bool isexist = false;
-//                         for (int need_i = 0; need_i < count_need2; need_i++) {
-//                           if (arr_need2[need_i] == rw_bdd)
-//                             isexist = true;
-//                         }
-//                         if (!isexist){
-//                           arr_need2[count_need2] = rw_bdd;
-//                           count_need2++;
-//                         }
-//                       }
-//                     }
-//                   }
-//                   count1 ++;
-//                 }
-//                 // printf("the else-if for end\n");
-//               }
-//               for (int arr2_i = 0; arr2_i < count2; arr2_i++)
-//                 free(arr2[arr2_i]);
-//               count2 = 0;
-//               sign = false;
-//               isfirst = false;
-//               // printf("the else-if end\n");
-//             }
-//             else {
-//               for (int arr1_i = 0; arr1_i < count1; arr1_i++) {
-//                 // printf(" this rule is while else-else for updating %d - %d - %d\n", arr1[arr1_i]->n, count_need2, count2);
-//                 BDD insc = bdd_apply(arr1[arr1_i]->apbdd, arr_need1[n_i], bddop_and);
-//                 // printf(" this rule is while if2\n");
-//                 if (insc) {
-//                   arr2[count2] = xmalloc(sizeof(struct AP_rw));
-//                   arr2[count2]->apbdd = insc;
-//                   arr2[count2]->n = arr1[arr1_i]->n;
-//                   for (int rwr_i = 0; rwr_i < arr1[arr1_i]->n; rwr_i++)
-//                     arr2[count2]->rwrules[rwr_i] = arr1[arr1_i]->rwrules[rwr_i];
-//                   if ((isfirst)&&(n_i == 0)&&(sw->rules[i]->mask)){
-//                     bool isrwexist = false;
-//                     for (int rw_i = 0; rw_i < arr2[count2]->n; rw_i++) {
-//                       if (is_r_rw_same(arr2[count2]->rwrules[rw_i], sw->rules[i]))
-//                         isrwexist = true;
-//                     }
-//                     if (!isrwexist){
-//                       arr2[count2]->rwrules[arr2[count2]->n] = sw->rules[i];
-//                       arr2[count2]->n = arr2[count2]->n + 1;
-//                     }  
-                    
-//                     if (arr1[arr1_i]->apbdd ==  arr_need1[n_i]){
-//                       arr_need2[count_need2] = bdd_rw_BDD(arr_need1[n_i], sw->rules[i]->mask, sw->rules[i]->rewrite);
-//                       count_need2++;
-//                     }
-//                   }
-//                   // printf(" this rule is while if3 %d\n",arr2[count2]->n);
-//                   if(insc != arr1[arr1_i]->apbdd){
-//                     for (int t_i = 0; t_i < arr2[count2]->n; t_i++) {
-//                       // printf(" this rule is while if3 %d\n",tcount);
-//                       BDD t_insc = bdd_apply(insc, arr2[count2]->rwrules[t_i]->mf_in, bddop_and);
-//                       if (t_insc) {
-//                         BDD rw_bdd = bdd_rw_BDD(t_insc, arr2[count2]->rwrules[t_i]->mask, arr2[count2]->rwrules[t_i]->rewrite);
-//                         bool isexist = false;
-//                         for (int need_i = 0; need_i < count_need2; need_i++) {
-//                           if (arr_need2[need_i] == rw_bdd)
-//                             isexist = true;
-//                         }
-//                         if (!isexist){
-//                           arr_need2[count_need2] = rw_bdd;
-//                           count_need2++;
-//                         }
-//                       }
-//                     }
-//                   }
-//                   count2++;
-//                 }
-//                 // printf(" this rule is while if3\n");
-//                 BDD not = bdd_not(arr_need1[n_i]);
-//                 insc = bdd_apply (arr1[arr1_i]->apbdd, not, bddop_and);
-//                 if (insc) {
-//                   arr2[count2] = xmalloc(sizeof(struct AP_rw));
-//                   arr2[count2]->apbdd = insc;
-//                   arr2[count2]->n = arr1[arr1_i]->n;
-//                   for (int rwr_i = 0; rwr_i < arr1[arr1_i]->n; rwr_i++)
-//                     arr2[count2]->rwrules[rwr_i] = arr1[arr1_i]->rwrules[rwr_i];
-//                   if(insc != arr1[arr1_i]->apbdd){
-//                     for (int t_i = 0; t_i < arr2[count2]->n; t_i++) {
-//                       BDD t_insc = bdd_apply(insc, arr2[count2]->rwrules[t_i]->mf_in, bddop_and);
-//                       if (t_insc) {
-//                         BDD rw_bdd = bdd_rw_BDD(t_insc, arr2[count2]->rwrules[t_i]->mask, arr2[count2]->rwrules[t_i]->rewrite);
-//                         bool isexist = false;
-//                         for (int need_i = 0; need_i < count_need2; need_i++) {
-//                           if (arr_need2[need_i] == rw_bdd)
-//                             isexist = true;
-//                         }
-//                         if (!isexist){
-//                           arr_need2[count_need2] = rw_bdd;
-//                           count_need2++;
-//                         }
-//                       }
-//                     }
-//                   }
-//                   count2++;
-//                 }    
-//               }
-//               for (int arr1_i = 0; arr1_i < count1; arr1_i++)
-//                 free(arr1[arr1_i]);
-//               count1 = 0;
-//               sign = true;
-//               isfirst = false;
-//               // printf("the else-else end\n");
-//             }
-//           }
-//           count_need1 = 0;
-//           need_sign = true;
-//           // printf("the else end\n");
-//           // printf(" this rule %d - %d is while ifend %d - %d\n", k, i, count_need2, tcount);
-//           if (!count_need2)
-//             break;
-//         }
-//       }
-
-
-//       gettimeofday(&stop,NULL);
-//       long long int update_T = diff(&stop, &start);
-//       // BddCache_reset(&applycache);
-//       printf("APs compute for all: %lld us\n", update_T);
-//     }
-//   }
-//   uint32_t count = 0;
-//   if (sign)
-//     count = count2;
-//   else
-//     count = count1;
-//   struct APs *tmp = xmalloc(sizeof(uint32_t)+count*sizeof(BDD));
-//   tmp->nAPs = count;
-//   if (sign) {
-//     for (int i = 0; i < count; i++){
-//       tmp->AP_bdds[i] = arr2[i]->apbdd;
-//       free(arr2[i]);
-//     }
-//   }
-//   else {
-//     for (int i = 0; i < count; i++){
-//       tmp->AP_bdds[i] = arr1[i]->apbdd;
-//       free(arr1[i]);
-//     }
-//   }
-//   printf("there has been the %d aps\n", count);
-//   return tmp;
-// }
-
-// int
-// test_AP_generation(struct APs *AP_base, struct network_bdd *nt) {
-//   struct timeval start,stop;  //计算时间差 usec
-//   BDD arr[500000];
-//   uint32_t count = 1;
-//   BddCache_reset(&applycache);
-
-//   for (int k = 0; k < SW_NUM; k++) {
-//     // printf("the sw %d has been completed\n", k);
-//     struct switch_bdd_rs *sw = nt->sws[k];
-//     for (int i = 0; i < sw->nrules; i++) {
-//       gettimeofday(&start,NULL);
-//       BDD in = sw->rules[i]->mf_in;
-//       BDD notin = bdd_not(in);
-//       for (int i = 0; i < count; i++) {
-//         BDD insc = bdd_apply (AP_base->AP_bdds[i], in, bddop_and);
-//         if (insc) {
-//           arr[count] = insc;
-//           count++;
-//         }
-//         insc= bdd_apply (AP_base->AP_bdds[i], notin, bddop_and);
-//         if (insc) {
-//           arr[count] = insc;
-//           count++;
-//         }
-//       }
-//       count = 0;
-//       gettimeofday(&stop,NULL);
-//       long long int update_T = diff(&stop, &start);
-//       // BddCache_reset(&applycache);
-//       printf("APs update when one of it changed: %lld us\n", update_T);
-//     }
-//   }
-//   // printf("there has been the %d aps\n", count);
-//   return 0;
-// }
 
 /*处理JSON数据并生成相应net*/
 /*========================================================================*/
@@ -12551,8 +11927,11 @@ parse_js_rule(cJSON *r) {
 
   cJSON *match = cJSON_GetObjectItem(r, "match");
   struct mf_uint16_t *mf = mf_from_str(match->valuestring);
+  // print_mf_uint16_t(mf);
   r_new->mf_in = mf2bdd(mf);
+  // printf("rule original %d\n",r_new->mf_in);
   r_new->mf_in = bdd_apply(r_new->mf_in, r_new->lks_in, bddop_and);
+
   // bdd_addref(r_new->mf_in);
   // r_new->mf_out = r_new->mf_in; 
   if (strcmp(ac->valuestring, "fwd") == 0) {
@@ -12577,138 +11956,6 @@ parse_js_rule(cJSON *r) {
   // r_new->pbset = NULL;
   return r_new;
 }
-
-// struct switch_bdd_rs *
-// parse_tf_json_to_bddsw (const char *name, uint32_t sw_idx) {
-//   FILE *in = fopen (name, "r");
-//   fseek(in,0,SEEK_END);
-//   long in_len = ftell(in);
-//   fseek(in,0,SEEK_SET);
-//   char *content = (char*)malloc(in_len+1);
-//   fread(content,1,in_len,in);
-//   fclose(in);
-
-//   cJSON *root = cJSON_Parse(content);
-//   if (!root) {
-//       printf("Error before: [%s]\n",cJSON_GetErrorPtr());
-//       return NULL;
-//   }
-
-//   // cJSON *js_tableid = cJSON_GetObjectItem(root, "id"); 
-//   // if (!js_tableid) {
-//   //     printf("No tableid!\n");
-//   //     return NULL;
-//   // }
-
-//   // uint32_t tableid = js_tableid->valueint;
-//   // printf("tableid: %d\n", js_tableid->valueint);
-//   cJSON *js_rules = cJSON_GetObjectItem(root, "rules");
-//   if (!js_rules) {
-//       printf("No rules!\n");
-//       return NULL;
-//   }
-
-//   // cJSON *js_rules = cJSON_GetObjectItem(root, "rules");
-//   // if (!js_rules) {
-//   //     printf("No rules!\n");
-//   //     return NULL;
-//   // }
-
-//   uint32_t nrules = cJSON_GetArraySize(js_rules);
-//   printf("the rule num = %d\n", nrules);
-//   if (!nrules) {
-//       printf("Empty rules!\n");
-//       return NULL;
-//   }
-//   struct bdd_rule *bdd_rules[10000];
-//   uint32_t rules_count = 0;
-//   // struct switch_bdd_rs *sw = NULL;
-//   // if(nrules)
-//   //   sw = xmalloc(2*sizeof(uint32_t)+nrules*sizeof(struct bdd_rule *));
-//   // printf("here is wright!2\n");
-//   for (int i = 0; i < nrules; i++) {
-//     cJSON *rule = cJSON_GetArrayItem(js_rules, nrules - i - 1);
-//     // uint32_t re_i = nrules - i - 1;
-//     struct bdd_rule *r_new = parse_js_rule(rule);
-//     // printf("here is wright!3\n");
-//     if (!rules_count) {
-//       bdd_rules[rules_count] = r_new;
-//       bdd_addref(bdd_rules[rules_count]->mf_in);
-//       bdd_addref(bdd_rules[rules_count]->mf_out);
-//       bdd_rules[rules_count]->sw_idx = sw_idx;
-//       bdd_rules[rules_count]->idx = rules_count;//idx从0开始
-//       rules_count++;
-//     }
-//     else {
-//       bool mergesign = false;
-//       for (int j = 0; j < rules_count; j++) {
-//         // printf("here is wright!4\n");
-//         if (is_links_of_rule_same(r_new->lks_in, bdd_rules[j]->lks_in)) {
-//           // printf("here is wright!41\n");
-//           r_new->mf_in = bdd_apply(r_new->mf_in, bdd_rules[j]->mf_in, bddop_diff);
-//           if (r_new->mf_in == 0){
-//             bdd_addref(r_new->mf_in);
-//             bdd_addref(r_new->mf_out);
-//             // printf("the null rule is %d - %d\n", sw_idx, j);
-//             free_bdd_rule(r_new);
-//             mergesign = true;
-//             break;
-//           }
-//           if (is_r_action_same(r_new, bdd_rules[j])) {
-//             // printf("here is wright!42\n");
-//             if (bdd_rules[j]->mask){
-//               // printf("here is wright!42is\n");
-//               r_new->mf_out = bdd_rw_BDD(r_new->mf_in, r_new->mask, r_new->rewrite);
-//             }
-//             else{
-//               // printf("here is wright!42no\n");
-//               r_new->mf_out = r_new->mf_in;
-//             }
-//             // printf("here is wright!42m\n");
-//             bdd_delref(bdd_rules[j]->mf_in);
-//             bdd_delref(bdd_rules[j]->mf_out);
-//             bdd_rules[j]->mf_in = bdd_apply(bdd_rules[j]->mf_in, r_new->mf_in, bddop_or);
-//             bdd_rules[j]->mf_out = bdd_apply(bdd_rules[j]->mf_out, r_new->mf_out, bddop_or);
-//             bdd_addref(bdd_rules[j]->mf_in);
-//             bdd_addref(bdd_rules[j]->mf_out);
-//             bdd_addref(r_new->mf_in);
-//             bdd_addref(r_new->mf_out);
-//             // printf("here is wright!42f\n");
-//             free_bdd_rule(r_new);
-//             mergesign = true;
-//             // printf("here is wright!42e\n");
-//             break;
-//           }
-//         }
-//       }
-//       if (!mergesign) {
-//         // printf("here is wright!5\n");
-//         bdd_rules[rules_count] = r_new;
-//         if (bdd_rules[rules_count]->mask)
-//           bdd_rules[rules_count]->mf_out = bdd_rw_BDD(r_new->mf_in, r_new->mask, r_new->rewrite);
-//         else
-//           bdd_rules[rules_count]->mf_out = bdd_rules[rules_count]->mf_in;
-//         bdd_addref(bdd_rules[rules_count]->mf_in);
-//         bdd_addref(bdd_rules[rules_count]->mf_out);
-//         bdd_rules[rules_count]->sw_idx = sw_idx;
-//         bdd_rules[rules_count]->idx = rules_count;
-//         rules_count++;
-//         // printf("here is wright!5e\n");
-//       }
-//     }
-//   }
-//   free(content);
-
-//   struct switch_bdd_rs *sw = NULL;
-//   if (rules_count) {
-//     sw = xmalloc(2*sizeof(uint32_t)+rules_count*sizeof(struct bdd_rule *));
-//     sw->sw_idx = sw_idx;
-//     sw->nrules = rules_count;
-//     for (int i = 0; i < rules_count; i++) 
-//       sw->rules[i] = bdd_rules[i];
-//   }
-//   return sw; //在一个交换机中保存的规则和关系
-// }
 
 struct switch_bdd_rs *
 parse_tf_json_to_bddsw_nomerge (const char *name, uint32_t sw_idx) {
@@ -12760,6 +12007,7 @@ parse_tf_json_to_bddsw_nomerge (const char *name, uint32_t sw_idx) {
     bdd_rules[rules_count] = r_new;
     bdd_addref(bdd_rules[rules_count]->mf_in);
     bdd_addref(bdd_rules[rules_count]->mf_out);
+    // printf("rule %d - %d\n",rules_count, bdd_rules[rules_count]->mf_in);
     bdd_rules[rules_count]->sw_idx = sw_idx;
     bdd_rules[rules_count]->idx = rules_count;
     rules_count++;
@@ -12777,230 +12025,6 @@ parse_tf_json_to_bddsw_nomerge (const char *name, uint32_t sw_idx) {
   }
   return sw; //在一个交换机中保存的规则和关系
 }
-
-// struct APs *
-// get_APs_simple_astep(struct APs *input, BDD calcone) {
-//   struct timeval start,stop;  //计算时间差 usec
-//   uint32_t count_out = 0;
-//   BDD output[500000];
-//   gettimeofday(&start,NULL);
-//   // BDD in = sw->rules[i]->mf_in;
-//   BDD notcalc = bdd_not(calcone);
-//   for (int i = 0; i < input->nAPs; i++) {
-//     BDD insc = bdd_apply (input->AP_bdds[i], calcone, bddop_and);
-//     if (insc) {
-//       output[count_out] = insc;
-//       count_out ++;
-//     }
-//     insc= bdd_apply (input->AP_bdds[i], notcalc, bddop_and);
-//     if (insc) {
-//       output[count_out] = insc;
-//       count_out ++;
-//     }
-//   }
-//   gettimeofday(&stop,NULL);
-//   long long int update_T = diff(&stop, &start);
-//   printf("APs compute for all: %lld us, with the %d aps\n", update_T, count_out);
-//   struct APs *tmp = xmalloc(sizeof(uint32_t)+count_out*sizeof(BDD));
-//   tmp->nAPs = count_out;
-//   for (int i = 0; i < count_out; i++)
-//     tmp->AP_bdds[i] = output[i];
-//   // free(input);
-//   return tmp;
-// }
-
-// struct APs *
-// parse_tf_json_to_bddsw_inc_APs (const char *name, uint32_t sw_idx, struct APs *input) {
-//   FILE *in = fopen (name, "r");
-//   fseek(in,0,SEEK_END);
-//   long in_len = ftell(in);
-//   fseek(in,0,SEEK_SET);
-//   char *content = (char*)malloc(in_len+1);
-//   fread(content,1,in_len,in);
-//   fclose(in);
-
-//   cJSON *root = cJSON_Parse(content);
-//   if (!root) {
-//       printf("Error before: [%s]\n",cJSON_GetErrorPtr());
-//       return NULL;
-//   }
-
-//   // cJSON *js_tableid = cJSON_GetObjectItem(root, "id"); 
-//   // if (!js_tableid) {
-//   //     printf("No tableid!\n");
-//   //     return NULL;
-//   // }
-
-//   // uint32_t tableid = js_tableid->valueint;
-//   // printf("tableid: %d\n", js_tableid->valueint);
-//   cJSON *js_rules = cJSON_GetObjectItem(root, "rules");
-//   if (!js_rules) {
-//       printf("No rules!\n");
-//       return NULL;
-//   }
-
-//   uint32_t nrules = cJSON_GetArraySize(js_rules);
-//   printf("the rule num = %d\n", nrules);
-//   if (!nrules) {
-//       printf("Empty rules!\n");
-//       return NULL;
-//   }
-//   struct bdd_rule *bdd_rules[10000];
-//   uint32_t rules_count = 0;
-
-//   struct APs *tmpAP = input;
-//   struct APs *freeAP = NULL;
-//   // struct switch_bdd_rs *sw = NULL;
-//   // if(nrules)
-//   //   sw = xmalloc(2*sizeof(uint32_t)+nrules*sizeof(struct bdd_rule *));
-//   // printf("here is wright!2\n");
-//   for (int i = 0; i < nrules; i++) {
-//     cJSON *rule = cJSON_GetArrayItem(js_rules, nrules - i - 1);
-//     // uint32_t re_i = nrules - i - 1;
-//     struct bdd_rule *r_new = parse_js_rule(rule);
-//     // printf("here is wright!3\n");
-//     if (!rules_count) {
-//       bdd_rules[rules_count] = r_new;
-//       bdd_addref(bdd_rules[rules_count]->mf_in);
-//       bdd_addref(bdd_rules[rules_count]->mf_out);
-//       bdd_rules[rules_count]->sw_idx = sw_idx;
-//       bdd_rules[rules_count]->idx = rules_count;
-//       freeAP = tmpAP;
-//       tmpAP = get_APs_simple_astep(tmpAP, bdd_rules[rules_count]->mf_in);
-//       free(freeAP);
-//       rules_count++;
-//     }
-//     else {
-//       bool mergesign = false;
-//       for (int j = 0; j < rules_count; j++) {
-//         // printf("here is wright!4\n");
-//         if (is_links_of_rule_same(r_new->lks_in, bdd_rules[j]->lks_in)) {
-//           // printf("here is wright!41\n");
-//           r_new->mf_in = bdd_apply(r_new->mf_in, bdd_rules[j]->mf_in, bddop_diff);
-//           if (r_new->mf_in == 0){
-//             bdd_addref(r_new->mf_in);
-//             bdd_addref(r_new->mf_out);
-//             free_bdd_rule(r_new);
-//             mergesign = true;
-//             printf("APs compute for all: 0 us, with the 0 aps\n");
-//             break;
-//           }
-//           if (is_r_action_same(r_new, bdd_rules[j])) {
-//             // printf("here is wright!42\n");
-//             if (bdd_rules[j]->mask){
-//               // printf("here is wright!42is\n");
-//               r_new->mf_out = bdd_rw_BDD(r_new->mf_in, r_new->mask, r_new->rewrite);
-//             }
-//             else{
-//               // printf("here is wright!42no\n");
-//               r_new->mf_out = r_new->mf_in;
-//             }
-//             // printf("here is wright!42m\n");
-//             bdd_delref(bdd_rules[j]->mf_in);
-//             bdd_delref(bdd_rules[j]->mf_out);
-//             bdd_rules[j]->mf_in = bdd_apply(bdd_rules[j]->mf_in, r_new->mf_in, bddop_or);
-//             bdd_rules[j]->mf_out = bdd_apply(bdd_rules[j]->mf_out, r_new->mf_out, bddop_or);
-//             bdd_addref(bdd_rules[j]->mf_in);
-//             bdd_addref(bdd_rules[j]->mf_out);
-//             bdd_addref(r_new->mf_in);
-//             bdd_addref(r_new->mf_out);
-//             freeAP = tmpAP;
-//             tmpAP = get_APs_simple_astep(tmpAP, bdd_rules[j]->mf_in);
-//             free(freeAP);
-//             // printf("here is wright!42f\n");
-//             free_bdd_rule(r_new);
-//             mergesign = true;
-            
-//             // printf("here is wright!42e\n");
-//             break;
-//           }
-//         }
-//       }
-//       if (!mergesign) {
-//         // printf("here is wright!5\n");
-//         bdd_rules[rules_count] = r_new;
-//         if (bdd_rules[rules_count]->mask)
-//           bdd_rules[rules_count]->mf_out = bdd_rw_BDD(r_new->mf_in, r_new->mask, r_new->rewrite);
-//         else
-//           bdd_rules[rules_count]->mf_out = bdd_rules[rules_count]->mf_in;
-//         bdd_addref(bdd_rules[rules_count]->mf_in);
-//         bdd_addref(bdd_rules[rules_count]->mf_out);
-//         bdd_rules[rules_count]->sw_idx = sw_idx;
-//         bdd_rules[rules_count]->idx = rules_count;
-//         freeAP = tmpAP;
-//         tmpAP = get_APs_simple_astep(tmpAP, bdd_rules[rules_count]->mf_in);
-//         rules_count++;
-//         free(freeAP);
-//         // printf("here is wright!5e\n");
-//       }
-//     }
-//   }
-//   free(content);
-
-//   // struct switch_bdd_rs *sw = NULL;
-//   // if (rules_count) {
-//   //   sw = xmalloc(2*sizeof(uint32_t)+rules_count*sizeof(struct bdd_rule *));
-//   //   sw->sw_idx = sw_idx;
-//   //   sw->nrules = rules_count;
-//   //   for (int i = 0; i < rules_count; i++) 
-//   //     sw->rules[i] = bdd_rules[i];
-//   // }
-
-//   return tmpAP; //在一个交换机中保存的规则和关系
-// }
-
-// struct APs *
-// get_network_bdd_jsondata_inc_APs(const char *tfdir, const char *name) {
-//   printf ("Parsing: \n");
-//   fflush (stdout);
-//   struct network_bdd *netmp;
-//   // struct parse_tf *ttf;
-//   // int stages;
-
-//   char buf[255 + 1];
-//   snprintf (buf, sizeof buf, "../%s/%s", tfdir, name);
-//   char *base = buf + strlen (buf); //base指向buf后面的部分
-//   // strcpy (base, "/stages");//buf后面接上"/stages"
-//   // printf("%s\n", buf);
-
-//   // FILE *f = fopen (buf, "r");//打开"/stages"
-//   // if (!f) err (1, "Can't open %s", buf);//stanford为3
-//   // if (!fscanf (f, "%d", &stages)) errx (1, "Can't read NTF stages from %s", buf);
-//   // fclose (f);
-
-//   *base = 0;
-//   strcpy (base , "/");
-//   // printf("base:%s\n", base);
-//   // printf("buf:%s\n", buf);
-//   struct dirent **tfs;//#include<dirent.h>，为了获取某文件夹目录内容
-//   //成功则返回复制到tfs数组中的数据结构数目，每读取一个传给filter_json，过滤掉不想要的，这里要.json
-//   int n = scandir (buf, &tfs, filter_json, alphasort);//为了获取某文件夹目录内容，按字母排序
-//   if (n <= 0) err (1, "Couldn't find .json files in %s", buf);
-//   // n = 1;//控制只取一个来实验
-//   // printf("n:%d\n", n);
-
-//   netmp = xmalloc(sizeof(uint32_t)+n*sizeof(struct switch_bdd_rs *));
-//   netmp->nsws =  n;
-//   // uint32_t nmergerules_sum = 0;
-//   struct APs *tmpAP = xmalloc(sizeof(uint32_t)+sizeof(BDD));
-//   tmpAP->nAPs = 1;
-//   tmpAP->AP_bdds[0] = 1;
-//   for (int i = 0; i < n; i++) {//对找到的 .json 文件处理 0到n-1
-//       strcpy (base + 1, tfs[i]->d_name); //文件名，base+1写文件名，记录文件名,也就是要读取的名字
-//       free (tfs[i]);
-
-//       tmpAP = parse_tf_json_to_bddsw_inc_APs (buf, i, tmpAP);//解析 .json
-//       // nmergerules_sum += netmp->sws[i]->nrules;
-//       // assert (sw);
-//       // printf("the num of nmerged rules of table %d is: %d\n", i, netmp->sws[i]->nrules);
-//   }
-//   // check_mf(nsw);
-//   free (tfs);
-//   // printf("the num of nmerged rules is: %d\n", nmergerules_sum);
-
-
-//   return tmpAP;
-// }
 
 struct network_bdd *
 get_network_bdd_jsondata(const char *tfdir, const char *name) {
@@ -13055,162 +12079,6 @@ get_network_bdd_jsondata(const char *tfdir, const char *name) {
   return netmp;
 }
 
-// struct switch_bdd_rs *
-// parse_tf_json_to_bddsw_noconf (const char *name, uint32_t sw_idx) {
-//   FILE *in = fopen (name, "r");
-//   fseek(in,0,SEEK_END);
-//   long in_len = ftell(in);
-//   fseek(in,0,SEEK_SET);
-//   char *content = (char*)malloc(in_len+1);
-//   fread(content,1,in_len,in);
-//   fclose(in);
-
-//   cJSON *root = cJSON_Parse(content);
-//   if (!root) {
-//       printf("Error before: [%s]\n",cJSON_GetErrorPtr());
-//       return NULL;
-//   }
-
-//   // cJSON *js_tableid = cJSON_GetObjectItem(root, "id"); 
-//   // if (!js_tableid) {
-//   //     printf("No tableid!\n");
-//   //     return NULL;
-//   // }
-
-//   // uint32_t tableid = js_tableid->valueint;
-//   // printf("tableid: %d\n", js_tableid->valueint);
-//   cJSON *js_rules = cJSON_GetObjectItem(root, "rules");
-//   if (!js_rules) {
-//       printf("No rules!\n");
-//       return NULL;
-//   }
-
-//   uint32_t nrules = cJSON_GetArraySize(js_rules);
-//   printf("the rule num = %d\n", nrules);
-//   if (!nrules) {
-//       printf("Empty rules!\n");
-//       return NULL;
-//   }
-//   struct bdd_rule *bdd_rules[10000];
-//   uint32_t rules_count = 0;
-//   // struct switch_bdd_rs *sw = NULL;
-//   // if(nrules)
-//   //   sw = xmalloc(2*sizeof(uint32_t)+nrules*sizeof(struct bdd_rule *));
-//   // printf("here is wright!2\n");
-//   for (int i = 0; i < nrules; i++) {
-//     cJSON *rule = cJSON_GetArrayItem(js_rules, nrules - i - 1);
-//     // uint32_t re_i = nrules - i - 1;
-//     struct bdd_rule *r_new = parse_js_rule(rule);
-//     // printf("here is wright!3\n");
-//     if (!rules_count) {
-//       bdd_rules[rules_count] = r_new;
-//       bdd_addref(bdd_rules[rules_count]->mf_in);
-//       bdd_addref(bdd_rules[rules_count]->mf_out);
-//       bdd_rules[rules_count]->sw_idx = sw_idx;
-//       bdd_rules[rules_count]->idx = rules_count;
-//       rules_count++;
-//     }
-//     else {
-//       for (int j = 0; j < rules_count; j++) {
-//         // printf("here is wright!4\n");
-//         if (is_links_of_rule_same(r_new->lks_in, bdd_rules[j]->lks_in)) {
-//           // printf("here is wright!41\n");
-//           r_new->mf_in = bdd_apply(r_new->mf_in, bdd_rules[j]->mf_in, bddop_diff);
-//           if (r_new->mask){
-//             r_new->mf_out = bdd_rw_BDD(r_new->mf_in, r_new->mask, r_new->rewrite);
-//           }
-//           else{
-//             r_new->mf_out = r_new->mf_in;
-//           }
-//         }
-//       }
-
-//       bdd_rules[rules_count] = r_new;
-//       bdd_addref(bdd_rules[rules_count]->mf_in);
-//       bdd_addref(bdd_rules[rules_count]->mf_out);
-//       bdd_rules[rules_count]->sw_idx = sw_idx;
-//       bdd_rules[rules_count]->idx = rules_count;
-// //   bdd_r->vtnode_in = mtbdd_maketnode_from_r(bdd_r);
-// //   bdd_addref(bdd_r->vtnode_in);
-// //   bdd_r->mtbdd_in = bdd_rule_get_mtbdd_in(r, bdd_r->vtnode_in); 
-// //   bdd_addref(bdd_r->mtbdd_in);
-//       rules_count++;
-//     }
-//   }
-//   free(content);
-
-//   struct switch_bdd_rs *sw = NULL;
-//   if (rules_count) {
-//     sw = xmalloc(2*sizeof(uint32_t)+rules_count*sizeof(struct bdd_rule *));
-//     sw->sw_idx = sw_idx;
-//     sw->nrules = rules_count;
-//     for (int i = 0; i < rules_count; i++) 
-//       sw->rules[i] = bdd_rules[i];
-//   }
-//   return sw; //在一个交换机中保存的规则和关系
-// }
-
-// struct network_bdd *
-// get_network_bdd_jsondata_noconf(const char *tfdir, const char *name) {
-//   printf ("Parsing: \n");
-//   fflush (stdout);
-//   struct network_bdd *netmp;
-//   // struct parse_tf *ttf;
-//   // int stages;
-
-//   char buf[255 + 1];
-//   snprintf (buf, sizeof buf, "../%s/%s", tfdir, name);
-//   char *base = buf + strlen (buf); //base指向buf后面的部分
-//   // strcpy (base, "/stages");//buf后面接上"/stages"
-//   // printf("%s\n", buf);
-
-//   // FILE *f = fopen (buf, "r");//打开"/stages"
-//   // if (!f) err (1, "Can't open %s", buf);//stanford为3
-//   // if (!fscanf (f, "%d", &stages)) errx (1, "Can't read NTF stages from %s", buf);
-//   // fclose (f);
-
-//   *base = 0;
-//   strcpy (base , "/");
-//   // printf("base:%s\n", base);
-//   // printf("buf:%s\n", buf);
-//   struct dirent **tfs;//#include<dirent.h>，为了获取某文件夹目录内容
-//   //成功则返回复制到tfs数组中的数据结构数目，每读取一个传给filter_json，过滤掉不想要的，这里要.json
-//   int n = scandir (buf, &tfs, filter_json, alphasort);//为了获取某文件夹目录内容，按字母排序
-//   if (n <= 0) err (1, "Couldn't find .json files in %s", buf);
-//   // n = 1;//控制只取一个来实验
-//   // printf("n:%d\n", n);
-
-//   netmp = xmalloc(sizeof(uint32_t)+n*sizeof(struct switch_bdd_rs *));
-//   netmp->nsws =  n;
-//   uint32_t nmergerules_sum = 0;
-//   for (int i = 0; i < n; i++) {//对找到的 .json 文件处理 0到n-1
-//       strcpy (base + 1, tfs[i]->d_name); //文件名，base+1写文件名，记录文件名,也就是要读取的名字
-//       free (tfs[i]);
-
-//       netmp->sws[i] = parse_tf_json_to_bddsw_noconf (buf, i);//解析 .json
-
-//       nmergerules_sum += netmp->sws[i]->nrules;
-//       // assert (sw);
-//       printf("the num of no conflict rules of table %d is: %d\n", i, netmp->sws[i]->nrules);
-//   }
-//   // check_mf(nsw);
-//   free (tfs);
-//   printf("the num of no conflict rules is: %d\n", nmergerules_sum);
-
-//   return netmp;
-// }
-
-// void
-// test_APs_simple( struct APs *aps, struct network_bdd *nt) {
-//   for (int k = 0; k < SW_NUM; k++) {
-//     // printf("the sw %d has been completed\n", k);
-//     struct switch_bdd_rs *sw = nt->sws[k];
-//     for (int i = 0; i < sw->nrules; i++) {
-//       struct APs *freeap = get_APs_simple_astep(aps, sw->rules[i]->mf_in);
-//       free(freeap);
-//     }
-//   }
-// }
 
 /*稀疏矩阵处理with BDD*/
 /*========================================================================*/
@@ -13457,479 +12325,6 @@ bdd_rw_back_BDD(BDD a, BDD a_IN, struct mask_uint16_t *mask) {
   return root_IN;
 }
 
-// struct bdd_saved_arr *
-// copy_bdd_saved_arr(struct bdd_saved_arr *bdd_arr) {
-//   struct bdd_saved_arr *tmp = xmalloc(sizeof(int)+(bdd_arr->arr_num)*sizeof(struct BddNode_saved));
-//   tmp->arr_num = bdd_arr->arr_num;
-//   memcpy (tmp->bdd_s, bdd_arr->bdd_s, (bdd_arr->arr_num)*sizeof(struct BddNode_saved)); 
-//   return tmp;
-// }
-
-// void
-// print_bdd_saved_arr(struct bdd_saved_arr *bdd_arr) {
-//   printf("There are %d nodes\n", bdd_arr->arr_num);
-//   for (int i = 0; i < bdd_arr->arr_num; i++){
-//     printf("node:%d, var:%d, low:%d, high:%d\n", i, bdd_arr->bdd_s[i].var, bdd_arr->bdd_s[i].low, bdd_arr->bdd_s[i].high);
-//   }
-// }
-
-// // struct matrix_Tri_express * 
-// // insc_to_Tri_express_rlimit(struct bdd_rule *r_in, struct bdd_rule *r_out, BDD v_and) {
-
-// //   struct nf_space_pair *pair = xcalloc(1, sizeof *pair);
-// //   // struct links_of_rule *lks = rule_links_get(r_in, IN_LINK);
-// //   // struct links_of_rule *lks_out = rule_links_get(r_in, OUT_LINK);
-// //   // struct links_of_rule *lks_in = rule_links_get(r_out, IN_LINK);
-// //   // lks_out = links_insc(lks_in, lks_out);
-// //   // int add_len = sizeof(uint16_t);
-// //   struct matrix_Tri_express *tmp = xcalloc(1, sizeof *tmp);
-// //   tmp->elem = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+sizeof(struct nf_space_pair *));
-// //   tmp->elem->npairs = 1;
-// //   // tmp->row_idx = matrix_idx_get_r(r_in);
-// //   // tmp->col_idx = matrix_idx_get_r(r_out);
-// //   tmp->row_idx = matrix_idx_get_2idx(r_in->sw_idx, r_in->idx);
-// //   tmp->col_idx = matrix_idx_get_2idx(r_out->sw_idx, r_out->idx);
-// //   // struct bdd_saved_arr *bdd_arr_out = bdd_save_arr(v_and);
-
-// //   pair->in = xcalloc(1, sizeof *(pair->in));// 1,16(两个指针为16)
-// //   pair->in->lks = copy_links_of_rule(r_in->lks_in);
-// //   pair->out = xcalloc(1, sizeof *(pair->out));
-// //   pair->out->lks = copy_links_of_rule(r_in->lks_out);
-
-// //   pair->r_arr = NULL;
-// //   // pair->r_arr = xmalloc(sizeof (uint32_t)+2*sizeof (struct r_idx));
-// //   // pair->r_arr->nrs = 2;
-// //   // pair->r_arr->ridx[0].sw_idx = r_in->sw_idx;
-// //   // pair->r_arr->ridx[0].r_idx = r_in->idx;
-// //   // pair->r_arr->ridx[1].sw_idx = r_out->sw_idx;
-// //   // pair->r_arr->ridx[1].r_idx = r_out->idx;
-
-// //   pair->out->mf = v_and;
-// //   bdd_addref(pair->out->mf);
-// //   tmp->elem->bdd_out = pair->out->mf;
-// //   bdd_addref(pair->out->mf);
-
-// //   if (r_in->mask) {
-// //     struct mask_uint16_t *mask = xcalloc(1, sizeof *mask);
-// //     struct mask_uint16_t *rewrite = xcalloc(1, sizeof *rewrite);
-// //     for (uint32_t j = 0; j < MF_LEN; j++) {
-// //       mask->v[j] = r_in->mask->v[j];
-// //       rewrite->v[j] = r_in->rewrite->v[j];
-// //     }
-// //     // struct mf_uint16_t *r_in_mf = get_r_out_mf(r_in);
-// //     BDD bdd_in = r_in->mf_in;
-// //     BDD bdd_arr_tmp = bdd_rw_back_BDD(v_and, bdd_in, mask);
-// //     // BDD bdd_arr_tmp = bdd_rw_back(v_and, bdd_in, mask);
-
-// //     pair->in->mf = bdd_arr_tmp;
-// //     bdd_addref(pair->in->mf);
-// //     tmp->elem->bdd_in = pair->in->mf;
-// //     bdd_addref(pair->in->mf);
-// //     pair->mask = mask;
-// //     pair->rewrite = rewrite;
-// //   }
-// //   else {
-// //     pair->in->mf = v_and;
-// //     bdd_addref(pair->in->mf);
-// //     tmp->elem->bdd_in = pair->in->mf;
-// //     bdd_addref(pair->in->mf);
-// //     pair->mask = NULL;
-// //     pair->rewrite = NULL;
-// //   }
-// //   tmp->elem->nf_pairs[0] = pair;
-// //   return tmp;
-// // }
-
-// int
-// cmp_matrix_Tri_express(const void *a, const void *b) {
-//   struct matrix_Tri_express *a_tmp = *((struct matrix_Tri_express **)a);
-//   struct matrix_Tri_express *b_tmp = *((struct matrix_Tri_express **)b);
-//   uint32_t cmp = a_tmp->row_idx - b_tmp->row_idx;
-//   if (cmp)
-//     return cmp;
-//   return a_tmp->col_idx - b_tmp->col_idx;
-// }
-
-// int
-// cmp_matrix_Tri_express_CSC(const void *a, const void *b) {
-//   struct matrix_Tri_express *a_tmp = *((struct matrix_Tri_express **)a);
-//   struct matrix_Tri_express *b_tmp = *((struct matrix_Tri_express **)b);
-//   uint32_t cmp = a_tmp->col_idx - b_tmp->col_idx;
-//   if (cmp)
-//     return cmp;
-//   return a_tmp->row_idx - b_tmp->row_idx;
-// }
-
-// bool
-// Tri_is_eq (struct matrix_Tri_express *latter, struct matrix_Tri_express *former) {
-//   if ((latter->row_idx == former->row_idx)&&(latter->col_idx == former->col_idx))
-//     return 1;
-//   return 0;
-// }
-
-// struct matrix_element *
-// matrix_elem_plus(struct matrix_element *a, struct matrix_element *b) {
-//   if (!b)
-//     return a;
-//   if (!a)
-//     return b;
-//   struct nf_space_pair *nps[100000];
-//   uint32_t count = 0;
-//   for (int i = 0; i < a->npairs; i++) {
-//     nps[count] = a->nf_pairs[i]; 
-//     count++;
-//   }
-
-//   for (int i = 0; i < b->npairs; i++) {
-//     bool issame = false;
-//     for (int j = 0; j < count; j++) {
-//       if (issame_nf_space_pair_action(nps[j], b->nf_pairs[i])) {
-//         bdd_delref(nps[j]->in->mf);
-//         bdd_delref(nps[j]->out->mf);
-//         nps[j]->in->mf = bdd_apply(nps[j]->in->mf, b->nf_pairs[i]->in->mf, bddop_or);
-//         nps[j]->out->mf = bdd_apply(nps[j]->out->mf, b->nf_pairs[i]->out->mf, bddop_or);
-//         bdd_addref(nps[j]->in->mf);
-//         bdd_addref(nps[j]->out->mf);
-//         issame = true;
-//         free_nf_space_pair(b->nf_pairs[i]);
-//         break;
-//       } 
-//     }
-//     if (!issame) {
-//       nps[count] = b->nf_pairs[i];
-//       count++;
-//     }
-//   }
-
-//   struct matrix_element *tmp = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+count*sizeof(struct nf_space_pair *));
-//   tmp->npairs = count;
-//   if (a->bdd_in == b->bdd_in) {
-//     tmp->bdd_in = a->bdd_in;
-//     bdd_delref(a->bdd_in);
-//   }
-//   else {
-//     tmp->bdd_in = bdd_apply(a->bdd_in, b->bdd_in, bddop_or);
-//     bdd_delref(a->bdd_in);
-//     bdd_delref(b->bdd_in);
-//     bdd_addref(tmp->bdd_in);
-//   }
-//   if (a->bdd_out == b->bdd_out) {
-//     tmp->bdd_out = a->bdd_out;
-//     bdd_delref(a->bdd_out);
-//   }
-//   else {
-//     tmp->bdd_out = bdd_apply(a->bdd_out, b->bdd_out, bddop_or);
-//     bdd_delref(a->bdd_out);
-//     bdd_delref(b->bdd_out);
-//     bdd_addref(tmp->bdd_out);
-//   }
-//   for (int i = 0; i < count; i++) 
-//     tmp->nf_pairs[i] = nps[i]; 
-
-//   free(a);
-//   a = NULL;
-//   free(b);
-//   b = NULL;
-//   return tmp; 
-// }
-
-// struct nf_space *
-// copy_nf_space(struct nf_space *ns) {
-//   if (!ns)
-//     return NULL;
-//   struct nf_space *tmp = xmalloc(sizeof(*tmp));
-//   tmp->mf = ns->mf;
-//   bdd_addref(tmp->mf);
-//   /*if the link has always been changed in compution the copy should be used*/
-//   tmp->lks = copy_links_of_rule(ns->lks); 
-//   // tmp->lks = ns->lks;
-
-//   return tmp;
-// }
-
-// struct nf_space_pair *
-// copy_nf_space_pair(struct nf_space_pair *nsp) {
-//   if (!nsp)
-//     return NULL;
-//   struct nf_space_pair *tmp = xmalloc(sizeof(*tmp));
-//   tmp->in = copy_nf_space(nsp->in);
-//   tmp->out = copy_nf_space(nsp->out);
-//   /*if the mask and rewrite have always been changed in compution the copy should be used*/
-//   tmp->mask = copy_mask_uint16_t(nsp->mask);
-//   tmp->rewrite = copy_mask_uint16_t(nsp->rewrite);
-//   tmp->mask = nsp->mask;
-//   tmp->rewrite = nsp->rewrite;
-//   tmp->r_arr = nsp->r_arr;
-//   return tmp;
-// }
-
-// struct matrix_element *
-// copy_matrix_element(struct matrix_element *a) {
-//   if(!a)
-//     return NULL;
-//   struct matrix_element *tmp = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+(a->npairs)*sizeof(struct nf_space_pair *));
-//   tmp->npairs = a->npairs;
-//   tmp->bdd_in = a->bdd_in;
-//   bdd_addref(tmp->bdd_in);
-//   tmp->bdd_out = a->bdd_out;
-//   bdd_addref(tmp->bdd_out);
-//   for (int i = 0; i < a->npairs; i++)
-//     tmp->nf_pairs[i] = copy_nf_space_pair(a->nf_pairs[i]);
-//   return tmp;
-// }
-
-// struct matrix_element *
-// matrix_elem_plus_keepb(struct matrix_element *a, struct matrix_element *b) {
-//   if (!b)
-//     return a;
-//   if (!a)
-//     return copy_matrix_element(b);
-//   struct nf_space_pair *nps[100000];
-//   uint32_t count = 0;
-//   for (int i = 0; i < a->npairs; i++) {
-//     nps[count] = a->nf_pairs[i]; 
-//     count++;
-//   }
-
-//   for (int i = 0; i < b->npairs; i++) {
-//     bool issame = false;
-//     for (int j = 0; j < count; j++) {
-//       if (issame_nf_space_pair_action(nps[j], b->nf_pairs[i])) {
-//         bdd_delref(nps[j]->in->mf);
-//         bdd_delref(nps[j]->out->mf);
-//         nps[j]->in->mf = bdd_apply(nps[j]->in->mf, b->nf_pairs[i]->in->mf, bddop_or);
-//         nps[j]->out->mf = bdd_apply(nps[j]->out->mf, b->nf_pairs[i]->out->mf, bddop_or);
-//         bdd_addref(nps[j]->in->mf);
-//         bdd_addref(nps[j]->out->mf);
-//         issame = true;
-//         // free_nf_space_pair(b->nf_pairs[i]);
-//         break;
-//       } 
-//     }
-//     if (!issame) {
-//       nps[count] = copy_nf_space_pair(b->nf_pairs[i]);
-//       // nps[count] = b->nf_pairs[i];
-//       count++;
-//     }
-//   }
-
-//   struct matrix_element *tmp = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+count*sizeof(struct nf_space_pair *));
-//   tmp->npairs = count;
-//   if (a->bdd_in == b->bdd_in) {
-//     tmp->bdd_in = a->bdd_in;
-//   }
-//   else {
-//     tmp->bdd_in = bdd_apply(a->bdd_in, b->bdd_in, bddop_or);
-//     bdd_delref(a->bdd_in);
-//     bdd_addref(tmp->bdd_in);
-//   }
-//   if (a->bdd_out == b->bdd_out) {
-//     tmp->bdd_out = a->bdd_out;
-//   }
-//   else {
-//     tmp->bdd_out = bdd_apply(a->bdd_out, b->bdd_out, bddop_or);
-//     bdd_delref(a->bdd_out);
-//     bdd_addref(tmp->bdd_out);
-//   }
-//   for (int i = 0; i < count; i++) 
-//     tmp->nf_pairs[i] = nps[i]; 
-//   free(a);
-//   a = NULL;
-//   return tmp; 
-// }
-
-// struct matrix_element *
-// matrix_elem_plus_reuse(struct matrix_element *a, struct matrix_element *b) {
-//   if (!b)
-//     return a;
-//   if (!a)
-//     return b;
-//   struct nf_space_pair *nps[10000];
-//   struct nf_space_pair *nps_new[10000];
-//   uint32_t count = 0;
-//   for (int i = 0; i < a->npairs; i++) {
-//     nps[count] = a->nf_pairs[i];
-//     nps_new[count] = NULL;
-//     count++;
-//   }
-
-//   for (int i = 0; i < b->npairs; i++) {
-//     bool issame = false;
-//     for (int j = 0; j < a->npairs; j++) {
-//       if (issame_nf_space_pair_action(nps[j], b->nf_pairs[i])) {
-//         if (nps_new[j]) {
-//           bdd_delref(nps[j]->in->mf);
-//           bdd_delref(nps[j]->out->mf);
-//           nps[j]->in->mf = bdd_apply(nps[j]->in->mf, b->nf_pairs[i]->in->mf, bddop_or);
-//           nps[j]->out->mf = bdd_apply(nps[j]->out->mf, b->nf_pairs[i]->out->mf, bddop_or);
-//           bdd_addref(nps[j]->in->mf);
-//           bdd_addref(nps[j]->out->mf);
-//         }
-//         else{
-//           nps_new[j] = copy_nf_space_pair(nps[j]);
-//           bdd_delref(nps[j]->in->mf);
-//           bdd_delref(nps[j]->out->mf);
-//           nps[j]->in->mf = bdd_apply(nps[j]->in->mf, b->nf_pairs[i]->in->mf, bddop_or);
-//           nps[j]->out->mf = bdd_apply(nps[j]->out->mf, b->nf_pairs[i]->out->mf, bddop_or);
-//           bdd_addref(nps[j]->in->mf);
-//           bdd_addref(nps[j]->out->mf);
-//         }
-//         // free_nf_space_pair(b->nf_pairs[i]);
-//         break;
-//       } 
-//     }
-//     if (!issame) {
-//       nps[count] = b->nf_pairs[i];
-//       nps_new[count] = NULL;
-//       // nps[count] = b->nf_pairs[i];
-//       count++;
-//     }
-//   }
-
-//   struct matrix_element *tmp = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+count*sizeof(struct nf_space_pair *));
-//   tmp->npairs = count;
-//   if (a->bdd_in == b->bdd_in) {
-//     tmp->bdd_in = a->bdd_in;
-//   }
-//   else {
-//     tmp->bdd_in = bdd_apply(a->bdd_in, b->bdd_in, bddop_or);
-//     bdd_delref(a->bdd_in);
-//     bdd_addref(tmp->bdd_in);
-//   }
-//   if (a->bdd_out == b->bdd_out) {
-//     tmp->bdd_out = a->bdd_out;
-//   }
-//   else {
-//     tmp->bdd_out = bdd_apply(a->bdd_out, b->bdd_out, bddop_or);
-//     bdd_delref(a->bdd_out);
-//     bdd_addref(tmp->bdd_out);
-//   }
-//   for (int i = 0; i < count; i++) {
-//     if (nps_new[i]) 
-//       tmp->nf_pairs[i] = nps_new[i];
-//     else
-//       tmp->nf_pairs[i] = nps[i];
-//   } 
-    
-//   // free(a);
-//   // a = NULL;
-//   return tmp; 
-// }
-
-// struct matrix_CSR *
-// gen_matrix_CSR_from_Tris(struct Tri_arr *Tri_arr) {
-
-//   if (Tri_arr->nTris==0){
-//     return NULL;
-//   }
-//   // printf("matrix_CSR\n");
-//   // printf("there is wrong: %d - %d\n", data_allr_nums, Tri_arr->nTris);
-//   qsort(Tri_arr->arr, Tri_arr->nTris,sizeof (struct matrix_Tri_express *), cmp_matrix_Tri_express);
-  
-//   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+data_allr_nums*sizeof(struct CS_matrix_idx_v_arr *));
-//   tmp->nrows = data_allr_nums;
-//   for (int i = 0; i < data_allr_nums; i++){
-//     tmp->rows[i] = NULL;
-//   }
-//   // printf("matrix_CSR\n");
-//   // printf("matrix_CSR\n");
-//   // struct matrix_Tri_express *Tri_arr_tmp[Tri_arr->nTris];
-//   struct matrix_Tri_express **Tri_arr_tmp = xcalloc(Tri_arr->nTris,sizeof(struct matrix_Tri_express *));
-//   Tri_arr_tmp[0] = Tri_arr->arr[0];
-//   if (Tri_arr->nTris==1){   
-//     uint32_t row_idx = Tri_arr_tmp[0]->row_idx;
-//     tmp->rows[row_idx] = xmalloc(2*sizeof(uint32_t)+sizeof(struct CS_matrix_idx_v *));
-//     tmp->rows[row_idx]->idx = row_idx;
-//     tmp->rows[row_idx]->nidx_vs = 1;
-//     tmp->rows[row_idx]->idx_vs[0] = xmalloc(sizeof(struct CS_matrix_idx_v));
-//     tmp->rows[row_idx]->idx_vs[0]->idx = Tri_arr_tmp[0]->col_idx;
-//     tmp->rows[row_idx]->idx_vs[0]->elem = Tri_arr_tmp[0]->elem;
-//     return tmp;
-//   }
-//   uint32_t count = 1, last = 0;
-//   uint32_t begin = 0, count_row = 1;
-//   // uint32_t check = 0;
-//   // printf("matrix_CSR %d - %d\n", Tri_arr->arr[21280]->row_idx, Tri_arr->arr[21280]->col_idx);
-
-//   for (uint32_t i = 1; i < Tri_arr->nTris; i++) {   
-//     // for (int i = 0; i < count * MF_LEN; i += MF_LEN) {
-//     //计数乘以MF_LEN，i+MF_LEN，i，按match所占uint16_t位数循环，在前面的文件中
-//     if (Tri_is_eq (Tri_arr->arr[i], Tri_arr->arr[last])) {
-
-
-//       // Tri_arr_tmp[count-1]->elem = matrix_elem_plus(Tri_arr_tmp[count-1]->elem, Tri_arr->arr[i]->elem);//保留相同部分，r-r通过两条链路
-//       // free(Tri_arr->arr[i]);
-//       free_matrix_element(Tri_arr->arr[i]->elem);
-//       free(Tri_arr->arr[i]);
-//       continue;
-//     }
-//     Tri_arr_tmp[count] = Tri_arr->arr[i];
-//     if (Tri_arr_tmp[count]->row_idx != Tri_arr_tmp[count-1]->row_idx) {
-//       uint32_t row_idx = Tri_arr_tmp[begin]->row_idx;     
-//       tmp->rows[row_idx] = xmalloc(2*sizeof(uint32_t)+count_row*sizeof(struct CS_matrix_idx_v *));
-//       // if(!(tmp->rows[row_idx]))
-//       //   printf("there is wrong\n");
-//       tmp->rows[row_idx]->nidx_vs = count_row;
-//       tmp->rows[row_idx]->idx = row_idx;
-//       // check+=tmp->rows[row_idx]->nidx_vs;
-//       for (uint32_t j = 0; j < count_row; j++){
-//         tmp->rows[row_idx]->idx_vs[j] = xmalloc(sizeof(struct CS_matrix_idx_v));
-//         tmp->rows[row_idx]->idx_vs[j]->idx = Tri_arr_tmp[begin+j]->col_idx;
-//         tmp->rows[row_idx]->idx_vs[j]->elem = Tri_arr_tmp[begin+j]->elem;
-//       }
-//       count_row = 0;
-//       begin = count;
-//     }
-//     last = i;
-//     count++; 
-//     count_row++;  
-//   }
-//   // assert(!(check-count));
-//   uint32_t row_idx = Tri_arr_tmp[begin]->row_idx;
-//   // printf("%d\n", row_idx);
-//   tmp->rows[row_idx] = xmalloc(2*sizeof(uint32_t)+count_row*sizeof(struct CS_matrix_idx_v *));
-//   tmp->rows[row_idx]->idx = row_idx;
-//   // if(!(tmp->rows[row_idx]))
-//   //   printf("there is wrong\n");
-//   tmp->rows[row_idx]->nidx_vs = count_row;
-//   // check+=tmp->rows[row_idx]->nidx_vs;
-//   for (uint32_t j = 0; j < count_row; j++){
-//     tmp->rows[row_idx]->idx_vs[j] = xmalloc(sizeof(struct CS_matrix_idx_v));
-//     tmp->rows[row_idx]->idx_vs[j]->idx = Tri_arr_tmp[begin+j]->col_idx;
-//     tmp->rows[row_idx]->idx_vs[j]->elem = Tri_arr_tmp[begin+j]->elem;
-//   }
-//   for (uint32_t i = 0; i < count; i++) {
-//     free(Tri_arr_tmp[i]);
-//   }
-//   free(Tri_arr_tmp);
-//   // printf("all num = %d\n", count);
-//   return tmp;
-// }
-
-// bool
-// is_mf_allx(struct mf_uint16_t *a) {
-//   bool sign = true;
-//   for (uint32_t i = 0; i < MF_LEN; i++) {
-//     if ((a->mf_w[i]) != 0xffff){
-//       sign = false;
-//       break;
-//     }
-//   }
-//   return sign;
-// }
-
-// bool
-// is_wc_uint16_t_same(struct wc_uint16_t *a, struct wc_uint16_t *b) {
-//   if (a == b) 
-//     return true;
-//   if (!a || !b)
-//     return false;
-//   if (a->v != b->v )
-//     return false;
-//   if (a->w != b->w )
-//     return false;
-//   return true;
-// }
 
 bool
 is_mask_uint16_t_same(struct mask_uint16_t *a, struct mask_uint16_t *b) {
@@ -13943,1734 +12338,32 @@ is_mask_uint16_t_same(struct mask_uint16_t *a, struct mask_uint16_t *b) {
   return true;
 }
 
-// bool
-// is_links_of_rule_same(struct links_of_rule *a, struct links_of_rule *b) {
-//   if (a == b) 
-//     return true;
-//   if (!a || !b)
-//     return false;
-//   if (a->n != b->n )
-//     return false;
-
-//   for (int i = 0; i < a->n; i++)
-//     if (!is_wc_uint16_t_same(&(a->links_wc[i]), &(b->links_wc[i])))
-//       return false;
-//   return true;
-// }
-
-// struct Tri_arr *
-// gen_Tri_arr_bdd(void) {
-  
-//   uint32_t max_CSR = MAX_VAL_RATE*data_allr_nums*data_allr_nums;
-//   // struct matrix_Tri_express *Tri_arr[max_CSR];
-//   struct matrix_Tri_express **Tri_arr = xmalloc(max_CSR*sizeof(struct matrix_Tri_express *));
-//   // struct matrix_Tri_express *Tri_arr[200000];
-//   uint32_t nTris = 0;
-//   uint32_t rule_nums_in_pre = 0;
-//   uint32_t rule_nums_out = 0;
-
-//   printf("gen_Tri_arr_bdd\n" );
-//   for (uint32_t i = 0; i < link_in_rule_file->swl_num; i++) {
-//     struct link_to_rule *lout_r = get_link_rules(link_out_rule_file, &rule_nums_out, link_in_rule_file->links[i].link_idx);
-//     if (lout_r) {
-//       struct link *lk = link_get(lout_r->link_idx);
-//       print_link(lk);
-//       uint32_t rule_nums_in  = link_in_rule_file->links[i].rule_nums - rule_nums_in_pre;
-//       printf("%d: %d-%d\n", lout_r->link_idx, rule_nums_in, rule_nums_out);
-//       uint32_t *lin_arrs = (uint32_t *)(link_in_rule_data_arrs + 2*rule_nums_in_pre);
-//       uint32_t rule_nums_out_pre = lout_r->rule_nums - rule_nums_out;
-//       for (uint32_t i_in = 0; i_in < rule_nums_in; i_in++) {  
-
-
-//         struct bdd_rule *r_in = bdd_sws_arr[*(uint32_t *)lin_arrs]->rules[*(uint32_t *)(lin_arrs+1) - 1];
-
-//         BDD v_in, v_out;
-//         v_in = r_in->mf_out;
-
-//         uint32_t *lout_arrs = (uint32_t *)(link_out_rule_data_arrs + 2*rule_nums_out_pre);
-//         // struct timeval start,stop; 
-//         // gettimeofday(&start,NULL);
-//         // v_in = mf2bdd(r_in_mf);
-//         // gettimeofday(&stop,NULL);
-//         // time_counter_elemplus+=diff(&stop, &start);
-        
-//         for (uint32_t i_out = 0; i_out < rule_nums_out; i_out++) {
-//           struct bdd_rule *r_out = bdd_sws_arr[*(uint32_t *)lout_arrs]->rules[*(uint32_t *)(lout_arrs+1) - 1];
-//           // printf("%d-%d,%d-%d;", r_in->sw_idx, r_in->idx, r_out->sw_idx, r_out->idx);
-//           // struct mf_uint16_t *r_out_mf = get_r_out_mf(r_out); 
-          
-          
-//           // gettimeofday(&start,NULL);
-//           // v_out = mf2bdd(r_out_mf);
-//           v_out = r_out->mf_in;
-//           // gettimeofday(&stop,NULL);
-//           // time_counter_elemplus+=diff(&stop, &start);
-//           BDD v_and, v_diff;
-//           v_and = bdd_apply(v_in, v_out, bddop_and);
-                  
-//           if (v_and){
-//             Tri_arr[nTris] = insc_to_Tri_express_rlimit(r_in, r_out, v_and);
-//             nTris++;
-//             v_diff = bdd_apply(v_in, v_and, bddop_diff);
-//           }
-//           else {
-//             v_diff = v_in;
-//           } 
-//           v_in = v_diff;
-//           if (!v_in){
-//             // free(r_out_mf);
-//             break;
-//           }
-
-//           lout_arrs += 2;
-//           // free(r_out_mf);  
-//         }
-//         lin_arrs += 2;
-//         // free(r_in_mf);
-//         // bdd_delref(v_in); 
-//       }  
-//     }
-//     rule_nums_in_pre = link_in_rule_file->links[i].rule_nums;
-//   }
-
-//   struct Tri_arr *tmp = xmalloc(sizeof(uint32_t)+nTris*sizeof(struct matrix_Tri_express *));
-//   tmp->nTris = nTris;
-//   printf("nTris %d\n", nTris);
-//   for (uint32_t i = 0; i < nTris; i++){
-//     tmp->arr[i] = Tri_arr[i];
-//   }
-//   free(Tri_arr);
-//   return tmp;
-// }
-
-// struct matrix_CSR *  //通过对链路文件查找两个同链路的头尾端规则，计算是否连通并添加到矩阵
-// gen_sparse_matrix(void) {
-//   struct timeval start,stop; 
-//   gettimeofday(&start,NULL);
-//   struct Tri_arr *Tri_arr = gen_Tri_arr_bdd();
-//   gettimeofday(&stop,NULL);
-//   printf("gen_Tri_arr_bdd: %ld ms\n", diff(&stop, &start)/1000);
-//   printf("mf2bdd: %ld ms\n", time_counter_elemplus/1000);
-//   // printf("all num = %d\n", nTris);
-//   struct matrix_CSR *tmp = gen_matrix_CSR_from_Tris(Tri_arr);
-//   free(Tri_arr);
-//   return tmp;
-// }
-
-// struct matrix_CSC *
-// gen_CSC_from_CSR(struct matrix_CSR *matrix) {
-//   if(!matrix)
-//     return NULL;
-//   uint32_t valid_n = 0;
-//   for (uint32_t i = 0; i < matrix->nrows; i++) {
-//     if(matrix->rows[i])
-//       valid_n += matrix->rows[i]->nidx_vs;
-//   }
-//   // uint32_t max_CSR = MAX_VAL_RATE*data_allr_nums*data_allr_nums;
-//   // struct matrix_Tri_express *Tri_arr[valid_n];
-//   // printf("valid_n%d\n", valid_n);
-//   struct matrix_Tri_express **Tri_arr = xmalloc(valid_n*sizeof(struct matrix_Tri_express *));
-//   for (int i = 0; i < valid_n; i++)
-//     Tri_arr[i] = xcalloc(1,sizeof *(Tri_arr[i]));
-//   uint32_t count = 0;
-//   for (uint32_t i = 0; i < matrix->nrows; i++) {
-//     if(matrix->rows[i]){
-//       for (uint32_t j = 0; j < matrix->rows[i]->nidx_vs; j++){
-//         Tri_arr[count]->row_idx = i;
-//         Tri_arr[count]->col_idx = matrix->rows[i]->idx_vs[j]->idx;
-//         Tri_arr[count]->elem = matrix->rows[i]->idx_vs[j]->elem;
-//         count++;   
-//       }
-//     }
-//   }
-//   assert(!(valid_n - count));
-//   qsort(Tri_arr, valid_n,sizeof (struct matrix_Tri_express *), cmp_matrix_Tri_express_CSC);
-//   struct matrix_CSC *tmp = xmalloc(sizeof(uint32_t)+(matrix->nrows)*sizeof(struct CS_matrix_idx_v_arr *));
-//   tmp->ncols = matrix->nrows;
-//   for (int i = 0; i < tmp->ncols; i++)
-//     tmp->cols[i] = NULL;
-
-//   uint32_t begin = 0, count_col = 1;
-//   for (uint32_t i = 1; i < count; i++) {
-//     if (Tri_arr[i]->col_idx != Tri_arr[i-1]->col_idx) {
-//       uint32_t col_idx = Tri_arr[begin]->col_idx;
-//       tmp->cols[col_idx] = xmalloc(2*sizeof(uint32_t)+count_col*sizeof(struct CS_matrix_idx_v *));
-//       tmp->cols[col_idx]->idx = col_idx;
-//       tmp->cols[col_idx]->nidx_vs = count_col;
-//       for (uint32_t j = 0; j < count_col; j++){
-//         tmp->cols[col_idx]->idx_vs[j] = xmalloc(sizeof(struct CS_matrix_idx_v));
-//         tmp->cols[col_idx]->idx_vs[j]->idx = Tri_arr[begin+j]->row_idx;
-//         tmp->cols[col_idx]->idx_vs[j]->elem = Tri_arr[begin+j]->elem;
-//       }
-//       count_col = 0;
-//       begin = i;
-//     }
-//     count_col++; 
-//   }
-//   uint32_t col_idx = Tri_arr[begin]->col_idx;
-//   tmp->cols[col_idx] = xmalloc(2*sizeof(uint32_t)+count_col*sizeof(struct CS_matrix_idx_v *));
-//   tmp->cols[col_idx]->idx = col_idx;
-//   tmp->cols[col_idx]->nidx_vs = count_col;
-//   for (uint32_t j = 0; j < count_col; j++){
-//     tmp->cols[col_idx]->idx_vs[j] = xmalloc(sizeof(struct CS_matrix_idx_v));
-//     tmp->cols[col_idx]->idx_vs[j]->idx = Tri_arr[begin+j]->row_idx;
-//     tmp->cols[col_idx]->idx_vs[j]->elem = Tri_arr[begin+j]->elem;
-//   }
-//   for (uint32_t i = 0; i < valid_n; i++) 
-//     free(Tri_arr[i]);
-//   free(Tri_arr);
-//   return tmp;
-// }
-
-/*根据 r_to_merge 来合并规则生成新的矩阵*/
-/*------------------------------------------------*/
-// struct CS_matrix_idx_v_arr *
-// two_CS_matrix_idx_v_arr_plus(struct CS_matrix_idx_v_arr *row1, struct CS_matrix_idx_v_arr *row2, uint32_t num) {
-
-//   if(!row1)
-//     return row2;
-//   if(!row2)
-//     return row1;
-
-//   struct matrix_element *elems_arr[num];
-//   for (int i = 0; i < num; i++)
-//     elems_arr[i] = NULL;
-
-//   for (int i = 0; i < row1->nidx_vs; i++){
-//     elems_arr[row1->idx_vs[i]->idx] = matrix_elem_plus(elems_arr[row1->idx_vs[i]->idx], row1->idx_vs[i]->elem);
-//     if(row1->idx_vs[i])
-//       free(row1->idx_vs[i]);
-//     row1->idx_vs[i] = NULL;
-//   }
-//   for (int i = 0; i < row2->nidx_vs; i++){
-//     elems_arr[row2->idx_vs[i]->idx] = matrix_elem_plus(elems_arr[row2->idx_vs[i]->idx], row2->idx_vs[i]->elem);
-//     if(row2->idx_vs[i])
-//       free(row2->idx_vs[i]);
-//     row2->idx_vs[i] = NULL;
-//   }
-
-//   struct CS_matrix_idx_v *idx_vs_arr[num];
-//   uint32_t count = 0;
-//   for (int i = 0; i < num; i++) {
-//     if (elems_arr[i]) {
-//       idx_vs_arr[count] = xmalloc(sizeof(struct CS_matrix_idx_v));
-//       idx_vs_arr[count]->idx = i;
-//       idx_vs_arr[count]->elem = elems_arr[i];
-//       count++;
-//     }
-//   }
-
-//   struct CS_matrix_idx_v_arr *tmp = xmalloc(2*sizeof(uint32_t) + count*sizeof(struct CS_matrix_idx_v *));
-//   tmp->idx = row1->idx;
-//   tmp->nidx_vs = count;
-//   for (int i = 0; i < count; i++)
-//     tmp->idx_vs[i] = idx_vs_arr[i];
-//   if(row1)
-//     free(row1);
-//   row1 = NULL;
-//   if(row2)
-//     free(row2);
-//   row2 = NULL;
-//   return tmp;
-// }
-
-// struct CS_matrix_idx_v *
-// copy_CS_matrix_idx_v(struct CS_matrix_idx_v *idx_v) {
-//   if (!idx_v)
-//     return NULL;
-//   struct CS_matrix_idx_v *tmp = xmalloc(sizeof(*tmp));
-//   tmp->idx = idx_v->idx;
-//   tmp->elem = copy_matrix_element(idx_v->elem);
-//   return tmp;
-// }
-
-// struct CS_matrix_idx_v_arr *
-// copy_CS_matrix_idx_v_arr(struct CS_matrix_idx_v_arr *idx_v_arr) {
-//   if(!idx_v_arr)
-//     return NULL;
-//   struct CS_matrix_idx_v_arr *tmp = xmalloc(2*sizeof(uint32_t) + idx_v_arr->nidx_vs*sizeof(struct CS_matrix_idx_v *));
-//   tmp->idx = idx_v_arr->idx;
-//   tmp->nidx_vs = idx_v_arr->nidx_vs;
-//   for (int i = 0; i < idx_v_arr->nidx_vs; i++) {
-//     tmp->idx_vs[i] = copy_CS_matrix_idx_v(idx_v_arr->idx_vs[i]);
-//   }
-//   return tmp;
-// }
-
-// struct CS_matrix_idx_v_arr *
-// two_CS_matrix_idx_v_arr_plus_keeprow2(struct CS_matrix_idx_v_arr *row1, struct CS_matrix_idx_v_arr *row2, uint32_t num) {
-//   if(!row2)
-//     return row1;
-//   if(!row1)
-//     return copy_CS_matrix_idx_v_arr(row2);
-  
-
-//   struct matrix_element *elems_arr[num];
-//   for (int i = 0; i < num; i++)
-//     elems_arr[i] = NULL;
-
-//   for (int i = 0; i < row1->nidx_vs; i++){
-//     elems_arr[row1->idx_vs[i]->idx] = matrix_elem_plus(elems_arr[row1->idx_vs[i]->idx], row1->idx_vs[i]->elem);
-//     if(row1->idx_vs[i])
-//       free(row1->idx_vs[i]);
-//     row1->idx_vs[i] = NULL;
-//   }
-//   for (int i = 0; i < row2->nidx_vs; i++){
-//     elems_arr[row2->idx_vs[i]->idx] = matrix_elem_plus_keepb(elems_arr[row2->idx_vs[i]->idx], row2->idx_vs[i]->elem);
-//     // if(row2->idx_vs[i])
-//     //   free(row2->idx_vs[i]);
-//     // row2->idx_vs[i] = NULL;
-//   }
-
-//   struct CS_matrix_idx_v *idx_vs_arr[num];
-//   uint32_t count = 0;
-//   for (int i = 0; i < num; i++) {
-//     if (elems_arr[i]) {
-//       idx_vs_arr[count] = xmalloc(sizeof(struct CS_matrix_idx_v));
-//       idx_vs_arr[count]->idx = i;
-//       idx_vs_arr[count]->elem = elems_arr[i];
-//       count++;
-//     }
-//   }
-
-//   struct CS_matrix_idx_v_arr *tmp = xmalloc(2*sizeof(uint32_t) + count*sizeof(struct CS_matrix_idx_v *));
-//   tmp->idx = row1->idx;
-//   tmp->nidx_vs = count;
-//   for (int i = 0; i < count; i++)
-//     tmp->idx_vs[i] = idx_vs_arr[i];
-//   if(row1)
-//     free(row1);
-//   row1 = NULL;
-//   // if(row2)
-//   //   free(row2);
-//   // row2 = NULL;
-//   return tmp;
-// }
-
-// uint32_t
-// get_merged_matrix_idx_fr_idx(uint32_t idx) {
-//   struct bdd_rule *r = matrix_idx_to_bddr(&idx);
-//   uint32_t merged_rown = 0;
-//   for (int i = 0; i < r->sw_idx; i++)
-//     merged_rown += merged_arr[i]->nrules;
-
-//   merged_rown += r_to_merge_arr[r->sw_idx]->rules[r->idx - 1];
-
-//   return merged_rown;
-// }
-
-// uint32_t
-// get_merged_matrix_idx_fr_2idx(uint32_t sw_idx, uint32_t idx) {
-//   uint32_t merged_rown = 0;
-//   for (int i = 0; i < sw_idx; i++)
-//     merged_rown += merged_arr[i]->nrules;
-
-//   merged_rown += r_to_merge_arr[sw_idx]->rules[idx - 1];
-
-//   return merged_rown;
-// }
-
-// struct CS_matrix_idx_v_arr *
-// merge_matrix_idx_v_arr(struct CS_matrix_idx_v_arr *row, uint32_t num) {
-//   if(!row)
-//     return NULL;
-//   struct matrix_element *elems_arr[num];
-//   for (int i = 0; i < num; i++)
-//     elems_arr[i] = NULL;
-
-//   for (int i = 0; i < row->nidx_vs; i++){
-//     uint32_t merged_rown = get_merged_matrix_idx_fr_idx(row->idx_vs[i]->idx);
-//     elems_arr[merged_rown] = matrix_elem_plus(elems_arr[merged_rown], row->idx_vs[i]->elem);
-//     if(row->idx_vs[i])
-//       free(row->idx_vs[i]);
-//     row->idx_vs[i] = NULL;
-//   }
-
-//   struct CS_matrix_idx_v *idx_vs_arr[num];
-//   uint32_t count = 0;
-//   for (int i = 0; i < num; i++) {
-//     if (elems_arr[i]) {
-//       idx_vs_arr[count] = xmalloc(sizeof(struct CS_matrix_idx_v));
-//       idx_vs_arr[count]->idx = i;
-//       idx_vs_arr[count]->elem = elems_arr[i];
-//       count++;
-//     }
-//   }
-//   struct CS_matrix_idx_v_arr *tmp = xmalloc(2*sizeof(uint32_t) + count*sizeof(struct CS_matrix_idx_v *));
-//   tmp->idx = row->idx;
-//   tmp->nidx_vs = count;
-//   for (int i = 0; i < count; i++)
-//     tmp->idx_vs[i] = idx_vs_arr[i];
-//   if(row)
-//     free(row);
-//   row = NULL;
-//   return tmp;
-// }
-
-// struct CS_matrix_idx_v_arr *
-// merge_matrix_idx_v_arr_newone(struct CS_matrix_idx_v_arr *row, uint32_t num) {
-//   if(!row)
-//     return NULL;
-//   struct matrix_element *elems_arr[num];
-//   for (int i = 0; i < num; i++)
-//     elems_arr[i] = NULL;
-
-//   for (int i = 0; i < row->nidx_vs; i++){
-//     uint32_t merged_rown = get_merged_matrix_idx_fr_idx(row->idx_vs[i]->idx);
-//     elems_arr[merged_rown] = matrix_elem_plus_keepb(elems_arr[merged_rown], row->idx_vs[i]->elem);
-//     // if(row->idx_vs[i])
-//     //   free(row->idx_vs[i]);
-//     // row->idx_vs[i] = NULL;
-//   }
-
-//   struct CS_matrix_idx_v *idx_vs_arr[num];
-//   uint32_t count = 0;
-//   for (int i = 0; i < num; i++) {
-//     if (elems_arr[i]) {
-//       idx_vs_arr[count] = xmalloc(sizeof(struct CS_matrix_idx_v));
-//       idx_vs_arr[count]->idx = i;
-//       idx_vs_arr[count]->elem = elems_arr[i];
-//       count++;
-//     }
-//   }
-//   struct CS_matrix_idx_v_arr *tmp = xmalloc(2*sizeof(uint32_t) + count*sizeof(struct CS_matrix_idx_v *));
-//   tmp->idx = row->idx;
-//   tmp->nidx_vs = count;
-//   for (int i = 0; i < count; i++)
-//     tmp->idx_vs[i] = idx_vs_arr[i];
-//   // if(row)
-//   //   free(row);
-//   // row = NULL;
-//   return tmp;
-// }
-
-// struct matrix_CSR *
-// gen_merged_CSR(struct matrix_CSR *matrix) {
-//   if(!matrix)
-//     return NULL;
-//   uint32_t all_merged_nrs = 0;
-//   for (int i = 0; i < SW_NUM; i++)
-//     all_merged_nrs += merged_arr[i]->nrules;
-//     // all_merged_nrs += bdd_sws_arr[i]->nrules;
-
-//   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+all_merged_nrs*sizeof(struct CS_matrix_idx_v_arr *));
-//   tmp->nrows = all_merged_nrs;
-//   for (uint32_t i = 0; i < all_merged_nrs; i++)
-//     tmp->rows[i] = NULL;
-//   for (uint32_t i = 0; i < matrix->nrows; i++) {
-//     // struct bdd_rule *r = matrix_idx_to_bddr(&i);
-//     uint32_t merged_rown = get_merged_matrix_idx_fr_idx(i);   
-//     // tmp->rows[merged_rown] = two_CS_matrix_idx_v_arr_plus(tmp->rows[merged_rown], matrix->rows[i], matrix->nrows);
-//     tmp->rows[merged_rown] = two_CS_matrix_idx_v_arr_plus_keeprow2(tmp->rows[merged_rown], matrix->rows[i], matrix->nrows);
-//     if (tmp->rows[merged_rown])
-//       tmp->rows[merged_rown]->idx = merged_rown;
-//   }
-//   for (uint32_t i = 0; i < all_merged_nrs; i++)
-//     tmp->rows[i] = merge_matrix_idx_v_arr(tmp->rows[i], all_merged_nrs);
-//   return tmp;
-// }
-
-/*各个元素的连通*/
-/*------------------------------------------------*/
-// bool
-// issame_nf_space_pair_action(struct nf_space_pair *ns1, struct nf_space_pair *ns2) {
-//   if(!ns1 || !ns2)
-//     return false;
-//   if (is_mask_uint16_t_same(ns1->mask, ns2->mask) && is_mask_uint16_t_same(ns1->rewrite, ns2->rewrite))
-//     return true;
-//   return false;
-// }
-
-// struct nf_space_pair *
-// nf_space_connect(struct nf_space_pair *a, struct nf_space_pair *b) {
-//   // printf("starting nf_space_connect\n");
-//   // if(!is_insc_links(a->out->lks, b->in->lks))
-//   //   return NULL;
-//   // struct timeval start,stop;  //计算时间差 usec
-//   // BDD root_a = load_saved_bddarr(a->out->mf);
-//   // BDD root_b = load_saved_bddarr(b->in->mf);
-//   // gettimeofday(&start,NULL);
-//   // return NULL;
-//   BDD insc = bdd_apply(a->out->mf, b->in->mf, bddop_and);
-//   // gettimeofday(&stop,NULL);
-//   // time_counter1 += diff(&stop, &start);
-
-//   computation_counter ++;
-
-//   // return NULL;
-//   if (!insc) 
-//     return NULL;
-//   // gettimeofday(&start,NULL);
-
-//   // for (int i = 0; i < a->r_arr->nrs - 1; i++) {
-//   //   for (int j = 0; j < b->r_arr->nrs; j++) {
-//   //     if ((a->r_arr->ridx[i].sw_idx == b->r_arr->ridx[j].sw_idx)&&(a->r_arr->ridx[i].r_idx == b->r_arr->ridx[j].r_idx))
-//   //       return NULL;
-//   //   }
-//   // }
-
-//   compu_true_counter ++;
-//   // struct bdd_saved_arr *bdd_arr_insc = bdd_save_arr(insc);
-//   struct nf_space_pair *pair_tmp = xcalloc(1, sizeof *pair_tmp);
-//   pair_tmp->in = xcalloc(1, sizeof *(pair_tmp->in));// 1,16(两个指针为16)
-//   // pair_tmp->in->lks = copy_links_of_rule(a->in->lks);
-//   pair_tmp->in->lks = NULL;
-
-//   pair_tmp->out = xcalloc(1, sizeof *(pair_tmp->out));// 1,16(两个指针为16)
-//   // pair_tmp->out->lks = copy_links_of_rule(b->out->lks);
-//   pair_tmp->out->lks = NULL;
-
-//   if (a->mask) {
-//     if(a->out->mf== insc){
-//       pair_tmp->in->mf = a->in->mf;
-//       bdd_addref(pair_tmp->in->mf);
-//     }
-//     else{
-//       pair_tmp->in->mf = bdd_rw_back_BDD(insc, a->in->mf, a->mask);
-//       bdd_addref(pair_tmp->in->mf);
-//     }
-
-//     if (b->mask) {
-//       pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
-//       pair_tmp->rewrite = xcalloc(1, sizeof *(pair_tmp->rewrite));
-//       for (uint32_t j = 0; j < MF_LEN; j++) {
-//         pair_tmp->mask->v[j] = (a->mask->v[j])&(b->mask->v[j]);
-//         pair_tmp->rewrite->v[j] = ((a->rewrite->v[j])&(b->mask->v[j])) | ((b->rewrite->v[j])&(~(b->mask->v[j])));
-//       }
-//     }
-//     else{
-//       pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
-//       pair_tmp->rewrite = xcalloc(1, sizeof *(pair_tmp->rewrite));
-//       for (uint32_t j = 0; j < MF_LEN; j++) {
-//         pair_tmp->mask->v[j] = a->mask->v[j];
-//         pair_tmp->rewrite->v[j] = a->rewrite->v[j];
-//       }
-//     }     
-//   }
-//   else{    
-//     pair_tmp->in->mf = insc;
-//     bdd_addref(pair_tmp->in->mf);
-//     if (!(b->mask)) {
-//       pair_tmp->mask = NULL;
-//       pair_tmp->rewrite = NULL;
-//     }
-//   }
-//   if (b->mask) {
-//     if(b->in->mf == insc){
-//       pair_tmp->out->mf = b->out->mf;
-//       bdd_addref(pair_tmp->out->mf);
-//     }
-//     else{
-//       // if(a->mask){
-//       //   if(issame_nf_space_pair_action(a,pair_tmp)){
-//       //     pair_tmp->out->mf = insc;
-//       //     bdd_addref(pair_tmp->out->mf);
-//       //   }
-//       //   else{
-//       //     pair_tmp->out->mf = bdd_rw_BDD(insc, b->mask, b->rewrite);
-//       //     bdd_addref(pair_tmp->out->mf);
-//       //   }
-//       // }
-//       // else{
-//         pair_tmp->out->mf = bdd_rw_BDD(insc, b->mask, b->rewrite);
-//         bdd_addref(pair_tmp->out->mf);
-//       // }
-        
-//     }
-//     if (!(a->mask)){
-//       // gettimeofday(&startin,NULL);
-//       pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
-//       pair_tmp->rewrite = xcalloc(1, sizeof *(pair_tmp->rewrite));
-//       for (uint32_t j = 0; j < MF_LEN; j++) {
-//         pair_tmp->mask->v[j] = b->mask->v[j];
-//         pair_tmp->rewrite->v[j] = b->rewrite->v[j];
-//       }
-//     }
-//   }
-//   else{
-//     pair_tmp->out->mf = insc;//建立copy
-//     bdd_addref(pair_tmp->out->mf);
-//   }
-
-//   // gettimeofday(&stop,NULL);
-//   // time_counter2 += diff(&stop, &start);
-//   // gettimeofday(&start,NULL);
-
-//   pair_tmp->r_arr = NULL;
-//   // pair_tmp->r_arr = xmalloc(sizeof (uint32_t)+(a->r_arr->nrs+b->r_arr->nrs -1)*sizeof (struct r_idx));
-//   // pair_tmp->r_arr = xcalloc(1,sizeof (uint32_t)+(a->r_arr->nrs+b->r_arr->nrs -1)*sizeof (struct r_idx));
-
-//   // pair_tmp->r_arr->nrs = a->r_arr->nrs+b->r_arr->nrs -1;
-//   // for (uint32_t i = 0; i < a->r_arr->nrs; i++) {
-//   //   pair_tmp->r_arr->ridx[i].sw_idx = a->r_arr->ridx[i].sw_idx;
-//   //   pair_tmp->r_arr->ridx[i].r_idx = a->r_arr->ridx[i].r_idx;
-//   // }
-//   // for (uint32_t i = 0; i < b->r_arr->nrs -1; i++) {
-//   //   pair_tmp->r_arr->ridx[i+a->r_arr->nrs].sw_idx = b->r_arr->ridx[i+1].sw_idx;
-//   //   pair_tmp->r_arr->ridx[i+a->r_arr->nrs].r_idx = b->r_arr->ridx[i+1].r_idx;
-//   // }
-
-//   // gettimeofday(&stop,NULL);
-//   // time_counter3 += diff(&stop, &start);
-
-//   return pair_tmp;
-// }
-
-// struct nf_space_pair *
-// nf_space_connect_backup(struct nf_space_pair *a, struct nf_space_pair *b) {
-//   // printf("starting nf_space_connect\n");
-//   // if(!is_insc_links(a->out->lks, b->in->lks))
-//   //   return NULL;
-//   // struct timeval start,stop;  //计算时间差 usec
-//   // BDD root_a = load_saved_bddarr(a->out->mf);
-//   // BDD root_b = load_saved_bddarr(b->in->mf);
-//   // gettimeofday(&start,NULL);
-//   BDD insc = bdd_apply(a->out->mf, b->in->mf, bddop_and);
-//   // gettimeofday(&stop,NULL);
-//   // time_counter1 += diff(&stop, &start);
-
-//   computation_counter ++;
-
-
-//   if (!insc) 
-//     return NULL;
-//   // gettimeofday(&start,NULL);
-
-//   for (int i = 0; i < a->r_arr->nrs - 1; i++) {
-//     for (int j = 0; j < b->r_arr->nrs; j++) {
-//       if ((a->r_arr->ridx[i].sw_idx == b->r_arr->ridx[j].sw_idx)&&(a->r_arr->ridx[i].r_idx == b->r_arr->ridx[j].r_idx))
-//         return NULL;
-//     }
-//   }
-
-//   compu_true_counter ++;
-//   // struct bdd_saved_arr *bdd_arr_insc = bdd_save_arr(insc);
-//   struct nf_space_pair *pair_tmp = xcalloc(1, sizeof *pair_tmp);
-//   pair_tmp->in = xcalloc(1, sizeof *(pair_tmp->in));// 1,16(两个指针为16)
-//   pair_tmp->in->lks = copy_links_of_rule(a->in->lks);
-//   pair_tmp->out = xcalloc(1, sizeof *(pair_tmp->out));// 1,16(两个指针为16)
-//   pair_tmp->out->lks = copy_links_of_rule(b->out->lks);
-
-//   if (a->mask) {
-//     if(a->out->mf== insc){
-//       pair_tmp->in->mf = a->in->mf;
-//       bdd_addref(pair_tmp->in->mf);
-//     }
-//     else{
-//       pair_tmp->in->mf = bdd_rw_back_BDD(insc, a->in->mf, a->mask);
-//       bdd_addref(pair_tmp->in->mf);
-//     }
-
-//     if (b->mask) {
-//       pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
-//       pair_tmp->rewrite = xcalloc(1, sizeof *(pair_tmp->rewrite));
-//       for (uint32_t j = 0; j < MF_LEN; j++) {
-//         pair_tmp->mask->v[j] = (a->mask->v[j])&(b->mask->v[j]);
-//         pair_tmp->rewrite->v[j] = ((a->rewrite->v[j])&(b->mask->v[j])) | ((b->rewrite->v[j])&(~(b->mask->v[j])));
-//       }
-//     }
-//     else{
-//       pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
-//       pair_tmp->rewrite = xcalloc(1, sizeof *(pair_tmp->rewrite));
-//       for (uint32_t j = 0; j < MF_LEN; j++) {
-//         pair_tmp->mask->v[j] = a->mask->v[j];
-//         pair_tmp->rewrite->v[j] = a->rewrite->v[j];
-//       }
-//     }     
-//   }
-//   else{    
-//     pair_tmp->in->mf = insc;
-//     bdd_addref(pair_tmp->in->mf);
-//     if (!(b->mask)) {
-//       pair_tmp->mask = NULL;
-//       pair_tmp->rewrite = NULL;
-//     }
-//   }
-//   if (b->mask) {
-//     if(b->in->mf == insc){
-//       pair_tmp->out->mf = b->out->mf;
-//       bdd_addref(pair_tmp->out->mf);
-//     }
-//     else{
-//       pair_tmp->out->mf = bdd_rw_BDD(insc, b->mask, b->rewrite);
-//       bdd_addref(pair_tmp->out->mf);
-//     }
-//     if (!(a->mask)){
-//       // gettimeofday(&startin,NULL);
-//       pair_tmp->mask = xcalloc(1, sizeof *(pair_tmp->mask));
-//       pair_tmp->rewrite = xcalloc(1, sizeof *(pair_tmp->rewrite));
-//       for (uint32_t j = 0; j < MF_LEN; j++) {
-//         pair_tmp->mask->v[j] = b->mask->v[j];
-//         pair_tmp->rewrite->v[j] = b->rewrite->v[j];
-//       }
-//     }
-//   }
-//   else{
-//     pair_tmp->out->mf = insc;//建立copy
-//     bdd_addref(pair_tmp->out->mf);
-//   }
-
-//   // gettimeofday(&stop,NULL);
-//   // time_counter2 += diff(&stop, &start);
-//   // gettimeofday(&start,NULL);
-
-//   pair_tmp->r_arr = xmalloc(sizeof (uint32_t)+(a->r_arr->nrs+b->r_arr->nrs -1)*sizeof (struct r_idx));
-//   // pair_tmp->r_arr = xcalloc(1,sizeof (uint32_t)+(a->r_arr->nrs+b->r_arr->nrs -1)*sizeof (struct r_idx));
-
-//   pair_tmp->r_arr->nrs = a->r_arr->nrs+b->r_arr->nrs -1;
-//   for (uint32_t i = 0; i < a->r_arr->nrs; i++) {
-//     pair_tmp->r_arr->ridx[i].sw_idx = a->r_arr->ridx[i].sw_idx;
-//     pair_tmp->r_arr->ridx[i].r_idx = a->r_arr->ridx[i].r_idx;
-//   }
-//   for (uint32_t i = 0; i < b->r_arr->nrs -1; i++) {
-//     pair_tmp->r_arr->ridx[i+a->r_arr->nrs].sw_idx = b->r_arr->ridx[i+1].sw_idx;
-//     pair_tmp->r_arr->ridx[i+a->r_arr->nrs].r_idx = b->r_arr->ridx[i+1].r_idx;
-//   }
-
-//   // gettimeofday(&stop,NULL);
-//   // time_counter3 += diff(&stop, &start);
-
-//   return pair_tmp;
-// }
-
-// struct matrix_element * //a*b,a作用b，不可交换
-// elem_connect(struct matrix_element *a, struct matrix_element *b) { 
-//   // struct timeval start,stop; 
-//   struct nf_space_pair *nps[100000];
-//   // printf("%d\n", a->npairs*b->npairs);
-//   uint32_t count = 0;
-
-//   // gettimeofday(&start,NULL);
-//   for (uint32_t i = 0; i < a->npairs; i++) {
-//     struct nf_space_pair *np_a = a->nf_pairs[i];
-//     for (uint32_t j = 0; j < b->npairs; j++) {
-//       struct nf_space_pair *result = nf_space_connect(np_a, b->nf_pairs[j]);
-//       if (result) {
-//         // bool issame = false;
-//         // for (int k = 0; k < count; k++) {
-//         //   if (issame_nf_space_pair_action(result, nps[k])) {
-//         //     bdd_delref(nps[k]->in->mf);
-//         //     bdd_delref(nps[k]->out->mf);
-//         //     nps[k]->in->mf = bdd_apply(nps[k]->in->mf, result->in->mf, bddop_or);
-//         //     nps[k]->out->mf = bdd_apply(nps[k]->out->mf, result->out->mf, bddop_or);
-//         //     issame = true;
-//         //     bdd_addref(nps[k]->in->mf);
-//         //     bdd_addref(nps[k]->out->mf);
-//         //     free_nf_space_pair(result);
-//         //     break;
-//         //   }
-//         // }
-//         // if (!issame) {
-//           nps[count] = result;
-//           count++;
-//         // }
-//       }
-//     }
-//   }
-
-//   // gettimeofday(&stop,NULL);
-//   // time_counter_nf_space_connect += diff(&stop, &start);
-//   struct matrix_element *tmp = NULL;
-//   // gettimeofday(&start,NULL);
-//   if (count) { 
-//     // uint32_t count_ot = 1;
-//     uint32_t count_ot = count;
-//     // for (int i = 1; i < count; i++) {
-//     //   bool issame = false;
-//     //   for (int j = 0; j < count_ot; j++) {
-//     //     if (issame_nf_space_pair_action(nps[j], nps[i])) {
-//     //       bdd_delref(nps[j]->in->mf);
-//     //       bdd_delref(nps[j]->out->mf);
-//     //       nps[j]->in->mf = bdd_apply(nps[j]->in->mf, nps[i]->in->mf, bddop_or);
-//     //       nps[j]->out->mf = bdd_apply(nps[j]->out->mf, nps[i]->out->mf, bddop_or);
-//     //       issame = true;
-//     //       bdd_addref(nps[j]->in->mf);
-//     //       bdd_addref(nps[j]->out->mf);
-//     //       free_nf_space_pair(nps[i]);
-//     //       break;
-//     //     }
-//     //   }
-//     //   if (!issame) {
-//     //     nps[count_ot] = nps[i];
-//     //     count_ot++;
-//     //   }
-//     // }
-
-
-//     tmp = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+count_ot*sizeof(struct nf_space_pair *));
-//     tmp->bdd_in = 0;
-//     tmp->bdd_out = 0;
-//     tmp->npairs = count_ot;
-//     for (int i = 0; i < count_ot; i++) {
-//       // tmp->bdd_in = bdd_apply(tmp->bdd_in, nps[i]->in->mf, bddop_or);
-//       // tmp->bdd_out = bdd_apply(tmp->bdd_out, nps[i]->out->mf,bddop_or);
-//       tmp->nf_pairs[i] = nps[i];
-//     }
-//     // bdd_addref(tmp->bdd_in);
-//     // bdd_addref(tmp->bdd_out);
-//   } 
-//   // gettimeofday(&stop,NULL);
-//   // time_counter_elembdd_withpair += diff(&stop, &start);
-//   return tmp;
-// }
-
-// struct matrix_element * //removed the elem->in/out
-// row_col_multiply(struct CS_matrix_idx_v_arr *row, struct CS_matrix_idx_v_arr *col) {
-//   uint32_t num_row = row->nidx_vs;
-//   uint32_t num_col = col->nidx_vs;
-//   if ((row->idx_vs[0]->idx > col->idx_vs[num_col-1]->idx)||(row->idx_vs[num_row-1]->idx < col->idx_vs[0]->idx)) 
-//     return NULL;
-//   uint32_t count_row = 0, count_col = 0;
-//   struct matrix_element *tmp = NULL;
-//   struct matrix_element *elem_tmp = NULL;
-//   for (uint32_t i = 0; i < num_row + num_col; i++) {
-//     if ((row->idx_vs[count_row]->idx) == (col->idx_vs[count_col]->idx)){
-//       // struct timeval start,stop; 
-//       // gettimeofday(&start,NULL);
-//       // BDD insc = bdd_apply(row->idx_vs[count_row]->elem->bdd_out, col->idx_vs[count_col]->elem->bdd_in, bddop_and);
-//       // gettimeofday(&stop,NULL);
-//       // time_counter_eleminsc += diff(&stop, &start);
-//       elemconnet_counter ++;
-//       // if(bdd_apply(row->idx_vs[count_row]->elem->bdd_out, col->idx_vs[count_col]->elem->bdd_in, bddop_and)) {
-//         // gettimeofday(&start,NULL);
-//         elem_tmp = elem_connect(row->idx_vs[count_row]->elem, col->idx_vs[count_col]->elem);
-        
-//         // gettimeofday(&stop,NULL);
-//         // time_counter1 += diff(&stop, &start);
-//         if (elem_tmp)
-//           elem_true_counter++;
-        
-//         // gettimeofday(&start,NULL);
-//         tmp = matrix_elem_plus(tmp, elem_tmp);
-//         // gettimeofday(&stop,NULL);
-//         // time_counter_elemplus += diff(&stop, &start);
-//         elem_tmp = NULL;
-//       // }
-//       count_col++;
-//       count_row++;
-//     }
-//     else if ((row->idx_vs[count_row]->idx) > (col->idx_vs[count_col]->idx))
-//       count_col++;
-//     else
-//       count_row++;
-//     if ((count_row >= num_row)||(count_col>=num_col))
-//       break;
-//   }
-//   // if(tmp)
-//   //   printf("there has a computing\n");
-//   return tmp;
-// }
-
-// struct CS_matrix_idx_v_arr *
-// row_multi_col_multiply(struct CS_matrix_idx_v_arr *row, uint32_t *arr, uint32_t count, struct matrix_CSC *matrix_CSC) {
-//   struct CS_matrix_idx_v_arr *tmp = NULL;
-//   struct CS_matrix_idx_v *vs[data_allr_nums];
-//   uint32_t vs_count = 0;
-  
-//   for (uint32_t i = 0; i < count; i++){
-//     struct matrix_element *elem_tmp = row_col_multiply(row, matrix_CSC->cols[arr[i]]);
-//     if (elem_tmp) {
-//       vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
-//       vs[vs_count]->idx = arr[i];
-//       vs[vs_count]->elem = elem_tmp;
-//       vs_count++;
-//     }
-//   }
-//   if(vs_count){
-//     tmp = xmalloc(2*sizeof(uint32_t) + vs_count*sizeof(struct CS_matrix_idx_v *));
-//     tmp->idx = row->idx;
-//     tmp->nidx_vs = vs_count;
-//     // memcpy (tmp->idx_vs, vs, vs_count*sizeof(struct CS_matrix_idx_v *)); 
-//     for (uint32_t i = 0; i < vs_count; i++)
-//       tmp->idx_vs[i] = vs[i];
-//   }
-//   // qsort
-//   return tmp;
-// }
-
-// struct CS_matrix_idx_v_arr *
-// row_all_col_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSC *matrix_CSC) {
-//   struct CS_matrix_idx_v_arr *tmp = NULL;
-//   struct CS_matrix_idx_v *vs[data_allr_nums];
-//   uint32_t vs_count = 0;
-
-//   for (uint32_t i = 0; i < matrix_CSC->ncols; i++){
-//     if ( matrix_CSC->cols[i]){
-//       struct matrix_element *elem_tmp = row_col_multiply(row, matrix_CSC->cols[i]);
-//       if (elem_tmp) {
-//         vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
-//         vs[vs_count]->idx = i;
-//         vs[vs_count]->elem = elem_tmp;
-//         vs_count++;
-//       }
-//     }   
-//   }
-
-//   if(vs_count){
-//     tmp = xmalloc(2*sizeof(uint32_t) + vs_count*sizeof(struct CS_matrix_idx_v *));
-//     tmp->idx = row->idx;
-//     tmp->nidx_vs = vs_count;
-//     // memcpy (tmp->idx_vs, vs, vs_count*sizeof(struct CS_matrix_idx_v *)); 
-//     for (uint32_t i = 0; i < vs_count; i++)
-//       tmp->idx_vs[i] = vs[i];
-//   }
-//   // bdd_gbc();
-//   return tmp;
-// }
-// struct CS_matrix_idx_v_arr *
-// all_row_col_multiply(struct matrix_CSR *matrix_CSR, struct CS_matrix_idx_v_arr *col) {
-//   struct CS_matrix_idx_v_arr *tmp = NULL;
-//   struct CS_matrix_idx_v *vs[data_allr_nums];
-//   uint32_t vs_count = 0;
-
-//   for (uint32_t i = 0; i < matrix_CSR->nrows; i++){
-//     if (matrix_CSR->rows[i]){
-//       struct matrix_element *elem_tmp = row_col_multiply(matrix_CSR->rows[i], col);
-//       if (elem_tmp) {
-//         vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
-//         vs[vs_count]->idx = i;
-//         vs[vs_count]->elem = elem_tmp;
-//         vs_count++;
-//       }
-//     }   
-//   }
-
-//   if(vs_count){
-//     tmp = xmalloc(2*sizeof(uint32_t) + vs_count*sizeof(struct CS_matrix_idx_v *));
-//     tmp->nidx_vs = vs_count;
-//     tmp->idx = col->idx;
-//     // memcpy (tmp->idx_vs, vs, vs_count*sizeof(struct CS_matrix_idx_v *)); 
-//     for (uint32_t i = 0; i < vs_count; i++)
-//       tmp->idx_vs[i] = vs[i];
-//   }
-//   return tmp;
-// }
-
-// struct CS_matrix_idx_v_arr *
-// all_row_col_multiply_noloop(struct matrix_CSR *matrix_CSR, struct CS_matrix_idx_v_arr *col) {
-//   if(!col)
-//     return NULL;
-//   struct CS_matrix_idx_v_arr *tmp = NULL;
-//   struct CS_matrix_idx_v *vs[data_allr_nums];
-//   uint32_t vs_count = 0;
-
-//   for (uint32_t i = 0; i < matrix_CSR->nrows; i++){
-//     if (matrix_CSR->rows[i]){
-//       if (col->idx != matrix_CSR->rows[i]->idx){
-//         struct matrix_element *elem_tmp = row_col_multiply(matrix_CSR->rows[i], col);
-//         if (elem_tmp) {
-//           vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
-//           vs[vs_count]->idx = i;
-//           vs[vs_count]->elem = elem_tmp;
-//           vs_count++;
-//         }
-//       }
-//     }   
-//   }
-
-//   if(vs_count){
-//     tmp = xmalloc(2*sizeof(uint32_t) + vs_count*sizeof(struct CS_matrix_idx_v *));
-//     tmp->nidx_vs = vs_count;
-//     tmp->idx = col->idx;
-//     // memcpy (tmp->idx_vs, vs, vs_count*sizeof(struct CS_matrix_idx_v *)); 
-//     for (uint32_t i = 0; i < vs_count; i++)
-//       tmp->idx_vs[i] = vs[i];
-//   }
-//   return tmp;
-// }
-// struct CS_matrix_idx_v_arr *
-// row_all_col_multiply_noloop(struct CS_matrix_idx_v_arr *row, struct matrix_CSC *matrix_CSC) {
-//   if(!row)
-//     return NULL;
-//   struct CS_matrix_idx_v_arr *tmp = NULL;
-//   struct CS_matrix_idx_v *vs[data_allr_nums];
-//   uint32_t vs_count = 0;
-
-//   for (uint32_t i = 0; i < matrix_CSC->ncols; i++){
-//     if ( matrix_CSC->cols[i]){
-//       if (row->idx != matrix_CSC->cols[i]->idx){
-//         struct matrix_element *elem_tmp = row_col_multiply(row, matrix_CSC->cols[i]);
-//         if (elem_tmp) {
-//           vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
-//           vs[vs_count]->idx = i;
-//           vs[vs_count]->elem = elem_tmp;
-//           vs_count++;
-//         }
-//       }
-//     }   
-//   }
-
-//   if(vs_count){
-//     tmp = xmalloc(2*sizeof(uint32_t) + vs_count*sizeof(struct CS_matrix_idx_v *));
-//     tmp->idx = row->idx;
-//     tmp->nidx_vs = vs_count;
-//     // memcpy (tmp->idx_vs, vs, vs_count*sizeof(struct CS_matrix_idx_v *)); 
-//     for (uint32_t i = 0; i < vs_count; i++)
-//       tmp->idx_vs[i] = vs[i];
-//   }
-//   // bdd_gbc();
-//   return tmp;
-// }
-
-// static int
-// CS_matrix_idx_v_cmp (const void *a, const void *b) {
-//   struct CS_matrix_idx_v *va = *(struct CS_matrix_idx_v **)a;
-//   struct CS_matrix_idx_v *vb = *(struct CS_matrix_idx_v **)b;
-//   uint32_t c = (va->idx) - (vb->idx);
-//   return c;
-// }
-
-// struct CS_matrix_idx_v_arr * //最后需要排序，row找对每个csr 的 row 每个乘 保存到数组，然后合并
-// row_matrix_CSR_multiply(struct CS_matrix_idx_v_arr *row, struct matrix_CSR *matrix_CSR) {
-//   struct CS_matrix_idx_v_arr *tmp = NULL;
-//   struct CS_matrix_idx_v *vs[data_allr_nums];
-//   uint32_t vs_count = 0;
-
-//   for (int i = 0; i < row->nidx_vs; i++) {
-//     struct CS_matrix_idx_v *row_idxv = row->idx_vs[i];
-//     if (matrix_CSR->rows[row_idxv->idx]) {
-//       struct CS_matrix_idx_v_arr *row_matrix = matrix_CSR->rows[row_idxv->idx];
-//       for (uint32_t j = 0; j < row_matrix->nidx_vs; j++) {
-//         elemconnet_counter ++;
-//         if(bdd_apply(row_idxv->elem->bdd_out, row_matrix->idx_vs[j]->elem->bdd_in, bddop_and)) {
-//           struct matrix_element *elem_tmp = elem_connect(row_idxv->elem, row_matrix->idx_vs[j]->elem);
-
-//           if (elem_tmp) {
-//             elem_true_counter++;
-//             if (vs_count){
-//               uint32_t sign = 1;
-//               for (int k = 0; k < vs_count; k++) {
-//                 if(row_matrix->idx_vs[j]->idx == vs[k]->idx){
-//                   vs[k]->elem = matrix_elem_plus(vs[k]->elem, elem_tmp);
-//                   sign = 0;
-//                   break;
-//                 }
-//               }
-//               if (sign) {
-//                 vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
-//                 vs[vs_count]->idx = row_matrix->idx_vs[j]->idx;
-//                 vs[vs_count]->elem = elem_tmp;
-//                 vs_count ++;
-//               }      
-//             }
-//             else {
-//               vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
-//               vs[vs_count]->idx = row_matrix->idx_vs[j]->idx;
-//               vs[vs_count]->elem = elem_tmp;
-//               vs_count ++;
-//             }     
-//           }
-//           elem_tmp = NULL;
-//         }
-//       }
-//     }
-//   }
-
-
-//   if(vs_count){
-//     qsort (vs, vs_count,sizeof(struct CS_matrix_idx_v *), CS_matrix_idx_v_cmp); 
-//     tmp = xmalloc(2*sizeof(uint32_t) + vs_count*sizeof(struct CS_matrix_idx_v *));
-//     tmp->idx = row->idx;
-//     tmp->nidx_vs = vs_count;
-//     // memcpy (tmp->idx_vs, vs, vs_count*sizeof(struct CS_matrix_idx_v *)); 
-//     for (uint32_t i = 0; i < vs_count; i++)
-//       tmp->idx_vs[i] = vs[i];
-//   }
-//   return tmp;
-// }
-
-// struct CS_matrix_idx_v_arr * //最后需要排序，row找对每个csr 的 row 每个乘 保存到数组，然后合并
-// row_matrix_CSR_multiply_noloop(struct CS_matrix_idx_v_arr *row, struct matrix_CSR *matrix_CSR) {
-//   struct CS_matrix_idx_v_arr *tmp = NULL;
-//   struct CS_matrix_idx_v *vs[data_allr_nums];
-//   uint32_t vs_count = 0;
-
-//   for (int i = 0; i < row->nidx_vs; i++) {
-//     struct CS_matrix_idx_v *row_idxv = row->idx_vs[i];
-//     if (matrix_CSR->rows[row_idxv->idx]) {
-//       struct CS_matrix_idx_v_arr *row_matrix = matrix_CSR->rows[row_idxv->idx];
-//       for (uint32_t j = 0; j < row_matrix->nidx_vs; j++) {
-//         elemconnet_counter ++;
-//         if (row->idx == row_matrix->idx_vs[j]->idx)
-//           continue;
-//         if(bdd_apply(row_idxv->elem->bdd_out, row_matrix->idx_vs[j]->elem->bdd_in, bddop_and)) {
-//           struct matrix_element *elem_tmp = elem_connect(row_idxv->elem, row_matrix->idx_vs[j]->elem);
-
-//           if (elem_tmp) {
-//             elem_true_counter++;
-//             if (vs_count){
-//               uint32_t sign = 1;
-//               for (int k = 0; k < vs_count; k++) {
-//                 if(row_matrix->idx_vs[j]->idx == vs[k]->idx){
-//                   vs[k]->elem = matrix_elem_plus(vs[k]->elem, elem_tmp);
-//                   sign = 0;
-//                   break;
-//                 }
-//               }
-//               if (sign) {
-//                 vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
-//                 vs[vs_count]->idx = row_matrix->idx_vs[j]->idx;
-//                 vs[vs_count]->elem = elem_tmp;
-//                 vs_count ++;
-//               }      
-//             }
-//             else {
-//               vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
-//               vs[vs_count]->idx = row_matrix->idx_vs[j]->idx;
-//               vs[vs_count]->elem = elem_tmp;
-//               vs_count ++;
-//             }     
-//           }
-//           elem_tmp = NULL;
-//         }
-//       }
-//     }
-//   }
-
-
-//   if(vs_count){
-//     qsort (vs, vs_count,sizeof(struct CS_matrix_idx_v *), CS_matrix_idx_v_cmp); 
-//     tmp = xmalloc(2*sizeof(uint32_t) + vs_count*sizeof(struct CS_matrix_idx_v *));
-//     tmp->idx = row->idx;
-//     tmp->nidx_vs = vs_count;
-//     // memcpy (tmp->idx_vs, vs, vs_count*sizeof(struct CS_matrix_idx_v *)); 
-//     for (uint32_t i = 0; i < vs_count; i++)
-//       tmp->idx_vs[i] = vs[i];
-//   }
-//   return tmp;
-// }
-
-// struct CS_matrix_idx_v_arr *
-// row_matrix_CSR_multiply_bysort(struct CS_matrix_idx_v_arr *row, struct matrix_CSR *matrix_CSR) {
-//   struct CS_matrix_idx_v_arr *tmp = NULL;
-//   struct CS_matrix_idx_v *vs[100000];
-//   // printf("there not wrong\n");
-//   // uint32_t max_CSR = MAX_VAL_RATE*data_allr_nums*data_allr_nums;
-//   // struct matrix_Tri_express **Tri_arr = xmalloc(max_CSR*sizeof(struct matrix_Tri_express *));
-//   uint32_t vs_count = 0;
-
-//   for (int i = 0; i < row->nidx_vs; i++) {
-//     struct CS_matrix_idx_v *row_idxv = row->idx_vs[i];
-//     if (matrix_CSR->rows[row_idxv->idx]) {
-//       struct CS_matrix_idx_v_arr *row_matrix = matrix_CSR->rows[row_idxv->idx];
-//       for (uint32_t j = 0; j < row_matrix->nidx_vs; j++) {
-//         elemconnet_counter ++;
-//         if(bdd_apply(row_idxv->elem->bdd_out, row_matrix->idx_vs[j]->elem->bdd_in, bddop_and)) {
-//           struct matrix_element *elem_tmp = elem_connect(row_idxv->elem, row_matrix->idx_vs[j]->elem);
-
-//           if (elem_tmp) {
-//             elem_true_counter++;
-//             vs[vs_count] = xmalloc(sizeof (struct CS_matrix_idx_v *));
-//             vs[vs_count]->idx = row_matrix->idx_vs[j]->idx;
-//             vs[vs_count]->elem = elem_tmp;
-//             vs_count ++;
-//             // if (vs_count>100000 - 1)
-//             //   printf("there is wrong\n");
-//           }     
-//           elem_tmp = NULL;
-//         }
-//       }
-//     }
-//   }
-
-
-//   if(vs_count){
-//     qsort (vs, vs_count,sizeof(struct CS_matrix_idx_v *), CS_matrix_idx_v_cmp); 
-//     uint32_t count = 1;
-//     for (uint32_t i = 1; i < vs_count; i++) {   
-//       if (vs[i]->idx == vs[count-1]->idx) {
-//         vs[count-1]->elem = matrix_elem_plus(vs[count-1]->elem, vs[i]->elem);//保留相同部分，r-r通过两条链路
-//         free(vs[i]);
-//         continue;
-//       }
-//       vs[count] = vs[i];
-//       count++; 
-//     }
-
-//     tmp = xmalloc(2*sizeof(uint32_t) + count*sizeof(struct CS_matrix_idx_v *));
-//     tmp->idx = row->idx;
-//     tmp->nidx_vs = count;
-//     // memcpy (tmp->idx_vs, vs, vs_count*sizeof(struct CS_matrix_idx_v *)); 
-//     for (uint32_t i = 0; i < count; i++)
-//       tmp->idx_vs[i] = vs[i];
-//   }
-//   return tmp;
-// }
-
-// struct matrix_CSR *
-// sparse_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_CSR1) {
-//   // uint32_t threshold = matrix_CSR->nrows/600;
-//   uint32_t threshold = 0;
-//   if((!matrix_CSR)||(!matrix_CSR1))
-//     return NULL;
-
-//   struct timeval start,stop; 
-//   gettimeofday(&start,NULL);
-//   struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR1);
-//   gettimeofday(&stop,NULL);
-//   printf("gen CSC: %ld ms\n", diff(&stop, &start)/1000);
-  
-//   bool hasvalue = false;
-//   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+(matrix_CSR->nrows)*sizeof(struct CS_matrix_idx_v_arr *));
-//   tmp->nrows = matrix_CSR->nrows;
-
-//   for (uint32_t i = 0; i < matrix_CSR->nrows; i++)
-//     tmp->rows[i] = NULL;
-//   for (uint32_t i = 0; i < matrix_CSR->nrows; i++) {
-//     if (matrix_CSR->rows[i]){
-//       // tmp->rows[i] = row_all_col_multiply_noloop(matrix_CSR->rows[i], matrix_CSC);
-//       if (matrix_CSR->rows[i]->nidx_vs < threshold) {
-
-//       //   gettimeofday(&start,NULL);
-
-//       //   // tmp->rows[i] = row_matrix_CSR_multiply_bysort(matrix_CSR->rows[i], matrix_CSR1);
-//       //   // tmp->rows[i] = row_matrix_CSR_multiply(matrix_CSR->rows[i], matrix_CSR1);
-//         tmp->rows[i] = row_matrix_CSR_multiply_noloop(matrix_CSR->rows[i], matrix_CSR1);
-//       //   gettimeofday(&stop,NULL);
-//       //   time_counter4+= diff(&stop, &start);
-//       // //   printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
-//       }
-//       else{
-//       //   // printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
-//       //   gettimeofday(&start,NULL);
-//         tmp->rows[i] = row_all_col_multiply_noloop(matrix_CSR->rows[i], matrix_CSC);
-//       //   // tmp->rows[i] = row_all_col_multiply(matrix_CSR->rows[i], matrix_CSC);
-//       //   gettimeofday(&stop,NULL);
-//       //   time_counter5+= diff(&stop, &start);
-//       }
-//       if(tmp->rows[i])
-//         hasvalue = true;
-//     }
-//   }
-
-
-//   free_matrix_CSC_fr_CSR(matrix_CSC);
-//   // printf("row number:%d\n", matrix_CSR->nrows);
-//   // printf("tmp:%d\n", tmp->nrows);
-//   if (!hasvalue){
-//     free(tmp);
-//     return NULL;
-//   }
-//   return tmp;
-// }
-
-// struct matrix_CSR *
-// sparse_matrix_multiply_2diff(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_CSR1) {
-//   // uint32_t threshold = matrix_CSR->nrows/600;
-//   uint32_t threshold = 0;
-//   if((!matrix_CSR)||(!matrix_CSR1))
-//     return NULL;
-
-//   struct timeval start,stop; 
-//   gettimeofday(&start,NULL);
-//   struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR1);
-//   gettimeofday(&stop,NULL);
-//   printf("gen CSC: %ld ms\n", diff(&stop, &start)/1000);
-  
-//   bool hasvalue = false;
-//   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+(matrix_CSR->nrows)*sizeof(struct CS_matrix_idx_v_arr *));
-//   tmp->nrows = matrix_CSR->nrows;
-
-//   for (uint32_t i = 0; i < matrix_CSR->nrows; i++)
-//     tmp->rows[i] = NULL;
-//   for (uint32_t i = 0; i < matrix_CSR->nrows; i++) {
-//     if (matrix_CSR->rows[i]){
-//       // tmp->rows[i] = row_all_col_multiply_noloop(matrix_CSR->rows[i], matrix_CSC);
-//       if (matrix_CSR->rows[i]->nidx_vs < threshold) {
-
-//       //   gettimeofday(&start,NULL);
-
-//       //   // tmp->rows[i] = row_matrix_CSR_multiply_bysort(matrix_CSR->rows[i], matrix_CSR1);
-//         tmp->rows[i] = row_matrix_CSR_multiply(matrix_CSR->rows[i], matrix_CSR1);
-//         // tmp->rows[i] = row_matrix_CSR_multiply_noloop(matrix_CSR->rows[i], matrix_CSR1);
-//       //   gettimeofday(&stop,NULL);
-//       //   time_counter4+= diff(&stop, &start);
-//       // //   printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
-//       }
-//       else{
-//       //   // printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
-//       //   gettimeofday(&start,NULL);
-//         // tmp->rows[i] = row_all_col_multiply_noloop(matrix_CSR->rows[i], matrix_CSC);
-//         tmp->rows[i] = row_all_col_multiply(matrix_CSR->rows[i], matrix_CSC);
-//       //   gettimeofday(&stop,NULL);
-//       //   time_counter5+= diff(&stop, &start);
-//       }
-//       if(tmp->rows[i])
-//         hasvalue = true;
-//     }
-//   }
-
-
-//   free_matrix_CSC_fr_CSR(matrix_CSC);
-//   // printf("row number:%d\n", matrix_CSR->nrows);
-//   // printf("tmp:%d\n", tmp->nrows);
-//   if (!hasvalue){
-//     free(tmp);
-//     return NULL;
-//   }
-//   return tmp;
-// }
-
-// struct matrix_CSC *
-// sparse_matrix_multiply_CSC_allrowcol(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix_CSC) {
-//   if((!matrix_CSR)||(!matrix_CSC))
-//     return NULL;
-//   bool hasvalue = false;
-//   struct matrix_CSC *tmp = xmalloc(sizeof(uint32_t)+(matrix_CSC->ncols)*sizeof(struct CS_matrix_idx_v_arr *));
-//   tmp->ncols = matrix_CSC->ncols;
-//   for (uint32_t i = 0; i < matrix_CSC->ncols; i++)
-//     tmp->cols[i] = NULL;
-//   for (uint32_t i = 0; i < matrix_CSC->ncols; i++) {
-//     if (matrix_CSC->cols[i]){
-//       tmp->cols[i] = all_row_col_multiply_noloop(matrix_CSR, matrix_CSC->cols[i]);
-//       if(tmp->cols[i])
-//         hasvalue = true;
-//     }
-//   }
-
-//   if (!hasvalue){
-//     free(tmp);
-//     return NULL;
-//   }
-//   return tmp;
-// }
-
-// struct matrix_CSR *
-// sparse_matrix_multiply_CSC(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_CSR1, struct matrix_CSC *matrix_CSC) {
-//   // uint32_t threshold = matrix_CSR->nrows/600;
-//   if((!matrix_CSR)||(!matrix_CSR1))
-//     return NULL;
-//   bool hasvalue = false;
-//   uint32_t threshold = 2;
-//   // struct timeval start,stop; 
-//   // gettimeofday(&start,NULL);
-//   // gettimeofday(&stop,NULL);
-//   // printf("gen CSC: %ld ms\n", diff(&stop, &start)/1000);
-
-
-//   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+(matrix_CSR->nrows)*sizeof(struct CS_matrix_idx_v_arr *));
-//   tmp->nrows = matrix_CSR->nrows;
-//   for (uint32_t i = 0; i < matrix_CSR->nrows; i++)
-//     tmp->rows[i] = NULL;
-//   for (uint32_t i = 0; i < matrix_CSR->nrows; i++) {
-//     if (matrix_CSR->rows[i]){
-//       // tmp->rows[i] = row_all_col_multiply(matrix_CSR->rows[i], matrix_CSC);
-//       // tmp->rows[i] = row_all_col_multiply_noloop(matrix_CSR->rows[i], matrix_CSC);
-//       if (matrix_CSR->rows[i]->nidx_vs < threshold) {
-
-//       //   // gettimeofday(&start,NULL);
-
-
-//         tmp->rows[i] = row_matrix_CSR_multiply_noloop(matrix_CSR->rows[i], matrix_CSR1);
-//       //   // gettimeofday(&stop,NULL);
-//       //   // time_counter4+= diff(&stop, &start);
-//       // //   printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
-//       }
-//       else{
-//       //   // printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
-//       //   // gettimeofday(&start,NULL);
-//         tmp->rows[i] = row_all_col_multiply_noloop(matrix_CSR->rows[i], matrix_CSC);
-//       //   // gettimeofday(&stop,NULL);
-//       //   // time_counter5+= diff(&stop, &start);
-//       }
-//       if(tmp->rows[i])
-//         hasvalue = true;
-//     }
-//   }
-//   if (!hasvalue){
-//     free(tmp);
-//     return NULL;
-//   }
-//   return tmp;
-// }
-
-// struct matrix_CSR *
-// sparse_matrix_multiply_CSC_2diff(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_CSR1, struct matrix_CSC *matrix_CSC) {
-//   // uint32_t threshold = matrix_CSR->nrows/600;
-//   if((!matrix_CSR)||(!matrix_CSR1))
-//     return NULL;
-//   bool hasvalue = false;
-//   uint32_t threshold = 0;
-//   // struct timeval start,stop; 
-//   // gettimeofday(&start,NULL);
-//   // gettimeofday(&stop,NULL);
-//   // printf("gen CSC: %ld ms\n", diff(&stop, &start)/1000);
-
-
-//   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+(matrix_CSR->nrows)*sizeof(struct CS_matrix_idx_v_arr *));
-//   tmp->nrows = matrix_CSR->nrows;
-//   for (uint32_t i = 0; i < matrix_CSR->nrows; i++)
-//     tmp->rows[i] = NULL;
-//   for (uint32_t i = 0; i < matrix_CSR->nrows; i++) {
-//     if (matrix_CSR->rows[i]){
-//       // tmp->rows[i] = row_all_col_multiply(matrix_CSR->rows[i], matrix_CSC);
-//       // tmp->rows[i] = row_all_col_multiply_noloop(matrix_CSR->rows[i], matrix_CSC);
-//       if (matrix_CSR->rows[i]->nidx_vs < threshold) {
-
-//       //   // gettimeofday(&start,NULL);
-
-
-//         tmp->rows[i] = row_matrix_CSR_multiply(matrix_CSR->rows[i], matrix_CSR1);
-//       //   // gettimeofday(&stop,NULL);
-//       //   // time_counter4+= diff(&stop, &start);
-//       // //   printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
-//       }
-//       else{
-//       //   // printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
-//       //   // gettimeofday(&start,NULL);
-//         tmp->rows[i] = row_all_col_multiply(matrix_CSR->rows[i], matrix_CSC);
-//       //   // gettimeofday(&stop,NULL);
-//       //   // time_counter5+= diff(&stop, &start);
-//       }
-//       if(tmp->rows[i])
-//         hasvalue = true;
-//     }
-//   }
-//   if (!hasvalue){
-//     free(tmp);
-//     return NULL;
-//   }
-//   return tmp;
-// }
-
-// struct matrix_CSR * // n row * CSR
-// sparse_matrix_multiply_otway(struct matrix_CSR *matrix_CSR, struct matrix_CSR *matrix_CSR1) {
-//   // uint32_t threshold = matrix_CSR->nrows/600;
-//   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+data_allr_nums*sizeof(struct CS_matrix_idx_v_arr *));
-//   tmp->nrows = data_allr_nums;
-//   for (uint32_t i = 0; i < data_allr_nums; i++)
-//     tmp->rows[i] = NULL;
-
-//   for (uint32_t i = 0; i < matrix_CSR->nrows; i++) {
-//     if (matrix_CSR->rows[i]){
-//       tmp->rows[i] = row_matrix_CSR_multiply(matrix_CSR->rows[i], matrix_CSR1);
-//     }
-//   }
-
-//   // printf("row number:%d\n", matrix_CSR->nrows);
-//   // printf("tmp:%d\n", tmp->nrows);
-//   return tmp;
-// }
-
-// int
-// get_value_num_matrix_CSR(struct matrix_CSR *matrix_CSR) {
-//   int count = 0;
-//   for (uint32_t i = 0; i < matrix_CSR->nrows; i++) {
-//     if (matrix_CSR->rows[i]){
-//       count += matrix_CSR->rows[i]->nidx_vs;
-//     }
-//   }
-//   return count;
-// }
-
-// struct matrix_CSR *
-// selected_rs_matrix_multiply(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix_CSC, struct u32_arrs *rs) {
-//   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+matrix_CSR->nrows*sizeof(struct CS_matrix_idx_v_arr *));
-//   tmp->nrows = rs->ns;
-//   for (uint32_t i = 0; i < tmp->nrows; i++)
-//     tmp->rows[i] = NULL;
-
-//   for (uint32_t i = 0; i < rs->ns; i++) {
-//     uint32_t idx = rs->arrs[i];
-//     if (matrix_CSR->rows[idx]){
-//       tmp->rows[i] = row_all_col_multiply(matrix_CSR->rows[idx], matrix_CSC);
-//     }
-//   }
-
-//   return tmp;
-// }
-
-// struct matrix_CSR *
-// sparse_matrix_multiply_nsqure(struct matrix_CSR *matrix_CSR, struct matrix_CSC *matrix_CSC) {
-//   // uint32_t threshold = matrix_CSR->nrows/600;
-//   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+matrix_CSR->nrows*sizeof(struct CS_matrix_idx_v_arr *));
-//   tmp->nrows = matrix_CSR->nrows;
-//   for (uint32_t i = 0; i < tmp->nrows; i++)
-//     tmp->rows[i] = NULL;
-
-//   for (uint32_t i = 0; i < matrix_CSR->nrows; i++) {
-//     if (matrix_CSR->rows[i]){
-//       tmp->rows[i] = row_all_col_multiply(matrix_CSR->rows[i], matrix_CSC);
-//       // if (matrix_CSR->rows[i]->nidx_vs < threshold) {
-//       //   printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
-//       //   // uint32_t arr[threshold*matrix_CSR->nrows];
-//       //   uint32_t *arr = xmalloc((threshold*matrix_CSR->nrows)*sizeof(uint32_t));
-//       //   uint32_t count = 0;
-//       //   struct CS_matrix_idx_v_arr *row = matrix_CSR->rows[i];
-//       //   for (uint32_t j = 0; j < row->nidx_vs; j++) {
-//       //     uint32_t col_row = row->idx_vs[j]->idx;
-//       //     struct CS_matrix_idx_v_arr *row_tmp = matrix_CSR->rows[col_row];
-//       //     if (row_tmp){
-//       //       for (uint32_t k = 0; k < row_tmp->nidx_vs; k++){
-//       //         arr[count] = row_tmp->idx_vs[k]->idx;
-//       //         count++;
-//       //       }
-//       //     }
-//       //   }
-//       //   if (count){
-//       //     uint32_t count1 = 1;
-//       //     qsort(arr, count,sizeof (uint32_t), uint32_t_cmp);
-//       //     uint32_t arr1[matrix_CSR->nrows];
-//       //     arr1[0] = arr[0];
-//       //     for (uint32_t j = 1; j < count; j++){
-//       //       if (arr[j] != arr[j-1]) {
-//       //         arr1[count1] = arr[j];
-//       //         count1++;
-//       //       }
-//       //     }
-//       //     tmp->rows[i] = row_multi_col_multiply(row, arr1, count1, matrix_CSC);
-//       //   }
-//       //   free(arr);
-//       // }
-//       // else{
-//       //   printf("rows %d - %d \n", i, matrix_CSR->rows[i]->nidx_vs);
-//       //   tmp->rows[i] = row_all_col_multiply(matrix_CSR->rows[i], matrix_CSC);
-//       // }
-//     }
-//   }
-
-//   // printf("row number:%d\n", matrix_CSR->nrows);
-//   // printf("tmp:%d\n", tmp->nrows);
-//   return tmp;
-// }
-
-// struct matrix_CSR * //reuse the vector of the old one
-// sparse_matrix_plus(struct matrix_CSR *matrix_CSR1, struct matrix_CSR *matrix_CSR2) {
-//   // uint32_t threshold = matrix_CSR->nrows/600;
-//   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+matrix_CSR1->nrows*sizeof(struct CS_matrix_idx_v_arr *));
-//   tmp->nrows = matrix_CSR1->nrows;
-//   for (uint32_t i = 0; i < tmp->nrows; i++)
-//     tmp->rows[i] = NULL;
-
-//   for (uint32_t i = 0; i < tmp->nrows; i++) {
-//     if (matrix_CSR1->rows[i]){
-//       if (matrix_CSR2->rows[i]){
-//         tmp->rows[i] = two_CS_matrix_idx_v_arr_plus_keeprow2(matrix_CSR1->rows[i], matrix_CSR2->rows[i], tmp->nrows);
-//       }
-//       else{
-//         tmp->rows[i] = matrix_CSR1->rows[i];
-//       }
-//     }
-//     else{
-//       tmp->rows[i] = matrix_CSR2->rows[i];
-//     }
-//   }
-//   // printf("row number:%d\n", matrix_CSR->nrows);
-//   // printf("tmp:%d\n", tmp->nrows);
-//   return tmp;
-// }
-
-// struct CS_matrix_idx_v_arr *
-// gen_matrix_row_CSR_fr_Tris(struct Tri_arr *Tri_arr) {
-//   if (Tri_arr->nTris==0){
-//     return NULL;
-//   }
-//   // printf("there is wrong: %d - %d\n", data_allr_nums, Tri_arr->nTris);
-//   qsort(Tri_arr->arr, Tri_arr->nTris,sizeof (struct matrix_Tri_express *), cmp_matrix_Tri_express);
-  
-//   struct CS_matrix_idx_v_arr *tmp = xmalloc(2*sizeof(uint32_t)+Tri_arr->nTris*sizeof(struct CS_matrix_idx_v *));
-//   tmp->idx = 0;
-//   tmp->nidx_vs = Tri_arr->nTris;
-//   for (int i = 0; i < Tri_arr->nTris; i++) {
-//     tmp->idx_vs[i] = xmalloc(sizeof(struct CS_matrix_idx_v));
-//     tmp->idx_vs[i]->idx = Tri_arr->arr[i]->col_idx;
-//     tmp->idx_vs[i]->elem = Tri_arr->arr[i]->elem;
-//   }
-//   return tmp;
-//   // return NULL;
-// }
-
-// struct matrix_Tri_express * 
-// insc_to_Tri_express_rlimit_simple(uint32_t lk, struct bdd_rule *r_out, BDD v_and) {
-//   struct nf_space_pair *pair = xcalloc(1, sizeof *pair);
-
-//   struct links_of_rule *lks_out_tmp = xmalloc(sizeof(uint32_t)+sizeof (lks_out_tmp->links_wc[0]));
-//   lks_out_tmp->n = 1;
-//   lks_out_tmp->links_wc[0].w = 0x00;
-//   lks_out_tmp->links_wc[0].v = (uint16_t)lk;
-
-
-//   // struct links_of_rule *lks_in = rule_links_get(r_out, IN_LINK);
-//   // struct links_of_rule *lks_out = links_insc(lks_in, lks_out_tmp);
-//   // print_links_of_rule(lks_out_tmp);
-//   // print_links_of_rule(lks_out);
-//   // print_links_of_rule(lks_out);
-
-//   struct matrix_Tri_express *tmp = xcalloc(1, sizeof *tmp);
-//   tmp->elem = xmalloc(sizeof(uint32_t)+2*sizeof(BDD)+sizeof(struct nf_space_pair *));
-//   tmp->elem->npairs = 1;
-//   tmp->row_idx = 0;
-//   tmp->col_idx = matrix_idx_get_2idx(r_out->sw_idx, r_out->idx);
-
-//   // struct bdd_saved_arr *bdd_arr_out = bdd_save_arr(v_and);
-//   // bdd_printtable(v_and);
-
-//   pair->in = xcalloc(1, sizeof *(pair->in));// 1,16(两个指针为16)
-//   pair->in->lks = NULL;
-//   pair->out = xcalloc(1, sizeof *(pair->out));
-//   pair->out->lks = lks_out_tmp;
-//   pair->r_arr = xmalloc(sizeof (uint32_t)+2*sizeof (struct r_idx));
-
-
-//   pair->r_arr->nrs = 2;
-//   pair->r_arr->ridx[0].sw_idx = -1;
-//   pair->r_arr->ridx[0].r_idx = -1;
-//   pair->r_arr->ridx[1].sw_idx = r_out->sw_idx;
-//   pair->r_arr->ridx[1].r_idx = r_out->idx;
-//   pair->out->mf = v_and;
-//   bdd_addref(pair->out->mf);
-//   tmp->elem->bdd_out = pair->out->mf;
-//   bdd_addref(pair->out->mf);
-
-
-//   pair->in->mf = v_and;
-//   bdd_addref(pair->in->mf);
-//   tmp->elem->bdd_in = pair->out->mf;
-//   bdd_addref(pair->in->mf);
-
-//   pair->mask = NULL;
-//   pair->rewrite = NULL;
-
-//   tmp->elem->nf_pairs[0] = pair;
-//   return tmp;
-// }
-
-// struct mf_uint16_t *
-// get_allx_mf_uint16_t(void) {
-//   struct mf_uint16_t *tmp = xcalloc(1, sizeof *tmp);
-//   init_mf_allx(tmp);
-//   return tmp;
-// }
-
-// struct Tri_arr *
-// gen_Tri_arr_bdd_fr_port(uint32_t inport) {
-
-//   uint32_t max_CSR = data_allr_nums;
-//   // printf("max_CSR%d\n", max_CSR);
-//   struct matrix_Tri_express *Tri_arr[max_CSR];
-//   uint32_t nTris = 0;
-//   uint32_t rule_nums_out = 0;
-//   struct u32_arrs *links = get_link_idx_from_inport(inport);
-//   // print_u32_arrs(links);
-
-//   if (links->ns) {
-//     // printf("gen_Tri_arr_bdd_fr_port\n");
-//     struct link_to_rule *lout_r = get_link_rules(link_out_rule_file, &rule_nums_out, links->arrs[0]);
-//      if (lout_r){
-//       uint32_t *lout_arrs = (uint32_t *)(link_out_rule_data_arrs + 2*(lout_r->rule_nums - rule_nums_out));
-
-//       struct mf_uint16_t *r_in_mf = get_allx_mf_uint16_t(); 
-//       BDD v_in, v_out; 
-//       v_in = mf2bdd(r_in_mf);
-
-//       for (uint32_t i_out = 0; i_out < rule_nums_out; i_out++) {
-//         struct bdd_rule *r_out = bdd_sws_arr[*(uint32_t *)lout_arrs]->rules[*(uint32_t *)(lout_arrs+1) - 1];
-//         v_out = r_out->mf_in;
-//         BDD v_and, v_diff;
-//         v_and = bdd_apply(v_in, v_out, bddop_and);
-                  
-//         if (v_and){
-//           Tri_arr[nTris] = insc_to_Tri_express_rlimit_simple(links->arrs[0], r_out, v_and);
-//           nTris++;
-//           v_diff = bdd_apply(v_in, v_and, bddop_diff);
-//         }
-//         else {
-//           v_diff = v_in;
-//         } 
-//         v_in = v_diff;
-//         if (!v_in){
-//           break;
-//         }
-//         lout_arrs += 2;
-//       } 
-//       free(r_in_mf);
-//     }
-//   }
-
-//   struct Tri_arr *tmp = xmalloc(sizeof(uint32_t)+nTris*sizeof(struct matrix_Tri_express *));
-//   tmp->nTris = nTris;
-//   // printf("nTris %d\n", nTris);
-//   for (uint32_t i = 0; i < nTris; i++){
-//     tmp->arr[i] = Tri_arr[i];
-//   }
-//   return tmp;
-// }
-
-// struct CS_matrix_idx_v_arr * //通过对链路文件查找两个同链路的头尾端规则，计算是否连通并添加到矩阵
-// gen_sparse_matrix_row_fr_port(uint32_t inport) {
-//   struct Tri_arr *Tri_arr = gen_Tri_arr_bdd_fr_port(inport);
-//   printf("gen_sparse_matrix_row_fr_port\n");
-//   printf("all num = %d\n", Tri_arr->nTris);
-//   struct CS_matrix_idx_v_arr *tmp = gen_matrix_row_CSR_fr_Tris(Tri_arr);
-//   printf("--------------------------------------\n");
-//   free(Tri_arr);
-//   return tmp;
-// }
-
-// struct CS_matrix_idx_v_arr * 
-// vec_matrix_multiply (struct CS_matrix_idx_v_arr *vec, struct matrix_CSC *matrix_CSC) {
-//   if(!vec)
-//     return NULL;
-//   // bdd_init(BDDSIZE, BDDOPCHCHE);
-//   // bdd_setvarnum(16*MF_LEN);
-//   struct CS_matrix_idx_v_arr *tmp = row_all_col_multiply(vec, matrix_CSC);
-//   // bdd_done();
-//   return tmp;
-// }
-
-// void
-// print_CS_matrix_idx_v_arr(struct CS_matrix_idx_v_arr *v_arr) {
-//   if (v_arr) {
-//     printf("All num of the arr is: %d\n", v_arr->nidx_vs);
-//     for (int i = 0; i < v_arr->nidx_vs; i++)
-//       printf("%d;", v_arr->idx_vs[i]->idx);
-//     printf("\n");
-    
-//   }
-//   else
-//     printf("This vector is NULL\n");
-// }
-
-// void
-// print_CS_matrix_v_arr(struct CS_matrix_idx_v_arr *v_arr) {
-//   if (v_arr) {
-//     printf("All num of the arr is: %d\n", v_arr->nidx_vs);
-//     for (int i = 0; i < v_arr->nidx_vs; i++){
-//       printf("%d:", v_arr->idx_vs[i]->idx);
-//       print_matrix_element(v_arr->idx_vs[i]->elem);
-//     }
-//     printf("\n");
-    
-//   }
-//   else
-//     printf("This vector is NULL\n");
-// }
-
 void
 BDD_init_multiply(void) {
   bdd_init(BDDSIZE, MTBDDSIZE, BDDOPCHCHE);
   bdd_setvarnum(16*MF_LEN + LINK_LEN);
   mtbddop_count = 20;
+  coveringop_count = 1;
 }
 
 /*MTBDD结构*/
 /*========================================================================*/
-// bool
-// is_action_same(struct bdd_rule *a, struct bdd_rule *b) {
-//   if (!is_mask_uint16_t_same(a->mask, b->mask))
-//     return false;
-//   if (!is_mask_uint16_t_same(a->rewrite, b->rewrite))
-//     return false;
-//   // if (!is_links_of_rule_same(a->lks_out, b->lks_out))
-//   //   return false;
-//   // if (!is_links_of_rule_same(a->lks_in, b->lks_in))
-//   //   return false;
-//   if (a->lks_out != b->lks_out)
-//     return false;
-//   if (a->lks_in != b->lks_in)
-//     return false;
-//   return true;
-// }
+bool
+is_action_same(struct bdd_rule *a, struct bdd_rule *b) {
+  if (!is_mask_uint16_t_same(a->mask, b->mask))
+    return false;
+  if (!is_mask_uint16_t_same(a->rewrite, b->rewrite))
+    return false;
+  // if (!is_links_of_rule_same(a->lks_out, b->lks_out))
+  //   return false;
+  // if (!is_links_of_rule_same(a->lks_in, b->lks_in))
+  //   return false;
+  if (a->lks_out != b->lks_out)
+    return false;
+  if (a->lks_in != b->lks_in)
+    return false;
+  return true;
+}
 
 BDD
 bdd_to_mtbdd(BDD domain, BDD tnode) {
@@ -15695,6 +12388,7 @@ generate_mtbddrules(struct network_bdd *net) {
     struct switch_bdd_rs *sw = net->sws[sw_i];
     for (int r_i = 0; r_i < sw->nrules; r_i++) {
       sw->rules[r_i]->vtnode_in = mtbdd_maketnode_from_r(sw->rules[r_i]);
+      bdd_addref(sw->rules[r_i]->vtnode_in);
       sw->rules[r_i]->mtbdd_in = bdd_to_mtbdd(sw->rules[r_i]->mf_in, sw->rules[r_i]->vtnode_in);
       bdd_addref(sw->rules[r_i]->mtbdd_in);
       // sw->rules[r_i]->vtnode_in_merge = mtbdd_maketnode_merge_from_r(sw->rules[r_i]); 
@@ -15704,1389 +12398,12 @@ generate_mtbddrules(struct network_bdd *net) {
   printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum());
 }
 
-// BDD
-// mtbdd_2pr_add_r(BDD a, BDD b) {
-//   CHECKa(a, bddfalse);
-//   CHECKa(b, bddfalse);
-//   // hit_cache_counter = 0;
-//   // calc_node_counter = 0;
-//   BDD res = mtbdd_2pr_add_r_rec(a, b);
-//   // if (sign == 1) {
-//   //   printf("the hit_cache_counter is %d\n", hit_cache_counter);
-//   //   printf("the calc_node_counter is %d\n", calc_node_counter);
-//   //   // printf("a has %d nodes\n", bdd_nodecount(a));
-//   //   // printf("b has %d nodes\n", bdd_nodecount(b));
-//   //   // printf("res has %d nodes\n", bdd_nodecount(res));
-//   // }
-//   return res;
-// }
-
-// struct network_mtbdd *
-// generate_mtbdd_foreach_table(struct network_bdd *net) {
-//   struct timeval start,stop;
-//   BDD tmp_mtbdd_sws[net->nsws];
-//   for (int i = 0; i < net->nsws; i++) {
-//     tmp_mtbdd_sws[i] = BDDZERO;
-//   }
-
-//   for (int sw_i = 0; sw_i < net->nsws; sw_i++) {
-//     struct switch_bdd_rs *sw = net->sws[sw_i];
-//     for (int r_i = 0; r_i < sw->nrules; r_i++) {
-//       gettimeofday(&start,NULL);
-//       tmp_mtbdd_sws[sw_i] = mtbdd_2pr_add_r(tmp_mtbdd_sws[sw_i], sw->rules[r_i]->mtbdd_in);
-//       gettimeofday(&stop,NULL);
-//       long long int rupdate = diff(&stop, &start);
-//       printf("rupdate %d - %d for each table: %lld us\n", sw_i, r_i, rupdate);
-//      }
-//   }
-//   printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum());
-//   struct network_mtbdd *tmp = xmalloc(sizeof(struct network_mtbdd));
-//   tmp->nsws = net->nsws;
-//   for (int i = 0; i < net->nsws; i++)
-//     tmp->mtbdd_sws[i] = tmp_mtbdd_sws[i];
-//   return tmp;
-// }
-
-// uint32_t
-// get_mtbdd_probes_num(struct network_mtbdd *net) {
-//   uint32_t sum_v_num = 0;
-//   for (int i = 0; i < net->nsws; i++){
-//     bdd_nodecount(net->mtbdd_sws[i]);
-//     sum_v_num +=  test_counter;
-//   }
-//   printf("MTBDD get %d probes for the network\n", sum_v_num);
-//   return sum_v_num;
-// }
-
-// struct network_bdd *
-// generate_empty_net(struct network_bdd *net) {
-//   if (!net)
-//     return NULL;
-//   struct network_bdd *tmp = xmalloc(sizeof(struct network_bdd));
-//   tmp->nsws = net->nsws;
-//   for (int i = 0; i < tmp->nsws; i++) {
-//     if (net->sws[i]) {
-//       tmp->sws[i] = xmalloc(2*sizeof(uint32_t)+(net->sws[i]->nrules)*sizeof(struct bdd_rule *));
-//       tmp->sws[i]->sw_idx = net->sws[i]->sw_idx;
-//       tmp->sws[i]->nrules = net->sws[i]->nrules;
-//       for (int r_i = 0; r_i < tmp->sws[i]->nrules; r_i++)
-//         tmp->sws[i]->rules[r_i] = NULL;
-//     }
-//     else
-//       tmp->sws[i] = NULL;
-//   }
-//   return tmp;
-// }
-
-// BDD
-// portin_mtbdd_r_add(BDD bddbasic, BDD bddadd, uint32_t lk_ibasic, uint32_t lk_iadd) {
-//   CHECKa(bddbasic, bddfalse);
-//   CHECKa(bddadd, bddfalse);
-//   // hit_cache_counter = 0;
-//   // calc_node_counter = 0;
-//   BDD res = portin_mtbdd_r_add_rec(bddbasic, bddadd, lk_ibasic, lk_iadd);
-//   // if (sign == 1) {
-//   //   printf("the hit_cache_counter is %d\n", hit_cache_counter);
-//   //   printf("the calc_node_counter is %d\n", calc_node_counter);
-//   //   // printf("a has %d nodes\n", bdd_nodecount(a));
-//   //   // printf("b has %d nodes\n", bdd_nodecount(b));
-//   //   // printf("res has %d nodes\n", bdd_nodecount(res));
-//   // }
-//   return res;
-// }
-
-// void
-// rmtbdd_insert_arule_get_dominant(struct bdd_rule *r){
-//   if (r->lks_in->n == mtbdd_sw_port_relations[r->sw_idx]->allportin) {
-//     if (!mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[0]) {
-//       mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[0] = xmalloc(sizeof(struct port_relation_insw));
-//       mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[0]->in = NULL;
-//       mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[0]->in_mtbdd_r = BDDZERO;
-//       mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[0]->in_mtbdd_merged_r = BDDZERO;
-//     }
-//     struct port_relation_insw *portin_all = mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[0];
-//     // BDD tmp_all = portin_all->in_mtbdd_r;
-//     bdd_delref(portin_all->in_mtbdd_r);
-//     portin_all->in_mtbdd_r = portin_mtbdd_r_add(portin_all->in_mtbdd_r, r->mtbdd_in, 0, 0);
-//     bdd_addref(portin_all->in_mtbdd_r);
-//     mtbddop_count++;
-//     for (int port_i = 1; port_i < mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->nports; port_i++) {
-//       if (mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[port_i]) {
-//         struct port_relation_insw *portin_i = mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[port_i];
-//         if (portin_i->in_mtbdd_r) {
-//           for (int i = 0; i < r->lks_in->n; i++) {
-//             if (port_i == (uint32_t)(r->lks_in->links_wc[i].v)) {
-//               r->lks_in_bdd->link_BDDs[i+1] = r->lks_in_bdd->link_BDDs[0];
-//               bdd_addref(r->lks_in_bdd->link_BDDs[i+1]);
-//               bdd_delref(portin_i->in_mtbdd_r);
-//               portin_i->in_mtbdd_r = portin_mtbdd_r_add(portin_i->in_mtbdd_r, r->mtbdd_in, port_i, i+1);
-//               bdd_addref(portin_i->in_mtbdd_r);
-//               mtbddop_count++;
-//             }
-//           }
-//         }
-//       }
-//     }
-//   }
-//   else {
-//     for (int port_i = 0; port_i < r->lks_in->n; port_i++) {
-//       uint32_t current_port = (uint32_t)(r->lks_in->links_wc[port_i].v);
-//       if (!(mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[current_port])) {
-//         mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[current_port] = xmalloc(sizeof(struct port_relation_insw));
-//         mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[current_port]->in = NULL;
-//         mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[current_port]->in_mtbdd_r = BDDZERO;
-//         mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[current_port]->in_mtbdd_merged_r = BDDZERO;
-//       }
-//       // printf("current_port %d\n", current_port);
-//       struct port_relation_insw *portin_i = mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[current_port];
-//       if ((portin_i->in_mtbdd_r == BDDZERO)&&(mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[0])) {
-//         bdd_delref(portin_i->in_mtbdd_r);
-//         portin_i->in_mtbdd_r = portin_mtbdd_r_add(mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[0]->in_mtbdd_r, r->mtbdd_in, 0, port_i+1);
-//         bdd_addref(portin_i->in_mtbdd_r);
-//         mtbddop_count++;
-//       }
-//       else {
-//         // printf("current_port %d\n", current_port);
-//         bdd_delref(portin_i->in_mtbdd_r);
-//         // printf("current_port %d\n", current_port);
-//         portin_i->in_mtbdd_r = portin_mtbdd_r_add(portin_i->in_mtbdd_r, r->mtbdd_in, current_port, port_i+1);
-//         bdd_addref(portin_i->in_mtbdd_r);
-//         mtbddop_count++; 
-//         // printf("current_port %d\n", current_port);
-//       }
-//     }
-//   }
-// }
-
-// void
-// get_delta_inserting_a_rule(struct bdd_rule *r){
-//   for (int ch_i = 0; ch_i < mgr_change_count; ch_i++) {
-//     struct bdd_rule *merged_r = mgr_change_tmp[ch_i].r;
-//     struct bdds_for_lkin *lkin = mgr_change_tmp[ch_i].lks_in_bdd;
-//     if (mtbdd_sw_port_relations[merged_r->sw_idx]->allportin>1){
-//       for (int lk_i = 1; lk_i < lkin->n; lk_i++) {
-//         if (lkin->link_BDDs[lk_i]) {
-//           uint32_t lk_idx = (uint32_t)(r->lks_in->links_wc[lk_i-1].v);
-//           if (mtbdd_sw_port_relations[merged_r->sw_idx]->port_relation_in->ports[lk_idx]) {
-//             struct port_relation_insw *pr_in = mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[lk_idx];
-//             if (pr_in->in) {
-//               for (int pout_i = 0; pout_i < pr_in->in->ncps; pout_i++) {
-//                 if(mtbdd_sw_port_relations[pr_in->in->cps[pout_i]->sw_idx]->port_relation_out->ports[pr_in->in->cps[pout_i]->port_idx]){
-//                   struct port_relation_outsw *pr_out = mtbdd_sw_port_relations[pr_in->in->cps[pout_i]->sw_idx]->port_relation_out->ports[pr_in->in->cps[pout_i]->port_idx];
-//                   if (pr_out->out){
-//                     if(pr_out->out_records){
-//                       for (int rout_i = 0; rout_i < pr_out->out_records->nrules; rout_i++){
-//                         BDD insc = bdd_apply(pr_out->out_records->rules[rout_i]->mf_out, lkin->link_BDDs[lk_i], bddop_and);
-//                       }
-//                     }
-//                   }
-//                 }
-//               }
-//             }
-//           }
-//         }
-//         else{
-//           if(lkin->link_BDDs[0]){
-//             uint32_t lk_idx = (uint32_t)(r->lks_in->links_wc[lk_i-1].v);
-//             if (mtbdd_sw_port_relations[merged_r->sw_idx]->port_relation_in->ports[lk_idx]) {
-//               struct port_relation_insw *pr_in = mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[lk_idx];
-//               if (pr_in->in) {
-//                 for (int pout_i = 0; pout_i < pr_in->in->ncps; pout_i++) {
-//                   if(mtbdd_sw_port_relations[pr_in->in->cps[pout_i]->sw_idx]->port_relation_out->ports[pr_in->in->cps[pout_i]->port_idx]){
-//                     struct port_relation_outsw *pr_out = mtbdd_sw_port_relations[pr_in->in->cps[pout_i]->sw_idx]->port_relation_out->ports[pr_in->in->cps[pout_i]->port_idx];
-//                     if (pr_out->out){
-//                       if(pr_out->out_records){
-//                         for (int rout_i = 0; rout_i < pr_out->out_records->nrules; rout_i++){
-//                           BDD insc = bdd_apply(pr_out->out_records->rules[rout_i]->mf_out, lkin->link_BDDs[0], bddop_and);
-//                         }
-//                       }
-//                     }
-//                   }
-//                 }
-//               }
-//             }
-//           }
-//         }
-//       }
-//     }
-//     else{
-//       if(lkin->link_BDDs[0]){
-//         if (mtbdd_sw_port_relations[merged_r->sw_idx]->port_relation_in->ports[0]) {
-//           struct port_relation_insw *pr_in = mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[0];
-//           if (pr_in->in) {
-//             for (int pout_i = 0; pout_i < pr_in->in->ncps; pout_i++) {
-//               if(mtbdd_sw_port_relations[pr_in->in->cps[pout_i]->sw_idx]->port_relation_out->ports[pr_in->in->cps[pout_i]->port_idx]){
-//                 struct port_relation_outsw *pr_out = mtbdd_sw_port_relations[pr_in->in->cps[pout_i]->sw_idx]->port_relation_out->ports[pr_in->in->cps[pout_i]->port_idx];
-//                 if (pr_out->out){
-//                   if(pr_out->out_records){
-//                     for (int rout_i = 0; rout_i < pr_out->out_records->nrules; rout_i++){
-//                       BDD insc = bdd_apply(pr_out->out_records->rules[rout_i]->mf_out, lkin->link_BDDs[0], bddop_and);
-//                     }
-//                   }
-//                 }
-//               }
-//             }
-//           }
-//         }
-//       }
-//     }
-//     for (int lk_i = 0; lk_i < lkin->n; lk_i++) {
-//       if (lkin->link_BDDs[lk_i]) {
-//         bdd_delref(merged_r->lks_in_bdd->link_BDDs[lk_i]);
-//         merged_r->lks_in_bdd->link_BDDs[lk_i] = bdd_apply(merged_r->lks_in_bdd->link_BDDs[lk_i], lkin->link_BDDs[lk_i], bddop_diff);
-//         bdd_addref(merged_r->lks_in_bdd->link_BDDs[lk_i]);
-//       }
-//     }
-//   }
-
-//   struct bdd_rule *merged_r = mtbddvalues[(bddnodes[r->vtnode_in_merge].high)].main_r;
-//   if (mtbdd_sw_port_relations[r->sw_idx]->allportin>1){
-//     for (int lk_i = 1; lk_i < r->lks_in_bdd->n; lk_i++) {
-//       if (r->lks_in_bdd->link_BDDs[lk_i]) {
-//         uint32_t lk_idx = (uint32_t)(r->lks_in->links_wc[lk_i-1].v);
-//         if (mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[lk_idx]) {
-//           struct port_relation_insw *pr_in = mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[lk_idx];
-//           if (pr_in->in) {
-//             for (int pout_i = 0; pout_i < pr_in->in->ncps; pout_i++) {
-//               if(mtbdd_sw_port_relations[pr_in->in->cps[pout_i]->sw_idx]->port_relation_out->ports[pr_in->in->cps[pout_i]->port_idx]){
-//                 struct port_relation_outsw *pr_out = mtbdd_sw_port_relations[pr_in->in->cps[pout_i]->sw_idx]->port_relation_out->ports[pr_in->in->cps[pout_i]->port_idx];
-//                 if (pr_out->out){
-//                   if (pr_out->out_records){
-//                     for (int rout_i = 0; rout_i < pr_out->out_records->nrules; rout_i++){
-//                       BDD insc = bdd_apply(pr_out->out_records->rules[rout_i]->mf_out, r->lks_in_bdd->link_BDDs[lk_i], bddop_and);
-//                     }
-//                   }
-//                 }
-//               }
-//             }
-//           }
-//         }
-//       }
-//       else{
-//         if(r->lks_in_bdd->link_BDDs[0]){
-//           uint32_t lk_idx = (uint32_t)(r->lks_in->links_wc[lk_i-1].v);
-//           if (mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[lk_idx]) {
-//             struct port_relation_insw *pr_in = mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[lk_idx];
-//             if (pr_in->in) {
-//               for (int pout_i = 0; pout_i < pr_in->in->ncps; pout_i++) {
-//                 if(mtbdd_sw_port_relations[pr_in->in->cps[pout_i]->sw_idx]->port_relation_out->ports[pr_in->in->cps[pout_i]->port_idx]){
-//                   struct port_relation_outsw *pr_out = mtbdd_sw_port_relations[pr_in->in->cps[pout_i]->sw_idx]->port_relation_out->ports[pr_in->in->cps[pout_i]->port_idx];
-//                   if (pr_out->out){
-//                     if(pr_out->out_records){
-//                       for (int rout_i = 0; rout_i < pr_out->out_records->nrules; rout_i++){
-//                         BDD insc = bdd_apply(pr_out->out_records->rules[rout_i]->mf_out, r->lks_in_bdd->link_BDDs[0], bddop_and);
-//                       }
-//                     }
-//                   }
-//                 }
-//               }
-//             }
-//           }
-//         }
-//       }
-//     }
-//   }
-//   else{
-//     if(r->lks_in_bdd->link_BDDs[0]){
-//       if (mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[0]) {
-//         struct port_relation_insw *pr_in = mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[0];
-//         if (pr_in->in) {
-//           for (int pout_i = 0; pout_i < pr_in->in->ncps; pout_i++) {
-//             if(mtbdd_sw_port_relations[pr_in->in->cps[pout_i]->sw_idx]->port_relation_out->ports[pr_in->in->cps[pout_i]->port_idx]){
-//               struct port_relation_outsw *pr_out = mtbdd_sw_port_relations[pr_in->in->cps[pout_i]->sw_idx]->port_relation_out->ports[pr_in->in->cps[pout_i]->port_idx];
-//               if (pr_out->out){
-//                 if(pr_out->out_records){
-//                   for (int rout_i = 0; rout_i < pr_out->out_records->nrules; rout_i++){
-//                     BDD insc = bdd_apply(pr_out->out_records->rules[rout_i]->mf_out, r->lks_in_bdd->link_BDDs[0], bddop_and);
-//                   }
-//                 }
-//               }
-//             }
-//           }
-//         }
-//       }
-//     }
-//   }
-//   for (int lk_i = 0; lk_i < r->lks_in_bdd->n; lk_i++) {
-//     if (r->lks_in_bdd->link_BDDs[lk_i]) {
-//       bdd_delref(merged_r->lks_in_bdd->link_BDDs[lk_i]);
-//       merged_r->lks_in_bdd->link_BDDs[lk_i] = bdd_apply(merged_r->lks_in_bdd->link_BDDs[lk_i], r->lks_in_bdd->link_BDDs[lk_i], bddop_or);
-//       bdd_addref(merged_r->lks_in_bdd->link_BDDs[lk_i]);
-//     }
-//   }
-// }
-
-// void
-// Update_aRule_Insert(struct bdd_rule *r) {
-//   if(!(r->lks_in))
-//     return;
-//   r->type = RULE_BS;
-//   rmtbdd_insert_arule_get_dominant(r);
-//   r->vtnode_in_merge = mtbdd_maketnode_merge_from_r(r); 
-//   get_delta_inserting_a_rule(r);
-//   // r->vtnode_in_merge = mtbdd_maketnode_merge_from_r(sw->rules[r_i]); 
-// }
 
 static int //比较bdd规则的优先级
 bdd_rule_idx_cmp (const void *a, const void *b) {
  return (*(struct bdd_rule **)a)->idx - (*(struct bdd_rule **)b)->idx;}
 
 
-// struct bdd_rule_arr *
-// get_readd_rule_arr_when_remove_arule(struct bdd_rule *r) {
-//   if (!r->covering) 
-//     return NULL;
-//   struct bdd_rule *rules_tmp[1000];
-//   uint32_t rules_tmp_count = 0;
-  
-//   for (int cov_i = 0; cov_i < r->covering->nrules; cov_i++) {
-//     if(r->covering->rules[cov_i]->type != RULE_RM){
-//       struct bdd_rule *cov_r = r->covering->rules[cov_i];
-//       struct bdd_rule *virtual_r = xmalloc(sizeof(struct bdd_rule));
-//       virtual_r->sw_idx = cov_r->sw_idx;
-//       virtual_r->idx = cov_r->idx;
-//       virtual_r->type = cov_r->type;
-//       virtual_r->mf_in = bdd_apply(r->mf_in, cov_r->mf_in, bddop_and);
-//       virtual_r->mf_out = cov_r->mf_out;
-//       virtual_r->vtnode_in = cov_r->vtnode_in;
-//       virtual_r->mtbdd_in = bdd_to_mtbdd(virtual_r->mf_in, virtual_r->vtnode_in);
-//       virtual_r->vtnode_in_merge = cov_r->vtnode_in_merge;
-//       virtual_r->mtbdd_in_merge = cov_r->mtbdd_in_merge; 
-//       virtual_r->mask = cov_r->mask;
-//       virtual_r->rewrite = cov_r->rewrite;
-//       virtual_r->lks_in = cov_r->lks_in;
-//       virtual_r->lks_out = cov_r->lks_out;
-//       virtual_r->lks_in_bdd = cov_r->lks_in_bdd;
-//       virtual_r->covering = cov_r->covering;
-//       for (int p_i = 0; p_i < virtual_r->lks_in_bdd->n; p_i++) {
-//           if (virtual_r->lks_in_bdd->link_BDDs[p_i]) {
-//             bdd_delref(virtual_r->lks_in_bdd->link_BDDs[p_i]);
-//             virtual_r->lks_in_bdd->link_BDDs[p_i] = bdd_apply(r->mf_in, virtual_r->lks_in_bdd->link_BDDs[p_i], bddop_or);
-//             bdd_addref(virtual_r->lks_in_bdd->link_BDDs[p_i]);
-//           }
-//       }  
-//       rules_tmp[rules_tmp_count] = virtual_r;
-//       rules_tmp_count++;
-//     }
-//   }
-//   qsort(rules_tmp,rules_tmp_count,sizeof(struct bdd_rule *),bdd_rule_idx_cmp);
-//   struct bdd_rule_arr *tmp = xmalloc(sizeof(uint32_t)+rules_tmp_count*sizeof(struct bdd_rule *));
-//   tmp->nrules = rules_tmp_count;
-//   for (int i = 0; i < rules_tmp_count; i++)
-//     tmp->rules[i] = rules_tmp[i];
-//   return tmp;
-// }
-
-// BDD
-// portin_mtbdd_r_remove(BDD bddbasic, BDD bddrm) {
-//   CHECKa(bddbasic, bddfalse);
-//   CHECKa(bddrm, bddfalse);
-//   // hit_cache_counter = 0;
-//   // calc_node_counter = 0;
-//   BDD res = portin_mtbdd_r_remove_rec(bddbasic, bddrm);
-//   // if (sign == 1) {
-//   //   printf("the hit_cache_counter is %d\n", hit_cache_counter);
-//   //   printf("the calc_node_counter is %d\n", calc_node_counter);
-//   //   // printf("a has %d nodes\n", bdd_nodecount(a));
-//   //   // printf("b has %d nodes\n", bdd_nodecount(b));
-//   //   // printf("res has %d nodes\n", bdd_nodecount(res));
-//   // }
-//   return res;
-// }
-
-// void
-// remove_r_from_mtbddnet(struct bdd_rule *r){
-//   r->type = RULE_RM;
-//   if (r->lks_in->n == mtbdd_sw_port_relations[r->sw_idx]->allportin) {
-//     for (int port_i = 0; port_i < mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->nports; port_i++) {
-//       if (mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[port_i]) {
-//         struct port_relation_insw *portin_i = mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[port_i];
-//         if (portin_i->in_mtbdd_r){
-//           bdd_delref(portin_i->in_mtbdd_r);
-//           portin_i->in_mtbdd_r = portin_mtbdd_r_remove(portin_i->in_mtbdd_r, r->mtbdd_in);
-//           bdd_addref(portin_i->in_mtbdd_r);
-//         }
-//       }
-//     }
-//     bdd_delref(r->lks_in_bdd->link_BDDs[0]);
-//     r->lks_in_bdd->link_BDDs[0] = r->mf_in;
-//     bdd_addref(r->lks_in_bdd->link_BDDs[0]);
-//     for (int lk_i = 1; lk_i < r->lks_in_bdd->n; lk_i++){
-//       bdd_delref(r->lks_in_bdd->link_BDDs[lk_i]);
-//       r->lks_in_bdd->link_BDDs[lk_i] = BDDZERO;
-//     }
-//   }
-//   else{
-//     for (int port_i = 0; port_i < r->lks_in->n; port_i++) {
-//       uint32_t current_port = (uint32_t)(r->lks_in->links_wc[port_i].v);
-//       if (mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[current_port]) {
-//         struct port_relation_insw *portin_i = mtbdd_sw_port_relations[r->sw_idx]->port_relation_in->ports[current_port];
-//         if (portin_i->in_mtbdd_r) {
-//           bdd_delref(portin_i->in_mtbdd_r);
-//           portin_i->in_mtbdd_r = portin_mtbdd_r_remove(portin_i->in_mtbdd_r, r->mtbdd_in);
-//           bdd_addref(portin_i->in_mtbdd_r);
-//         }
-//       }
-//     }
-//     for (int lk_i = 0; lk_i < r->lks_in->n; lk_i++) {
-//       bdd_delref(r->lks_in_bdd->link_BDDs[lk_i+1]);
-//       r->lks_in_bdd->link_BDDs[lk_i+1] = r->mf_in;
-//       bdd_addref(r->lks_in_bdd->link_BDDs[lk_i+1]);
-//     }
-//   }
-// }
-
-// void
-// Update_aRule_Remove(struct bdd_rule *r) {
-//   if(!(r->lks_in))
-//     return;
-
-//   struct bdd_rule_arr *readd_vrules = get_readd_rule_arr_when_remove_arule(r);
-//   remove_r_from_mtbddnet(r);
-//   if(readd_vrules){
-//     for (int i = 0; i < readd_vrules->nrules; i++){
-//       Update_aRule_Insert(readd_vrules->rules[i]);
-//       free(readd_vrules->rules[i]);
-//     }
-//     free(readd_vrules);
-//   }
-// }
-
-// void
-// reset_mgr_change_tmp(void) {
-//   for (int i = 0; i < mgr_change_count; i++){
-//     mgr_change_tmp[i].r = NULL;
-//     if (mgr_change_tmp[i].lks_in_bdd)
-//       free(mgr_change_tmp[i].lks_in_bdd);
-//     mgr_change_tmp[i].lks_in_bdd = NULL;
-//   }
-//   mgr_change_count = 0;
-// }
-
-// void
-// test_mtbdd_get_right_dominant(struct network_bdd *noconf_net, struct network_bdd *mtbdd_net){
-//   for (int sw_i = 0; sw_i < noconf_net->nsws; sw_i++) {
-//     struct switch_bdd_rs *noconf_sw = noconf_net->sws[sw_i];
-//     struct switch_bdd_rs *mtbdd_sw = mtbdd_net->sws[sw_i];
-//     for (int r_i = 0; r_i < noconf_sw->nrules; r_i++) {
-//       struct bdd_rule *noconf_r = noconf_sw->rules[r_i];
-//       struct bdd_rule *mtbdd_r = mtbdd_sw->rules[r_i];
-//       for (int port_i = 0; port_i < mtbdd_r->lks_in_bdd->n; port_i++) {
-//         if ((mtbdd_r->lks_in_bdd->link_BDDs[port_i])&&(mtbdd_r->lks_in_bdd->link_BDDs[port_i]) != noconf_r->mf_in) {
-//           printf("there is a different for two method on rule %d - %d with port %d\n", sw_i, r_i, port_i);
-//         }
-//         // else{
-//         //   if(mtbdd_r->lks_in_bdd->link_BDDs[port_i])
-//         //     printf("the bdd is %d on rule %d - %d with port %d\n", mtbdd_r->lks_in_bdd->link_BDDs[port_i], sw_i, r_i, port_i);
-//         // }
-//       }
-//     }
-//   }
-// }
-
-
-
-/*for test*/
-/*========================================================================*/
-// void
-// counter_init(void) {
-//   computation_counter = 0;
-//   elemconnet_counter = 0;
-//   compu_true_counter = 0;
-//   elem_true_counter = 0;
-//   time_counter_elembdd_withpair = 0;
-//   time_counter_elemplus = 0;
-//   time_counter_nf_space_connect = 0;
-//   time_counter_eleminsc = 0;
-//   global_sign = 0;
-//   time_counter1 = 0;
-//   time_counter2 = 0;
-//   time_counter3 = 0;
-//   time_counter4 = 0;
-//   time_counter5 = 0;
-// }
-
-// void
-// print_counter(void) {
-//   printf("computation_counter = %d\n", computation_counter);
-//   printf("compu_true_counter = %d\n", compu_true_counter);
-//   printf("elemconnet_counter = %d\n", elemconnet_counter);
-//   printf("elem_true_counter = %d\n", elem_true_counter);
-//   printf("time_counter1 = %ld us\n", time_counter1);
-//   printf("time_counter2 = %ld us\n", time_counter2);
-//   printf("time_counter3 = %ld us\n", time_counter3);
-//   printf("time_counter4 = %ld us\n", time_counter4);
-//   printf("time_counter5 = %ld us\n", time_counter5);
-//   printf("time_counter_elembdd_withpair = %ld us\n", time_counter_elembdd_withpair);
-//   printf("time_counter_elemplus = %ld us\n", time_counter_elemplus);
-//   printf("time_counter_nf_space_connect = %ld us\n", time_counter_nf_space_connect);
-//   printf("time_counter_eleminsc = %ld us\n", time_counter_eleminsc);
-// }
-
-// struct matrix_CSR *
-// get_delta_merged_from_a_rule(struct matrix_CSR *matrix_CSR, struct bdd_rule *r, uint32_t num) {
-//   uint32_t row_idx = matrix_idx_get_2idx(r->sw_idx, r->idx);
-
-//   if(!matrix_CSR->rows[row_idx])
-//     return NULL;
-//   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+(num)*sizeof(struct CS_matrix_idx_v_arr *));
-//   tmp->nrows = num;
-//   for (int i = 0; i < num; i++)
-//     tmp->rows[i] = NULL;
-//   uint32_t merged_idx = get_merged_matrix_idx_fr_2idx(r->sw_idx, r->idx);
-//   // printf("merged_idx %d\n", merged_idx);
-//   // printf("row_idx %d-%d\n", row_idx, matrix_CSR->rows[row_idx]->idx);
-//   tmp->rows[merged_idx] = merge_matrix_idx_v_arr_newone(matrix_CSR->rows[row_idx], num);
-//   tmp->rows[merged_idx]->idx = merged_idx;
-
-//   struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
-//   struct CS_matrix_idx_v_arr *arr = merge_matrix_idx_v_arr_newone(matrix_CSC->cols[row_idx], num);
-//   if (arr) {
-//     arr->idx = merged_idx;
-//     for (int i = 0; i < arr->nidx_vs; i++) {   
-//       tmp->rows[arr->idx_vs[i]->idx] = xmalloc(2*sizeof(uint32_t)+sizeof(struct CS_matrix_idx_v *));
-//       tmp->rows[arr->idx_vs[i]->idx]->nidx_vs = 1;
-//       tmp->rows[arr->idx_vs[i]->idx]->idx = arr->idx;
-//       // tmp->rows[arr->idx_vs[i]->idx]->idx_vs[0] = xmalloc(sizeof(struct CS_matrix_idx_v));
-//       // tmp->rows[arr->idx_vs[i]->idx]->idx_vs[0]->idx = merged_idx;
-//       tmp->rows[arr->idx_vs[i]->idx]->idx_vs[0] = arr->idx_vs[i];
-//       tmp->rows[arr->idx_vs[i]->idx]->idx_vs[0]->idx = merged_idx;
-//     }
-//   }
-//   free_matrix_CSC_fr_CSR(matrix_CSC);
-//   return tmp;
-// }
-
-// struct matrix_CSR *
-// get_delta_from_a_rule_old(struct matrix_CSR *matrix_CSR, struct bdd_rule *r) {
-//   uint32_t row_idx = matrix_idx_get_2idx(r->sw_idx, r->idx);
-//   if(!matrix_CSR->rows[row_idx])
-//     return NULL;
-
-//   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+(matrix_CSR->nrows)*sizeof(struct CS_matrix_idx_v_arr *));
-//   struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
-//   tmp->nrows = matrix_CSR->nrows;
-//   for (int i = 0; i < tmp->nrows; i++)
-//     tmp->rows[i] = NULL;
-//   tmp->rows[row_idx] = copy_CS_matrix_idx_v_arr(matrix_CSR->rows[row_idx]);
-//   struct CS_matrix_idx_v_arr *arr = copy_CS_matrix_idx_v_arr(matrix_CSC->cols[row_idx]);
-//   if (arr) {
-//     for (int i = 0; i < arr->nidx_vs; i++) {   
-//       tmp->rows[arr->idx_vs[i]->idx] = xmalloc(2*sizeof(uint32_t)+sizeof(struct CS_matrix_idx_v *));
-//       tmp->rows[arr->idx_vs[i]->idx]->nidx_vs = 1;
-//       tmp->rows[arr->idx_vs[i]->idx]->idx = arr->idx;
-//       // tmp->rows[arr->idx_vs[i]->idx]->idx_vs[0] = xmalloc(sizeof(struct CS_matrix_idx_v));
-//       // tmp->rows[arr->idx_vs[i]->idx]->idx_vs[0]->idx = merged_idx;
-//       tmp->rows[arr->idx_vs[i]->idx]->idx_vs[0] = arr->idx_vs[i];
-//       tmp->rows[arr->idx_vs[i]->idx]->idx_vs[0]->idx = row_idx;
-//     }
-//   }
-
-
-//   free_matrix_CSC_fr_CSR(matrix_CSC);
-//   return tmp;
-// }
-
-// bool
-// average_updating_r_ord(struct matrix_CSR *matrix_CSR) {
-//   struct timeval start,stop;
-//   // long long int average = 0;
-//   for (int r_i = 0; r_i < 2; r_i++) {
-//       /* code */
-    
-//     struct bdd_rule *r = bdd_sws_arr[2]->rules[r_i];
-    
-//     struct matrix_CSR *delta_CSR = get_delta_from_a_rule_old(matrix_CSR, r);
-
-//     if (!delta_CSR){
-//       printf("the %d - %d rule is NULL in orin_matrix_CSR!!\n", r->sw_idx, r->idx);
-//       continue;
-//     }
-//     else
-//       printf("the updating of rule %d - %d start!!\n", r->sw_idx, r->idx);
-
-//     struct matrix_CSR *delta_CSR_fw = delta_CSR;
-//     struct matrix_CSC *delta_CSC_bk = gen_CSC_from_CSR(delta_CSR);
-//     struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
-
-//     for (int i = 0; i < 3; i++) {
-//       gettimeofday(&start,NULL);
-//       delta_CSR_fw = sparse_matrix_multiply_CSC(delta_CSR_fw, matrix_CSR, matrix_CSC);
-//       gettimeofday(&stop,NULL);
-//       if(!delta_CSR_fw)
-//         printf("NULL ");
-//       printf("fw: %ld us; ", diff(&stop, &start));
-//       gettimeofday(&start,NULL);
-//       delta_CSC_bk = sparse_matrix_multiply_CSC_allrowcol(matrix_CSR, delta_CSC_bk);
-//       gettimeofday(&stop,NULL);
-//       if(!delta_CSC_bk)
-//         printf("NULL ");
-//       printf("bk: %ld us; ", diff(&stop, &start));    
-//     }
-//     printf("\n");
-//   }
-//   printf("--------------------------------------\n");
-//   return 1;
-// }
-
-// void
-// print_matrix_element_simple(struct matrix_element *elem) {
-//   if(!elem){
-//     printf("This element is NULL!!!\n");
-//     return;
-//   }
-//   printf("all num %d; ", elem->npairs);
-//   for (int i = 0; i < elem->npairs; i++){
-//     printf("%d - %d; ", elem->nf_pairs[i]->in->mf, elem->nf_pairs[i]->out->mf);
-//     // print_mask_uint16_t(elem->nf_pairs[i]->mask);
-//     // print_mask_uint16_t(elem->nf_pairs[i]->rewrite);
-//   }
-//   printf("\n");
-// }
-
-// void
-// print_matrix_CSR_simple(struct matrix_CSR *matrix_CSR) {
-//   if(!matrix_CSR){
-//     printf("This matrix_CSR is NULL!!!\n");
-//     return;
-//   }
-//   printf("matrix has %d rules\n", matrix_CSR->nrows);
-//   for (int i = 0; i < matrix_CSR->nrows; i++) {
-//     if (matrix_CSR->rows[i]) {
-//       for (int j = 0; j < matrix_CSR->rows[i]->nidx_vs; j++) {
-//         printf("elem %d = %d - %d :", i, matrix_CSR->rows[i]->idx, matrix_CSR->rows[i]->idx_vs[j]->idx);
-//         print_matrix_element_simple(matrix_CSR->rows[i]->idx_vs[j]->elem);
-//       }
-//     }
-//   }
-// }
-
-// void
-// print_matrix_CSC_simple(struct matrix_CSC *matrix_CSC) {
-//   if(!matrix_CSC){
-//     printf("This matrix_CSC is NULL!!!\n");
-//     return;
-//   }
-//   printf("matrix has %d rules\n", matrix_CSC->ncols);
-//   for (int i = 0; i < matrix_CSC->ncols; i++) {
-//     if (matrix_CSC->cols[i]) {
-//       for (int j = 0; j < matrix_CSC->cols[i]->nidx_vs; j++) {
-//         printf("elem %d = %d - %d :", i, matrix_CSC->cols[i]->idx, matrix_CSC->cols[i]->idx_vs[j]->idx);
-//         print_matrix_element_simple(matrix_CSC->cols[i]->idx_vs[j]->elem);
-//       }
-//     }
-//   }
-// }
-
-// void
-// print_vElemsNUM_of_Matrix_CSR(struct matrix_CSR *matrix_CSR) {
-//   uint32_t sum = 0;
-//   for (int i = 0; i < matrix_CSR->nrows; i++) {
-//     if (matrix_CSR->rows[i]) {
-//       sum += matrix_CSR->rows[i]->nidx_vs;
-//     }
-//   }
-//   printf("This Matrix_CSR has %d valid elements\n", sum);
-// }
-
-// void
-// print_npairsNUM_of_Matrix_CSR(struct matrix_CSR *matrix_CSR) {
-//   uint32_t sum = 0;
-//   for (int i = 0; i < matrix_CSR->nrows; i++) {
-//     if (matrix_CSR->rows[i]) {
-//       for (int j = 0; j < matrix_CSR->rows[i]->nidx_vs; j++) {
-//         sum += matrix_CSR->rows[i]->idx_vs[j]->elem->npairs;
-//       }
-//     }
-//   }
-//   printf("This Matrix_CSR has %d valid npairs\n", sum);
-// }
-
-// void
-// print_vElemsNUM_of_Matrix_CSC(struct matrix_CSC *matrix_CSC) {
-//   uint32_t sum = 0;
-//   for (int i = 0; i < matrix_CSC->ncols; i++) {
-//     if (matrix_CSC->cols[i]) {
-//       sum += matrix_CSC->cols[i]->nidx_vs;
-//     }
-//   }
-//   printf("This Matrix_CSC has %d valid elements\n", sum);
-// }
-
-// void
-// print_npairsNUM_of_Matrix_CSC(struct matrix_CSC *matrix_CSC) {
-//   uint32_t sum = 0;
-//   for (int i = 0; i < matrix_CSC->ncols; i++) {
-//     if (matrix_CSC->cols[i]) {
-//       for (int j = 0; j < matrix_CSC->cols[i]->nidx_vs; j++) {
-//         sum += matrix_CSC->cols[i]->idx_vs[j]->elem->npairs;
-//       }
-//     }
-//   }
-//   printf("This Matrix_CSC has %d valid npairs\n", sum);
-// }
-
-// bool
-// average_updating_r_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *orin_matrix_CSR) {
-//   struct timeval start,stop;
-//   // long long int average = 0;
-//   // uint32_t sw_idx = 6;
-//   for (int sw_idx = 0; sw_idx < 9; sw_idx++){
- 
-//     for (int r_i = 0; r_i < bdd_sws_arr[sw_idx]->nrules; r_i++) {
-//       struct bdd_rule *r = bdd_sws_arr[sw_idx]->rules[r_i];
-
-//       uint32_t merged_idx = get_merged_matrix_idx_fr_2idx(sw_idx, r_i+1);
-//       // counter_init();
-//       struct matrix_CSR *delta_CSR = get_delta_merged_from_a_rule(orin_matrix_CSR, r, matrix_CSR->nrows);
-//       // print_matrix_CSR_simple(delta_CSR);
-//       // print_matrix_CSR_simple(matrix_CSR);
-//       struct matrix_CSC *delta_CSC = gen_CSC_from_CSR(delta_CSR);
-//       if (!delta_CSR){
-//         // printf("the %d - %d rule is NULL in orin_matrix_CSR!!\n", r->sw_idx, r->idx);
-//         printf("the %d - %d : 0; 0; 0; 0; 0; 0; 0; 0; 0; 0;\n", r->sw_idx, r->idx);
-//         continue;
-//       }
-//       else
-//         printf("the %d - %d : ", r->sw_idx, r->idx);
-
-//       // struct matrix_CSR *delta_CSR_fw = delta_CSR;
-//       // struct matrix_CSC *delta_CSC_bk = gen_CSC_from_CSR(delta_CSR);
-//       struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
-//       // print_matrix_CSC_simple(delta_CSC_bk);
-
-//       struct CS_matrix_idx_v_arr *delta_x =  delta_CSR->rows[merged_idx];
-//       struct CS_matrix_idx_v_arr *delta_y =  delta_CSC->cols[merged_idx];
-
-
-//       // print_matrix_CSC_simple(matrix_CSC);
-//       // delta_CSR_fw = sparse_matrix_multiply_CSC(delta_CSR_fw, matrix_CSR, matrix_CSC);
-//       // print_matrix_CSR_simple(delta_CSR_fw);
-//       // delta_CSR_fw = delta_CSR;
-//       // gettimeofday(&start,NULL);
-//       for (int i = 0; i < 5; i++) {
-//         gettimeofday(&start,NULL);
-//         delta_x = row_all_col_multiply_noloop(delta_x, matrix_CSC);
-//         // delta_CSR_fw = sparse_matrix_multiply_CSC(delta_CSR_fw, matrix_CSR, matrix_CSC);
-//         gettimeofday(&stop,NULL);
-//         // if(!delta_CSR_fw)
-//         //   printf("NULL ");
-//         // else{
-//         //   print_vElemsNUM_of_Matrix_CSR(delta_CSR_fw);
-//         //   print_npairsNUM_of_Matrix_CSR(delta_CSR_fw);
-//         // }
-//         printf("%ld ; ", diff(&stop, &start));
-//         gettimeofday(&start,NULL);
-//         delta_y = all_row_col_multiply_noloop(matrix_CSR, delta_y);
-//         // delta_CSC_bk = sparse_matrix_multiply_CSC_allrowcol(matrix_CSR, delta_CSC_bk);
-//         gettimeofday(&stop,NULL);
-//         // if(!delta_CSC_bk)
-//         //   printf("NULL ");
-//         // else{
-//         //   print_vElemsNUM_of_Matrix_CSC(delta_CSC_bk);
-//         //   print_npairsNUM_of_Matrix_CSC(delta_CSC_bk); 
-//         // }
-//         printf("%ld ; ", diff(&stop, &start)); 
-          
-//       }
-//       // gettimeofday(&stop,NULL);
-//       // printf("bk: %ld us; ", diff(&stop, &start)); 
-//       printf("\n");
-//       // print_counter();
-//       // printf("--------------------------------------\n");
-//     }
-
-//     printf("--------------------------------------\n");
-//   }
-//   return 1;
-// }
-
-// struct r_idxs *
-// get_r_idxs_fr_merged_matrix_idx(uint32_t merged_idx){
-//   uint32_t idx = merged_idx;
-//   struct r_idx arr[5000];
-//   uint32_t count = 0;
-//   for (int i = 0; i < SW_NUM; i++){
-//     if (idx < merged_arr[i]->nrules){
-//       for (int j = 0; j < r_to_merge_arr[i]->nrules; j++){
-//         if (r_to_merge_arr[i]->rules[j] == idx) {
-//           arr[count].sw_idx = i;
-//           arr[count].r_idx = j+1;
-//           count++;
-//         }
-//       }
-//       break;
-//     }
-//     else
-//       idx = idx - merged_arr[i]->nrules;
-//   }
-//   struct r_idxs *tmp = xmalloc(sizeof(uint32_t) + count*sizeof(struct r_idx));
-//   tmp->nrs = count;
-//   for (int i = 0; i < count; i++)
-//     tmp->ridx[i] = arr[i];
-//   return tmp;
-// }
-
-// void
-// correct_verifination(struct matrix_CSR *matrix_CSR) {
-//   uint32_t row_idx = 0;
-//   for (int i = 128; i < matrix_CSR->nrows; i++) {
-//     if (matrix_CSR->rows[i]) {
-//       row_idx = i;
-//       break;
-//     }
-//   }
-//   printf("row-col: %d - ", row_idx);
-//   struct matrix_element *elm = matrix_CSR->rows[row_idx]->idx_vs[0]->elem;
-//   uint32_t col_idx = matrix_CSR->rows[row_idx]->idx_vs[0]->idx;
-//   printf("%d:\n", col_idx);
-//   struct r_idxs *row_idxs = get_r_idxs_fr_merged_matrix_idx(row_idx);
-//   print_r_idxs(row_idxs);
-//   // for (int i = 0; i < row_idxs->nrs; i++) {
-//   //   uint32_t merge = get_merged_matrix_idx_fr_2idx(row_idxs->ridx[i].sw_idx, row_idxs->ridx[i].r_idx);
-//   //   printf("%d ; ", merge);
-//   // }
-//   // printf("\n");
-
-//   printf("the 1 - 833 :%d - %d\n", bdd_sws_arr[1]->rules[832]->mf_in, bdd_sws_arr[1]->rules[832]->mf_out);
-//   for (int i = 0; i < row_idxs->nrs; i++){
-//     struct bdd_rule *tmp_r = bdd_sws_arr[row_idxs->ridx[i].sw_idx]->rules[row_idxs->ridx[i].r_idx-1];
-//     printf("%d - %d \n", tmp_r->mf_in,elm->bdd_in);
-//     if(bdd_apply(elm->bdd_in, tmp_r->mf_in, bddop_and)){
-//       printf("rowr: %d - %d\n", tmp_r->sw_idx, tmp_r->idx);
-//       break;
-//     }
-//     else
-//       printf("there is not a intersec\n");
-    
-//   }
-//   struct r_idxs *col_idxs = get_r_idxs_fr_merged_matrix_idx(col_idx);
-//   print_r_idxs(col_idxs);
-//   // col_idxs = get_r_idxs_fr_merged_matrix_idx(0);
-//   // print_r_idxs(col_idxs);
-// }
-
-// void
-// test_someport_forallsquare(struct matrix_CSR *matrix_CSR){
-//   // struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
-
-//   uint32_t num = 16;
-//   struct timeval start,stop;
-//   uint32_t port[16] = {100021,200010,300003,400002,500003,600002,700003,800002,900003,1000003,1100003,1200002,1300002,1400002,1500004,1600003};
-
-//   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+num*sizeof(struct CS_matrix_idx_v_arr *));
-//   tmp->nrows = num;
-//   for (int i = 0; i < num; i++) {
-
-//     tmp->rows[i] = gen_sparse_matrix_row_fr_port(port[i]);
-//   }
-
-
-//   struct matrix_CSR *muti1_CSR = sparse_matrix_multiply(matrix_CSR, matrix_CSR);
-//   struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(muti1_CSR);
-//   counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR2 = sparse_matrix_multiply_CSC(tmp, muti1_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR2 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 2t: %lld us", T_port_CSR2);
-//   print_vElemsNUM_of_Matrix_CSR(port_CSR2);
-//   print_npairsNUM_of_Matrix_CSR(port_CSR2);
-//   print_counter();
-//   counter_init();
-//   free_matrix_CSC_fr_CSR(matrix_CSC);
-//   free_matrix_CSR(port_CSR2);
-//   bdd_gbc();
-//   printf("/*=====================================================*/\n");
-
-//   struct matrix_CSR *muti2_CSR = sparse_matrix_multiply(muti1_CSR, matrix_CSR);
-//   matrix_CSC = gen_CSC_from_CSR(muti2_CSR);
-//   counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR3 = sparse_matrix_multiply_CSC(tmp, muti2_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR3 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 3t: %lld us", T_port_CSR3);
-//   print_vElemsNUM_of_Matrix_CSR(port_CSR3);
-//   print_npairsNUM_of_Matrix_CSR(port_CSR3);
-//   print_counter();
-//   counter_init();
-//   free_matrix_CSC_fr_CSR(matrix_CSC);
-//   free_matrix_CSR(muti1_CSR);
-//   free_matrix_CSR(port_CSR3);
-//   bdd_gbc();
-//   printf("/*=====================================================*/\n");
-
-//   struct matrix_CSR *muti3_CSR = sparse_matrix_multiply(muti2_CSR, matrix_CSR);
-//   matrix_CSC = gen_CSC_from_CSR(muti3_CSR);
-//   counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR4 = sparse_matrix_multiply_CSC(tmp, muti3_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR4 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 4t: %lld us", T_port_CSR4);
-//   print_vElemsNUM_of_Matrix_CSR(port_CSR4);
-//   print_npairsNUM_of_Matrix_CSR(port_CSR4);
-//   print_counter();
-//   counter_init();
-//   free_matrix_CSC_fr_CSR(matrix_CSC);
-//   free_matrix_CSR(muti2_CSR);
-//   free_matrix_CSR(port_CSR4);
-//   bdd_gbc();
-//   printf("/*=====================================================*/\n");
-//   struct matrix_CSR *muti4_CSR = sparse_matrix_multiply(muti3_CSR, matrix_CSR);
-//   matrix_CSC = gen_CSC_from_CSR(muti4_CSR);
-//   counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR5 = sparse_matrix_multiply_CSC(tmp, muti4_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR5 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 5t: %lld us", T_port_CSR5);
-//   print_vElemsNUM_of_Matrix_CSR(port_CSR5);
-//   print_npairsNUM_of_Matrix_CSR(port_CSR5);
-//   print_counter();
-//   counter_init();
-//   free_matrix_CSC_fr_CSR(matrix_CSC);
-//   free_matrix_CSR(muti3_CSR);
-//   free_matrix_CSR(port_CSR5);
-//   bdd_gbc();
-//   printf("/*=====================================================*/\n");
-//   struct matrix_CSR *muti5_CSR = sparse_matrix_multiply(muti4_CSR, matrix_CSR);
-//   matrix_CSC = gen_CSC_from_CSR(muti5_CSR);
-//   counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR6 = sparse_matrix_multiply_CSC(tmp, muti5_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR6 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 6t: %lld us", T_port_CSR6);
-//   print_vElemsNUM_of_Matrix_CSR(port_CSR6);
-//   print_npairsNUM_of_Matrix_CSR(port_CSR6);
-//   print_counter();
-//   counter_init();
-//   free_matrix_CSC_fr_CSR(matrix_CSC);
-//   free_matrix_CSR(muti4_CSR);
-//   free_matrix_CSR(port_CSR6);
-//   bdd_gbc();
-//   printf("/*=====================================================*/\n");
-//   struct matrix_CSR *muti6_CSR = sparse_matrix_multiply(muti5_CSR, matrix_CSR);
-//   matrix_CSC = gen_CSC_from_CSR(muti6_CSR);
-//   counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR7 = sparse_matrix_multiply_CSC(tmp, muti6_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR7 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 7t: %lld us", T_port_CSR7);
-//   print_vElemsNUM_of_Matrix_CSR(port_CSR7);
-//   print_npairsNUM_of_Matrix_CSR(port_CSR7);
-//   print_counter();
-//   counter_init();
-//   free_matrix_CSC_fr_CSR(matrix_CSC);
-//   free_matrix_CSR(muti5_CSR);
-//   free_matrix_CSR(port_CSR7);
-//   bdd_gbc();
-//   printf("/*=====================================================*/\n");
-//   struct matrix_CSR *muti7_CSR = sparse_matrix_multiply(muti6_CSR, matrix_CSR);
-//   matrix_CSC = gen_CSC_from_CSR(muti7_CSR);
-//   counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR8 = sparse_matrix_multiply_CSC(tmp, muti7_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR8 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 8t: %lld us", T_port_CSR8);
-//   print_vElemsNUM_of_Matrix_CSR(port_CSR8);
-//   print_npairsNUM_of_Matrix_CSR(port_CSR8);
-//   print_counter();
-//   counter_init();
-//   free_matrix_CSC_fr_CSR(matrix_CSC);
-//   free_matrix_CSR(muti6_CSR);
-//   free_matrix_CSR(port_CSR8);
-//   bdd_gbc();
-//   printf("/*=====================================================*/\n");
-//   struct matrix_CSR *muti8_CSR = sparse_matrix_multiply(muti7_CSR, matrix_CSR);
-//   matrix_CSC = gen_CSC_from_CSR(muti8_CSR);
-//   counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR9 = sparse_matrix_multiply_CSC(tmp, muti8_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR9 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 9t: %lld us", T_port_CSR9);
-//   print_vElemsNUM_of_Matrix_CSR(port_CSR9);
-//   print_npairsNUM_of_Matrix_CSR(port_CSR9);
-//   print_counter();
-//   counter_init();
-//   free_matrix_CSC_fr_CSR(matrix_CSC);
-//   free_matrix_CSR(muti7_CSR);
-//   free_matrix_CSR(port_CSR9);
-//   bdd_gbc();
-//   printf("/*=====================================================*/\n");
-//   struct matrix_CSR *muti9_CSR = sparse_matrix_multiply(muti8_CSR, matrix_CSR);
-//   matrix_CSC = gen_CSC_from_CSR(muti9_CSR);
-//   counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR10 = sparse_matrix_multiply_CSC(tmp, muti9_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR10 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 10t: %lld us", T_port_CSR10);
-//   print_vElemsNUM_of_Matrix_CSR(port_CSR10);
-//   print_npairsNUM_of_Matrix_CSR(port_CSR10);
-//   print_counter();
-//   counter_init();
-//   free_matrix_CSC_fr_CSR(matrix_CSC);
-//   free_matrix_CSR(muti8_CSR);
-//   free_matrix_CSR(port_CSR10);
-//   bdd_gbc();
-//   printf("/*=====================================================*/\n");
-// }
-
-// void
-// test_someport_forall_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *orin_matrix_CSR){
-//   // struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
-
-//   uint32_t num = 9;
-//   struct timeval start,stop;
-//   // uint32_t port[16] = {100021,200010,300003,400002,500003,600002,700003,800002,900003,1000003,1100003,1200002,1300002,1400002,1500004,1600003};
-//   uint32_t port[9] = {100007,200008,300003,400002,500003,600002,700003,800002,900003};
-//   struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+num*sizeof(struct CS_matrix_idx_v_arr *));
-//   tmp->nrows = num;
-//   for (int i = 0; i < num; i++) {
-//     struct CS_matrix_idx_v_arr *row_tmp = gen_sparse_matrix_row_fr_port(port[i]);
-//     tmp->rows[i] = merge_matrix_idx_v_arr_newone(row_tmp, matrix_CSR->nrows);
-//   }
-
-
-//   struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
-//   counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR1 = sparse_matrix_multiply_CSC_2diff(tmp, matrix_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR1 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 1t: %lld us", T_port_CSR1);
-//   // print_vElemsNUM_of_Matrix_CSR(port_CSR1);
-//   // print_npairsNUM_of_Matrix_CSR(port_CSR1);
-//   // print_counter();
-//   // counter_init();
-//   bdd_gbc();
-//   printf("/*=====================================================*/\n");
-//   counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR2 = sparse_matrix_multiply_CSC_2diff(port_CSR1, matrix_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR2 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 2t: %lld us", T_port_CSR2);
-//   // print_vElemsNUM_of_Matrix_CSR(port_CSR2);
-//   // print_npairsNUM_of_Matrix_CSR(port_CSR2);
-//   // print_counter();
-//   // counter_init();
-//   free_matrix_CSR(port_CSR1);
-//   bdd_gbc();
-//   printf("/*=====================================================*/\n");
-//   counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR3 = sparse_matrix_multiply_CSC_2diff(port_CSR2, matrix_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR3 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 3t: %lld us", T_port_CSR3);
-//   // print_vElemsNUM_of_Matrix_CSR(port_CSR3);
-//   // print_npairsNUM_of_Matrix_CSR(port_CSR3);
-//   // print_counter();
-//   // counter_init();
-//   free_matrix_CSR(port_CSR2);
-//   bdd_gbc();
-//   printf("/*=====================================================*/\n");
-//   counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR4 = sparse_matrix_multiply_CSC_2diff(port_CSR3, matrix_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR4 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 4t: %lld us", T_port_CSR4);
-//   // print_vElemsNUM_of_Matrix_CSR(port_CSR4);
-//   // print_npairsNUM_of_Matrix_CSR(port_CSR4);
-//   // print_counter();
-//   // counter_init();
-//   free_matrix_CSR(port_CSR3);
-//   bdd_gbc();
-//   printf("/*=====================================================*/\n");
-//   counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR5 = sparse_matrix_multiply_CSC_2diff(port_CSR4, matrix_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR5 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 5t: %lld us", T_port_CSR5);
-//   // print_vElemsNUM_of_Matrix_CSR(port_CSR5);
-//   // print_npairsNUM_of_Matrix_CSR(port_CSR5);
-//   // print_counter();
-//   // counter_init();
-//   free_matrix_CSR(port_CSR4);
-//   bdd_gbc();
-//   printf("/*=====================================================*/\n");
-//   counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR6 = sparse_matrix_multiply_CSC_2diff(port_CSR5, matrix_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR6 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 6t: %lld us", T_port_CSR6);
-//   // print_vElemsNUM_of_Matrix_CSR(port_CSR6);
-//   // print_npairsNUM_of_Matrix_CSR(port_CSR6);
-//   // print_counter();
-//   // counter_init();
-//   free_matrix_CSR(port_CSR5);
-//   bdd_gbc();
-//   printf("/*=====================================================*/\n");
-//   counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR7 = sparse_matrix_multiply_CSC_2diff(port_CSR6, matrix_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR7 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 7t: %lld us", T_port_CSR7);
-//   // print_vElemsNUM_of_Matrix_CSR(port_CSR7);
-//   // print_npairsNUM_of_Matrix_CSR(port_CSR7);
-//   // print_counter();
-//   // counter_init();
-//   free_matrix_CSR(port_CSR6);
-//   bdd_gbc();
-//   printf("/*=====================================================*/\n");
-//   counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR8 = sparse_matrix_multiply_CSC_2diff(port_CSR7, matrix_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR8 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 8t: %lld us", T_port_CSR8);
-//   // print_vElemsNUM_of_Matrix_CSR(port_CSR8);
-//   // print_npairsNUM_of_Matrix_CSR(port_CSR8);
-//   // print_counter();
-//   // counter_init();
-//   free_matrix_CSR(port_CSR7);
-//   bdd_gbc();
-//   printf("/*=====================================================*/\n");
-//   counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR9 = sparse_matrix_multiply_CSC_2diff(port_CSR8, matrix_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR9 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 9t: %lld us", T_port_CSR9);
-//   // print_vElemsNUM_of_Matrix_CSR(port_CSR9);
-//   // print_npairsNUM_of_Matrix_CSR(port_CSR9);
-//   // print_counter();
-//   // counter_init();
-//   free_matrix_CSR(port_CSR8);
-//   bdd_gbc();
-//   printf("/*=====================================================*/\n");
-//   counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR10 = sparse_matrix_multiply_CSC_2diff(port_CSR9, matrix_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR10 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 10t: %lld us", T_port_CSR10);
-//   // print_vElemsNUM_of_Matrix_CSR(port_CSR10);
-//   // print_npairsNUM_of_Matrix_CSR(port_CSR10);
-//   // print_counter();
-//   // counter_init();
-//   free_matrix_CSR(port_CSR9);
-//   bdd_gbc();
-//   printf("/*=====================================================*/\n");counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR11 = sparse_matrix_multiply_CSC_2diff(port_CSR10, matrix_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR11 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 11t: %lld us", T_port_CSR11);
-//   // print_vElemsNUM_of_Matrix_CSR(port_CSR11);
-//   // print_npairsNUM_of_Matrix_CSR(port_CSR11);
-//   // print_counter();
-//   // counter_init();
-//   free_matrix_CSR(port_CSR10);
-//   bdd_gbc();
-//   printf("/*=====================================================*/\n");counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR12 = sparse_matrix_multiply_CSC_2diff(port_CSR11, matrix_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR12 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 12t: %lld us", T_port_CSR12);
-//   // print_vElemsNUM_of_Matrix_CSR(port_CSR12);
-//   // print_npairsNUM_of_Matrix_CSR(port_CSR12);
-//   // print_counter();
-//   // counter_init();
-//   free_matrix_CSR(port_CSR11);
-//   bdd_gbc();
-//   printf("/*=====================================================*/\n");counter_init();
-//   gettimeofday(&start,NULL); 
-//   struct matrix_CSR *port_CSR13 = sparse_matrix_multiply_CSC_2diff(port_CSR12, matrix_CSR, matrix_CSC);
-//   gettimeofday(&stop,NULL);
-//   long long int T_port_CSR13 = diff(&stop, &start);
-//   printf("port_CSR multi matrix 13t: %lld us", T_port_CSR13);
-//   // print_vElemsNUM_of_Matrix_CSR(port_CSR13);
-//   // print_npairsNUM_of_Matrix_CSR(port_CSR13);
-//   // print_counter();
-//   // counter_init();
-//   free_matrix_CSR(port_CSR12);
-//   bdd_gbc();
-//   free_matrix_CSR(port_CSR13);
-//   printf("/*=====================================================*/\n");
-// }
-
-// struct matrix_CSR *
-// gen_sparse_matrix_row_fr_inport_lk(uint32_t inport, struct matrix_CSR *matrix_CSR){
-//   // uint32_t max_CSR = matrix_CSR->nrows;
-//   // struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
-//   // struct matrix_CSR *tmp_CSR = struct matrix_CSR *tmp = xmalloc(sizeof(uint32_t)+(matrix_CSR->nrows)*sizeof(struct CS_matrix_idx_v_arr *));
-//   uint32_t max_CSR = MAX_VAL_RATE*data_allr_nums*data_allr_nums;
-//   // struct matrix_Tri_express *Tri_arr[max_CSR];
-//   struct matrix_Tri_express **Tri_arr = xmalloc(max_CSR*sizeof(struct matrix_Tri_express *));
-//   uint32_t nTris = 0;
-  
-
-//   struct u32_arrs *links = get_link_idx_from_inport(inport);
-//   if(links->ns){
-//     uint32_t rule_nums_out = 0;
-//     struct link_to_rule *lout_r = get_link_rules(link_out_rule_file, &rule_nums_out, links->arrs[0]);
-//     uint32_t rule_nums_in = 0;
-//     struct link_to_rule *lin_r = get_link_rules(link_in_rule_file, &rule_nums_in, links->arrs[0]);
-
-//     if (lout_r&&lin_r){ 
-//       uint32_t *lin_arrs = (uint32_t *)(link_in_rule_data_arrs + 2*(lin_r->rule_nums - rule_nums_in));
-
-//       for (uint32_t i_in = 0; i_in < rule_nums_in; i_in++){
-//         struct bdd_rule *r_in = bdd_sws_arr[*(uint32_t *)lin_arrs]->rules[*(uint32_t *)(lin_arrs+1) - 1];
-//         BDD v_in, v_out;
-//         v_in = r_in->mf_out;
-//         uint32_t *lout_arrs = (uint32_t *)(link_out_rule_data_arrs + 2*(lout_r->rule_nums - rule_nums_out));
-//         for (uint32_t i_out = 0; i_out < rule_nums_out; i_out++) {
-//           struct bdd_rule *r_out = bdd_sws_arr[*(uint32_t *)lout_arrs]->rules[*(uint32_t *)(lout_arrs+1) - 1];
-//           v_out = r_out->mf_in;
-//           BDD v_and, v_diff;
-//           v_and = bdd_apply(v_in, v_out, bddop_and);
-//           if (v_and){
-//             Tri_arr[nTris] = insc_to_Tri_express_rlimit(r_in, r_out, v_and);
-//             nTris++;
-//             v_diff = bdd_apply(v_in, v_and, bddop_diff);
-//           }
-//           else {
-//             v_diff = v_in;
-//           } 
-//           v_in = v_diff;
-//           if (!v_in){
-//             break;
-//           }
-
-//           lout_arrs += 2;
-//         }
-//         lin_arrs += 2; 
-//       }  
-//     }
-//   }
-//   // if(!nTris)
-//   //   return NULL;
-//   struct Tri_arr *tmp = xmalloc(sizeof(uint32_t)+nTris*sizeof(struct matrix_Tri_express *));
-//   tmp->nTris = nTris;
-//   // printf("nTris %d\n", nTris);
-//   for (uint32_t i = 0; i < nTris; i++){
-//     tmp->arr[i] = Tri_arr[i];
-//   }
-//   struct matrix_CSR *csr_tmp = gen_matrix_CSR_from_Tris(tmp);
-//   free(Tri_arr);
-//   return csr_tmp;
-// }
-
-// bool
-// average_updating_link_merged(struct matrix_CSR *matrix_CSR, struct matrix_CSR *orin_matrix_CSR) {
-//   struct timeval start,stop;
-//   // uint32_t num = 58;
-//   // uint32_t port[58] = {700006,100025,1000002,400001,100003,1600009,1100006,300006,100001,1200001,800001,600001,900007,100012,1300008,500010,100024,1400001,1500006,100015,200012,100023,1500036,200010,700001,200005,1000007,400006,200009,1100001,1600008,300001,200004,1200007,800006,200013,600008,900001,1300001,500001,200019,1400008,400007,300007,600010,500012,800007,700007,1000008,900008,1200008,1100008,1400010,1300010,1600006,1500007,1600005,1500005};
-//   uint32_t num = 55;
-//   uint32_t port[55] = {600025,200036,400022,200047,900033,200003,500018,300011,700014,400017,100021,200002,700017,800031,400019,200046,400032,300003,500027,800030,500021,700022,700015,800037,900030,600023,900031,600024,100026,200005,800008,500024,500019,300043,900002,100020,400016,300045,100018,400029,200045,700018,500020,300050,100019,900015,100030,900034,200025,900028,100032,700013,400021,600014,200004};
-//   // tmp->nrows = num;
-//   for (int link_idx = 0; link_idx < num; link_idx++){
-//     struct matrix_CSR *delta_CSR = gen_sparse_matrix_row_fr_inport_lk(port[link_idx],orin_matrix_CSR);
-//     delta_CSR = gen_merged_CSR(delta_CSR);
-//     if (!delta_CSR){
-//         // printf("the %d - %d rule is NULL in orin_matrix_CSR!!\n", r->sw_idx, r->idx);
-//         printf("the %d : 0; 0; 0; 0; 0; 0; 0; 0; 0; 0;\n", port[link_idx]);
-//         continue;
-//       }
-//     else
-//       printf("the %d : ", port[link_idx]);
-
-//     struct matrix_CSR *delta_CSR_fw = delta_CSR;
-//     struct matrix_CSC *delta_CSC_bk = gen_CSC_from_CSR(delta_CSR);
-//     struct matrix_CSC *matrix_CSC = gen_CSC_from_CSR(matrix_CSR);
-//     // print_matrix_CSC_simple(delta_CSC_bk);
-
-//     for (int i = 0; i < 5; i++) {
-//       gettimeofday(&start,NULL);
-//       delta_CSR_fw = sparse_matrix_multiply_CSC(delta_CSR_fw, matrix_CSR, matrix_CSC);
-//       gettimeofday(&stop,NULL);
-//       // if(!delta_CSR_fw)
-//       //   printf("NULL ");
-//       // else{
-//       //   print_vElemsNUM_of_Matrix_CSR(delta_CSR_fw);
-//       //   print_npairsNUM_of_Matrix_CSR(delta_CSR_fw);
-//       // }
-//       printf("%ld ; ", diff(&stop, &start));
-//       gettimeofday(&start,NULL);
-//       delta_CSC_bk = sparse_matrix_multiply_CSC_allrowcol(matrix_CSR, delta_CSC_bk);
-//       gettimeofday(&stop,NULL);
-//       // if(!delta_CSC_bk)
-//       //   printf("NULL ");
-//       // else{
-//       //   print_vElemsNUM_of_Matrix_CSC(delta_CSC_bk);
-//       //   print_npairsNUM_of_Matrix_CSC(delta_CSC_bk); 
-//       // }
-//       printf("%ld ; ", diff(&stop, &start)); 
-        
-//     }
-//       // gettimeofday(&stop,NULL);
-//       // printf("bk: %ld us; ", diff(&stop, &start)); 
-//     printf("\n");
-//       // print_counter();
-//       // printf("--------------------------------------\n");
-//   }
-
-//   printf("--------------------------------------\n");
-//   return 1;
-// }
-
-
-// void
-// get_transformer(void) {
-//   for (int i = 0; i < SW_NUM; i++) {
-//     for (int j = 0; j < merged_arr[i]->nrules; j++) {
-//       uint32_t idx = merged_arr[i]->rules[j];
-//       if (bdd_sws_arr[i]->rules[idx]->mask){
-//         printf("rule %d - %d:\n", i, idx+1);
-//         print_mask_uint16_t(bdd_sws_arr[i]->rules[idx]->mask);
-//         print_mask_uint16_t(bdd_sws_arr[i]->rules[idx]->rewrite);
-//         printf("\n");
-//       }
-//     }
-//   }
-// }
-
-/*for test compute delta r*/
-/*========================================================================*/
-// void
-// init_bdd_merged_sws(void) {
-//   for (int i = 0; i < SW_NUM; i++){
-//     bdd_merged_sws[i] = xmalloc(2*sizeof(uint32_t)+MENUM_ASW*sizeof(struct bdd_rule *));
-//     bdd_merged_sws[i]->sw_idx = i;
-//     bdd_merged_sws[i]->nrules = MENUM_ASW;
-//     for (int j = 0; j < MENUM_ASW; j++) {
-//       bdd_merged_sws[i]->rules[j] = NULL;
-//     }
-//   }
-// }
-
-// void
-// print_rule_records(struct rule_records *rd) {
-//   if (!rd) {
-//     printf("rule_records NULL,");
-//     return;
-//   }
-//   for (int i = 0; i < rd->nrecords; i++) {
-//     if(!(rd->records[i]))
-//       printf("NULL, ");
-//     else
-//       printf("%d - %d, ", rd->records[i]->sw_idx, rd->records[i]->idx);
-//   }
-// }
 
 void
 print_bdd_rule_arr(struct bdd_rule_arr *rd) {
@@ -17103,293 +12420,6 @@ print_bdd_rule_arr(struct bdd_rule_arr *rd) {
   printf("\n");
 }
 
-// void
-// print_connect_ports(struct connect_ports *ps) {
-//   if (!ps) {
-//     printf("connect_ports NULL,");
-//     return;
-//   }
-//   for (int i = 0; i < ps->ncps; i++) {
-//     if(!(ps->cps[i]))
-//       printf("NULL, ");
-//     else
-//       printf("%d - %d, ", ps->cps[i]->sw_idx, ps->cps[i]->port_idx);
-//   }
-// }
-
-// void
-// print_port_relations_insw(struct port_relations_insw *pr) {
-//   if(!pr) {
-//     printf("port_relations_insw NULL\n");
-//     return;
-//   }
-//   for (int i = 0; i < pr->nports; i++) {
-//     printf("port%d: ", i);
-//     if(!(pr->ports[i]))
-//       printf("NULL; ");
-//     else {
-//       print_connect_ports(pr->ports[i]->in);
-//       printf("mtbdd for rule = %d; ", pr->ports[i]->in_mtbdd_r);
-//       printf("mtbdd for merged rule = %d; ", pr->ports[i]->in_mtbdd_merged_r);
-//     }
-//   }
-//   printf("\n");
-// }
-
-// void
-// print_port_relations_outsw(struct port_relations_outsw *pr) {
-//   if(!pr) {
-//     printf("port_relations_insw NULL\n");
-//     return;
-//   }
-//   for (int i = 0; i < pr->nports; i++) {
-//     printf("port%d: ", i);
-//     if(!(pr->ports[i]))
-//       printf("NULL; ");
-//     else {
-//       print_connect_ports(pr->ports[i]->out);
-//       if(!pr->ports[i]->out_records)
-//         printf("out_records = NULL;");
-//       else {
-//         printf("out_records =\n");
-//         print_bdd_rule_arr(pr->ports[i]->out_records);
-//         printf("; ");
-//       }
-//     }
-//   }
-//   printf("\n");
-// }
-
-// void
-// print_sw_port_relations(struct sw_port_relations *pr) {
-//   if (!pr){
-//     printf("sw_port_relations is NULL!\n");
-//     return;
-//   }
-//   printf("sw = %d; allportin = %d; allportout = %d\n", pr->sw_idx, pr->allportin, pr->allportout);
-//   printf("sw_in: ");
-//   print_port_relations_insw(pr->port_relation_in);
-//   printf("sw_out: ");
-//   print_port_relations_outsw(pr->port_relation_out);
-// }
-
-// void
-// print_sw_port_relations_arr(struct sw_port_relations **sw) {
-//   for (int i = 0; i < SW_NUM; i++){
-//     print_sw_port_relations(sw[i]);
-//   }
-// }
-
-// int
-// load_topology_jsondata(const char *tfdir, const char *name) {
-//   char buf[255 + 1];
-//   snprintf (buf, sizeof buf, "../%s/%s", tfdir, name);
-//   FILE *in = fopen (buf, "r");
-//   fseek(in,0,SEEK_END);
-//   long in_len = ftell(in);
-//   fseek(in,0,SEEK_SET);
-//   char *content = (char*)malloc(in_len+1);
-//   fread(content,1,in_len,in);
-//   fclose(in);
-
-//   uint32_t stage = 0;
-//   if (strcmp(name, "topology_stfw.json") == 0)
-//     stage = 1;
-//   else if (strcmp(name, "topology_st.json") == 0)
-//     stage = 2;
-//   else if (strcmp(name, "topology_i2.json") == 0)
-//     stage = 3;
-//   else{
-//     printf("there is no such policy\n");
-//     return -1;
-//   }
-
-//   cJSON *root = cJSON_Parse(content);
-//   if (!root) {
-//       printf("Error before: [%s]\n",cJSON_GetErrorPtr());
-//       return (-1);
-//   }
-//   cJSON *topology = cJSON_GetObjectItem(root, "topology");
-//   if (!topology) {
-//       printf("No links!\n");
-//       return (-1);
-//   }
-//   uint32_t nlinks = cJSON_GetArraySize(topology);
-//   printf("the inter-switch links num = %d\n", nlinks);
-//   if (!nlinks) {
-//       printf("Empty links!\n");
-//       return (-1);
-//   }
-
-//   for (int lk_i = 0; lk_i < nlinks; lk_i++) {
-//     cJSON *lk = cJSON_GetArrayItem(topology, lk_i);
-//     cJSON *src = cJSON_GetObjectItem(lk, "src"); 
-//     uint16_t src_idx = (uint16_t)(src->valueint % 1000); 
-//     cJSON *dst = cJSON_GetObjectItem(lk, "dst"); 
-//     uint16_t dst_idx = (uint16_t)(dst->valueint % 1000);
-//     // printf("%d - %d; ", src_sw_idx, src_idx);
-//     uint32_t src_sw_idx = 0;
-//     uint32_t dst_sw_idx = 0;
-//     if (stage == 1){
-//       src_sw_idx = (uint32_t)(src->valueint / 100000 - 1);
-//       dst_sw_idx = (uint32_t)(dst->valueint / 100000 - 1);
-//     }
-//     else if (stage == 2){
-//       src_sw_idx = 3*(uint32_t)(src->valueint / 100000 - 1)+(uint32_t)((src->valueint / 10000)%10);
-//       dst_sw_idx = 3*(uint32_t)(dst->valueint / 100000 - 1)+(uint32_t)((dst->valueint / 10000)%10);
-//     }
-//     else if (stage == 3){
-//       src_sw_idx = 2*(uint32_t)(src->valueint / 100000 - 1)+(uint32_t)(((src->valueint / 10000)%10)/2);
-//       dst_sw_idx = 2*(uint32_t)(dst->valueint / 100000 - 1)+(uint32_t)(((dst->valueint / 10000)%10)/2);
-//     }
-//     if (mtbdd_sw_port_relations[src_sw_idx]->port_relation_out->ports[src_idx]) {
-//       struct port_relation_outsw *rlout = mtbdd_sw_port_relations[src_sw_idx]->port_relation_out->ports[src_idx];
-//       if (rlout->out){
-//         bool hassign = false;
-//         for (int cp_i = 0; cp_i < rlout->out->ncps; cp_i++) {       
-//           if (rlout->out->cps[cp_i]) {
-//             if (rlout->out->cps[cp_i]->sw_idx == dst_sw_idx) {
-//               if (rlout->out->cps[cp_i]->port_idx == dst_idx)
-//                 hassign = true;
-//             }
-//           }
-//         }
-//         if (!hassign) {         
-//             struct connect_ports *port_out = xmalloc(sizeof(uint32_t)+(rlout->out->ncps+1)*sizeof(struct port_record *));
-//             port_out->ncps = rlout->out->ncps+1;
-//             for (int cp_i = 0; cp_i < rlout->out->ncps; cp_i++)
-//               port_out->cps[cp_i] = rlout->out->cps[cp_i];
-//             port_out->cps[rlout->out->ncps] = xmalloc(sizeof(struct port_record));
-//             port_out->cps[rlout->out->ncps]->sw_idx = dst_sw_idx;
-//             port_out->cps[rlout->out->ncps]->port_idx = dst_idx;
-//             free(rlout->out);
-//             rlout->out = port_out;
-//         }
-//       }
-//       else 
-//         printf("there is no rlout in %d - %d\n",src_sw_idx,src_idx);
-//     }
-//     else {
-//       mtbdd_sw_port_relations[src_sw_idx]->port_relation_out->ports[src_idx] = xmalloc(sizeof(struct port_relation_outsw));
-//       struct port_relation_outsw *rlout = mtbdd_sw_port_relations[src_sw_idx]->port_relation_out->ports[src_idx];
-//       rlout->out_records = NULL;
-//       rlout->out = xmalloc(sizeof(struct connect_ports));
-//       rlout->out->ncps = 1;
-//       rlout->out->cps[0] = xmalloc(sizeof(struct port_record));
-//       rlout->out->cps[0]->sw_idx = dst_sw_idx;
-//       rlout->out->cps[0]->port_idx = dst_idx;
-//     }
-//     if (mtbdd_sw_port_relations[dst_sw_idx]->port_relation_in->ports[dst_idx]) {
-//       struct port_relation_insw *rlin = mtbdd_sw_port_relations[dst_sw_idx]->port_relation_in->ports[dst_idx];
-//       if (rlin->in){
-//         bool hassign = false;
-//         for (int cp_i = 0; cp_i < rlin->in->ncps; cp_i++) {       
-//           if (rlin->in->cps[cp_i]) {
-//             if (rlin->in->cps[cp_i]->sw_idx == src_sw_idx) {
-//               if (rlin->in->cps[cp_i]->port_idx == src_idx)
-//                 hassign = true;
-//             }
-//           }
-//         }
-//         if (!hassign) {         
-//             struct connect_ports *port_in = xmalloc(sizeof(uint32_t)+(rlin->in->ncps+1)*sizeof(struct port_record *));
-//             port_in->ncps = rlin->in->ncps+1;
-//             for (int cp_i = 0; cp_i < rlin->in->ncps; cp_i++)
-//               port_in->cps[cp_i] = rlin->in->cps[cp_i];
-//             port_in->cps[rlin->in->ncps] = xmalloc(sizeof(struct port_record));
-//             port_in->cps[rlin->in->ncps]->sw_idx = src_sw_idx;
-//             port_in->cps[rlin->in->ncps]->port_idx = src_idx;
-//             free(rlin->in);
-//             rlin->in = port_in;
-//         }
-//       }
-//       else 
-//         printf("there is no rlin in %d - %d\n",dst_sw_idx,dst_idx);
-//     }
-//     else {
-//       mtbdd_sw_port_relations[dst_sw_idx]->port_relation_in->ports[dst_idx] = xmalloc(sizeof(struct port_relation_insw));
-//       struct port_relation_insw *rlin = mtbdd_sw_port_relations[dst_sw_idx]->port_relation_in->ports[dst_idx];
-//       rlin->in_mtbdd_r = BDDZERO;
-//       rlin->in_mtbdd_merged_r = BDDZERO;
-//       rlin->in = xmalloc(sizeof(struct connect_ports));
-//       rlin->in->ncps = 1;
-//       rlin->in->cps[0] = xmalloc(sizeof(struct port_record));
-//       rlin->in->cps[0]->sw_idx = src_sw_idx;
-//       rlin->in->cps[0]->port_idx = src_idx;
-//     }
-
-    
-//   }
-//   return 0;
-// }
-
-// int
-// init_sw_port_relations(const char *name) {
-//   if (strcmp(name, "json_stanford_fwd") == 0) {
-//     uint32_t allports[16] = {24,21,11,11,8,8,15,14,9,9,8,8,9,9,31,7};
-//     uint32_t ports[16] = {24,21,11,11,8,8,15,14,9,9,8,8,9,9,31,7};
-//     for (int i = 0; i < SW_NUM; i++) {
-//       mtbdd_sw_port_relations[i] = xmalloc(sizeof(struct sw_port_relations));
-//       mtbdd_sw_port_relations[i]->sw_idx = i;
-//       mtbdd_sw_port_relations[i]->allportin = allports[i];
-//       mtbdd_sw_port_relations[i]->allportout = allports[i];
-//       mtbdd_sw_port_relations[i]->port_relation_in = xmalloc(sizeof(uint32_t)+(ports[i]+1)*sizeof(struct port_relation_insw *));
-//       mtbdd_sw_port_relations[i]->port_relation_in->nports = (ports[i]+1);
-//       for (int rn_i = 0; rn_i < (ports[i]+1); rn_i++)
-//         mtbdd_sw_port_relations[i]->port_relation_in->ports[rn_i] = NULL;
-//       mtbdd_sw_port_relations[i]->port_relation_out = xmalloc(sizeof(uint32_t)+(ports[i]+1)*sizeof(struct port_relation_outsw *));
-//       mtbdd_sw_port_relations[i]->port_relation_out->nports = (ports[i]+1);
-//       for (int rn_i = 0; rn_i < (ports[i]+1); rn_i++)
-//         mtbdd_sw_port_relations[i]->port_relation_out->ports[rn_i] = NULL;
-//     }
-//     load_topology_jsondata("tfs/json_policy", "topology_stfw.json");
-//   }
-//   else if (strcmp(name, "json_stanford") == 0) {
-//     // uint32_t allports[16] = {34,20,14,12,8,8,23,23,11,10,11,11,9,9,43,6};
-//     uint32_t allportsin[48] = {39,1,39,22,1,22,14,1,14,12,1,12,8,1,8,8,1,8,23,1,23,23,1,23,11,1,11,10,1,10,11,1,11,11,1,11,9,1,9,9,1,9,43,1,43,6,1,6};
-//     uint32_t allportsout[48] = {1,39,39,1,22,22,1,14,14,1,12,12,1,8,8,1,8,8,1,23,23,1,23,23,1,11,11,1,10,10,1,11,11,1,11,11,1,9,9,1,9,9,1,43,43,1,6,6};
-//     uint32_t portsin[48] = {48,0,48,25,0,25,61,0,61,62,0,62,13,0,13,11,0,11,60,0,60,61,0,61,61,0,61,62,0,62,60,0,60,62,0,62,12,0,12,12,0,12,60,0,60,11,0,11};
-//     uint32_t portsout[48] = {0,48,48,0,25,25,0,61,61,0,62,62,0,13,13,0,11,11,0,60,60,0,61,61,0,61,61,0,62,62,0,60,60,0,62,62,0,12,12,0,12,12,0,60,60,0,11,11};
-//     for (int i = 0; i < SW_NUM; i++) {
-//       mtbdd_sw_port_relations[i] = xmalloc(sizeof(struct sw_port_relations));
-//       mtbdd_sw_port_relations[i]->sw_idx = i;
-//       mtbdd_sw_port_relations[i]->allportin = allportsin[i];
-//       mtbdd_sw_port_relations[i]->allportout = allportsout[i];
-//       mtbdd_sw_port_relations[i]->port_relation_in = xmalloc(sizeof(uint32_t)+(portsin[i]+1)*sizeof(struct port_relation_insw *));
-//       mtbdd_sw_port_relations[i]->port_relation_in->nports = (portsin[i]+1);
-//       for (int rn_i = 0; rn_i < (portsin[i]+1); rn_i++)
-//         mtbdd_sw_port_relations[i]->port_relation_in->ports[rn_i] = NULL;
-//       mtbdd_sw_port_relations[i]->port_relation_out = xmalloc(sizeof(uint32_t)+(portsout[i]+1)*sizeof(struct port_relation_outsw *));
-//       mtbdd_sw_port_relations[i]->port_relation_out->nports = (portsout[i]+1);
-//       for (int rn_i = 0; rn_i < (portsout[i]+1); rn_i++)
-//         mtbdd_sw_port_relations[i]->port_relation_out->ports[rn_i] = NULL;
-//     }
-//     load_topology_jsondata("tfs/json_policy", "topology_st.json");
-//   }
-//   else if (strcmp(name, "json_i2") == 0) {
-//     uint32_t allportsin[18] = {23,1,36,1,21,1,25,1,22,1,25,1,18,1,18,1,35,1};
-//     uint32_t allportsout[18] = {1,23,1,36,1,21,1,25,1,22,1,25,1,18,1,18,1,35};
-//     uint32_t portsin[18] = {33,0,47,0,50,0,32,0,33,0,36,0,23,0,37,0,49,0};
-//     uint32_t portsout[18] = {0,33,0,47,0,50,0,32,0,33,0,36,0,23,0,37,0,49};
-//     for (int i = 0; i < SW_NUM; i++) {
-//       mtbdd_sw_port_relations[i] = xmalloc(sizeof(struct sw_port_relations));
-//       mtbdd_sw_port_relations[i]->sw_idx = i;
-//       mtbdd_sw_port_relations[i]->allportin = allportsin[i];
-//       mtbdd_sw_port_relations[i]->allportout = allportsout[i];
-//       mtbdd_sw_port_relations[i]->port_relation_in = xmalloc(sizeof(uint32_t)+(portsin[i]+1)*sizeof(struct port_relation_insw *));
-//       mtbdd_sw_port_relations[i]->port_relation_in->nports = (portsin[i]+1);
-//       for (int rn_i = 0; rn_i < (portsin[i]+1); rn_i++)
-//         mtbdd_sw_port_relations[i]->port_relation_in->ports[rn_i] = NULL;
-//       mtbdd_sw_port_relations[i]->port_relation_out = xmalloc(sizeof(uint32_t)+(portsout[i]+1)*sizeof(struct port_relation_outsw *));
-//       mtbdd_sw_port_relations[i]->port_relation_out->nports = (portsout[i]+1);
-//       for (int rn_i = 0; rn_i < (portsout[i]+1); rn_i++)
-//         mtbdd_sw_port_relations[i]->port_relation_out->ports[rn_i] = NULL;
-//     }
-//     load_topology_jsondata("tfs/json_policy", "topology_i2.json");
-//   }
-//   print_sw_port_relations_arr(mtbdd_sw_port_relations);
-//   return 0;
-// }
 
 /*for test packet generation*/
 /*========================================================================*/
@@ -17419,13 +12449,58 @@ mtbdd_r_add_1tb(BDD mtbdd_sw, BDD mtbdd_r) {
   return res;
 }
 
+BDD
+update_achangedtnode_selfbdd(BDD mtbdd_base, BDD cnode) {
+  CHECKa(mtbdd_base, bddfalse);
+  CHECKa(cnode, bddfalse);
+  MTBddValue *v = &mtbddvalues[(bddnodes[cnode].high)];
+  v->self_bdd = mtbdd_update_achangedt_rec(mtbdd_base, cnode);
+}
+
+void
+update_changedtnodes_selfbdd(BDD mtbdd_base) {
+  for (int i = 0; i < changedtnodes_count; i++) {
+    mtbddop_count++;
+    update_achangedtnode_selfbdd(mtbdd_base, changedtnodes[i]);
+  }
+}
+
 void
 Update_aRule_Insert_1tb(struct bdd_rule *r){
   r->type = RULE_BS;
+  mtbddop_count++;
+  coveringop_count++;
+  changedtnodes_count = 0;
+
+  makenode_testcount = 0;
+  makenode_bddchange_testcount = 0;
+  makenewnode_testcount = 0;
+
   bdd_delref(mtbdd_sws[r->sw_idx]);
   mtbdd_sws[r->sw_idx] = mtbdd_r_add_1tb(mtbdd_sws[r->sw_idx], r->mtbdd_in);
   bdd_addref(mtbdd_sws[r->sw_idx]);
+
+  // printf("makenode_testcount %d - makenode_bddchange_testcount %d - makenewnode_testcount %d\n", makenode_testcount, makenode_bddchange_testcount, makenewnode_testcount);
+  
+  // changedtnodes[changedtnodes_count] = r->vtnode_in;
+  // changedtnodes_count++;
+  // printf("changedtnodes_count %d\n", changedtnodes_count);
+  // struct timeval start,stop;
+  // gettimeofday(&start,NULL);
+  // update_changedtnodes_selfbdd(mtbdd_sws[r->sw_idx]);
+  // gettimeofday(&stop,NULL);
+  // long long int rupdate = diff(&stop, &start);
+  // printf("update_changedtnodes_selfbdd: %lld us\n", rupdate);
 }
+
+// void
+// Update_aRule_Insert_vtr(struct bdd_rule *r){
+//   r->type = RULE_BS;
+//   mtbddop_count++;
+//   bdd_delref(mtbdd_sws[r->sw_idx]);
+//   mtbdd_sws[r->sw_idx] = mtbdd_r_add_1tb(mtbdd_sws[r->sw_idx], r->mtbdd_in);
+//   bdd_addref(mtbdd_sws[r->sw_idx]);
+// }
 
 void
 build_network_by_update_rules(struct network_bdd *net) {
@@ -17435,18 +12510,23 @@ build_network_by_update_rules(struct network_bdd *net) {
     return;
   }
   mgr_change_count = 0;
-  for (int sw_i = 15; sw_i < SW_NUM; sw_i++) {
+  for (int sw_i = 0; sw_i < SW_NUM; sw_i++) {
     struct switch_bdd_rs *sw = net->sws[sw_i];
     for (int r_i = 0; r_i < sw->nrules; r_i++) {
+    // for (int r_i = sw->nrules - 1; r_i >= 0; r_i--) {// reverse
+      
       gettimeofday(&start,NULL);
       Update_aRule_Insert_1tb(sw->rules[r_i]);
       gettimeofday(&stop,NULL);
       long long int rupdate = diff(&stop, &start);
+      
       printf("rupdate %d - %d for the basic rule mtbdd: %lld us\n", sw_i, r_i, rupdate);
+      // print_bdd_rule_arr(sw->rules[r_i]->covering);
       if (mtbddop_count > 65534){
       // if (mtbddop_count > 3000){
         bdd_operator_reset();
         mtbddop_count = 20;
+        coveringop_count = 1;
       }
       // reset_mgr_change_tmp();
      }
@@ -17469,18 +12549,18 @@ mtbdd_r_remove_1tb(BDD mtbdd_sw, BDD mtbdd_r) {
 void
 Remove_aRule_fr_Mtbddnet_1tb(struct bdd_rule *r){
   r->type = RULE_RM;
+  mtbddop_count++;
+  coveringop_count++;
   bdd_delref(mtbdd_sws[r->sw_idx]);
   mtbdd_sws[r->sw_idx] = mtbdd_r_remove_1tb(mtbdd_sws[r->sw_idx], r->mtbdd_in);
   bdd_addref(mtbdd_sws[r->sw_idx]);
-
-  bdd_delref(mtbddvalues[r->vtnode_in].self_bdd);
-  mtbddvalues[r->vtnode_in].self_bdd = r->mf_in;
-  bdd_addref(mtbddvalues[r->vtnode_in].self_bdd);
+  MTBddValue *v = &mtbddvalues[(bddnodes[r->vtnode_in].high)];
+  bdd_delref(v->self_bdd);
+  v->self_bdd = r->mf_in;
+  bdd_addref(v->self_bdd);
   if (r->covering)
     free(r->covering);
-  
   r->covering = NULL;
-
 }
 
 struct bdd_rule_arr *
@@ -17491,6 +12571,7 @@ get_readd_rule_arr_when_remove_arule(struct bdd_rule *r) {
   uint32_t rules_tmp_count = 0;
   for (int cov_i = 0; cov_i < r->covering->nrules; cov_i++) {
     if(r->covering->rules[cov_i]->type != RULE_RM){
+      // printf("there is a rule\n");
       struct bdd_rule *cov_r = r->covering->rules[cov_i];
       struct bdd_rule *virtual_r = xmalloc(sizeof(struct bdd_rule));
       virtual_r->sw_idx = cov_r->sw_idx;
@@ -17500,9 +12581,10 @@ get_readd_rule_arr_when_remove_arule(struct bdd_rule *r) {
       // virtual_r->mf_in = cov_r->mf_in;
       virtual_r->mf_out = cov_r->mf_out;
       virtual_r->vtnode_in = cov_r->vtnode_in;
-      bdd_delref(mtbddvalues[virtual_r->vtnode_in].self_bdd);
-      mtbddvalues[virtual_r->vtnode_in].self_bdd = bdd_apply(mtbddvalues[virtual_r->vtnode_in].self_bdd, virtual_r->mf_in, bddop_or);
-      bdd_addref(mtbddvalues[virtual_r->vtnode_in].self_bdd);
+      MTBddValue *v = &mtbddvalues[(bddnodes[virtual_r->vtnode_in].high)];
+      bdd_delref(v->self_bdd);
+      v->self_bdd = bdd_apply(v->self_bdd, virtual_r->mf_in, bddop_or);
+      bdd_addref(v->self_bdd);
       virtual_r->mtbdd_in = bdd_to_mtbdd(virtual_r->mf_in, virtual_r->vtnode_in);
       virtual_r->mask = cov_r->mask;
       virtual_r->rewrite = cov_r->rewrite;
@@ -17525,8 +12607,18 @@ void
 Update_aRule_Remove(struct bdd_rule *r) {
   if(!(r->lks_in))
     return;
+  // struct timeval start,stop;
+  // gettimeofday(&start,NULL);
   struct bdd_rule_arr *readd_vrules = get_readd_rule_arr_when_remove_arule(r);
+  // gettimeofday(&stop,NULL);
+  // long long int rupdate = diff(&stop, &start);
+  // printf("get_readd_rule_arr: %lld us\n", rupdate);
+  // gettimeofday(&start,NULL);
   Remove_aRule_fr_Mtbddnet_1tb(r);
+  // gettimeofday(&stop,NULL);
+  // rupdate = diff(&stop, &start);
+  // printf("Remove_aRule: %lld us\n", rupdate);
+  // gettimeofday(&start,NULL);
   if(readd_vrules){
     for (int i = 0; i < readd_vrules->nrules; i++){
       Update_aRule_Insert_1tb(readd_vrules->rules[i]);
@@ -17534,6 +12626,9 @@ Update_aRule_Remove(struct bdd_rule *r) {
     }
     free(readd_vrules);
   }
+  // gettimeofday(&stop,NULL);
+  // rupdate = diff(&stop, &start);
+  // printf("readd rule_arr: %lld us\n", rupdate);
 }
 
 void
@@ -17544,33 +12639,633 @@ test_remove_then_readd_rules(struct network_bdd *net) {
     return;
   }
   mgr_change_count = 0;
-  for (int sw_i = 15; sw_i < SW_NUM; sw_i++) {
+  for (int sw_i = 0; sw_i < SW_NUM; sw_i++) {
     struct switch_bdd_rs *sw = net->sws[sw_i];
     for (int r_i = 0; r_i < sw->nrules; r_i++) {
-      print_bdd_rule_arr(sw->rules[r_i]->covering);
+      // print_bdd_rule_arr(sw->rules[r_i]->covering);
       gettimeofday(&start,NULL);
       Update_aRule_Remove(sw->rules[r_i]);
       gettimeofday(&stop,NULL);
       long long int rupdate = diff(&stop, &start);
       printf("rupdate remove %d - %d for the basic rule mtbdd: %lld us\n", sw_i, r_i, rupdate);
-      bdd_nodecount(mtbdd_sws[sw_i]);
-      print_bdd_rule_arr(sw->rules[r_i]->covering);
+      // bdd_nodecount(mtbdd_sws[sw_i]);
+      // print_bdd_rule_arr(sw->rules[r_i]->covering);
       gettimeofday(&start,NULL);
       Update_aRule_Insert_1tb(sw->rules[r_i]);
       gettimeofday(&stop,NULL);
       rupdate = diff(&stop, &start);
       printf("rupdate readd %d - %d for the basic rule mtbdd: %lld us\n", sw_i, r_i, rupdate);
-      print_bdd_rule_arr(sw->rules[r_i]->covering);
-      if (mtbddop_count > 65532){
-      // if (mtbddop_count > 3000){
+      // bdd_nodecount(mtbdd_sws[sw_i]);
+      // print_bdd_rule_arr(sw->rules[r_i]->covering);
+      if (mtbddop_count > 65532 || coveringop_count > 65532){
         bdd_operator_reset();
         mtbddop_count = 20;
+        coveringop_count = 1;
       }
-      bdd_nodecount(mtbdd_sws[sw_i]);
       // reset_mgr_change_tmp();
      }
      printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum());
   }
   printf("bdd_getnodenum :%d - %d\n", bdd_getnodenum(),mtbdd_getvaluenum());
   get_mtbdd_probes_num();
+}
+
+struct network_bdd *
+generate_empty_net(struct network_bdd *net) {
+  if (!net)
+    return NULL;
+  struct network_bdd *tmp = xmalloc(sizeof(struct network_bdd));
+  tmp->nsws = net->nsws;
+  for (int i = 0; i < tmp->nsws; i++) {
+    if (net->sws[i]) {
+      tmp->sws[i] = xmalloc(2*sizeof(uint32_t)+(net->sws[i]->nrules)*sizeof(struct bdd_rule *));
+      tmp->sws[i]->sw_idx = net->sws[i]->sw_idx;
+      tmp->sws[i]->nrules = net->sws[i]->nrules;
+      for (int r_i = 0; r_i < tmp->sws[i]->nrules; r_i++)
+        tmp->sws[i]->rules[r_i] = NULL;
+    }
+    else
+      tmp->sws[i] = NULL;
+  }
+  return tmp;
+}
+
+void
+free_pbset(struct probeset *pbs) {
+  if(!pbs)
+    return;
+  for (int i = 0; i < pbs->nprobes; i++) {
+    if (pbs->probes[i])
+      free(pbs->probes[i]);
+  }
+}
+
+void
+is_pbset_NULL(struct probeset *pbs) {
+  if(!pbs){
+    printf("This pbset is empty!\n");
+    return;
+  }
+  for (int i = 0; i < pbs->nprobes; i++) {
+    if (!pbs->probes[i])
+      printf("null-%d;", i);
+  }
+  printf("\n");
+}
+
+struct network_bdd *
+UpdateProbesInsert(struct network_bdd *net, struct bdd_rule *r) {
+  if (!net)
+    return NULL;
+  if(!r)
+    return net;
+  struct switch_bdd_rs *sw = net->sws[r->sw_idx];
+  sw->rules[r->idx] = r;
+  // printf("ridx %d\n", r->idx);
+  r->pbset = xmalloc(sizeof(struct probeset));
+  r->pbset->nprobes = 1;
+  r->pbset->bdd_hit = r->mf_in;
+  bdd_addref(r->pbset->bdd_hit);
+  r->pbset->probes[0] = xmalloc(sizeof(struct probe));
+  r->pbset->probes[0]->bdd_mf = r->mf_in;
+  bdd_addref(r->pbset->probes[0]->bdd_mf);
+  r->pbset->probes[0]->override = NULL;
+  for (int r_i = 0; r_i < r->idx; r_i++){
+    if (sw->rules[r_i]){
+      struct bdd_rule *rt = sw->rules[r_i];
+      // bool actionsame = is_action_same(rt, r);
+      bool changedsign = false;
+      struct probe *pbs_tmp[1000];
+      uint32_t pbs_tmp_count = 0;
+      struct probe *newpb = xmalloc(sizeof(struct probe));
+      newpb->bdd_mf = BDDZERO;
+      newpb->override = r;
+
+      if (r->pbset) {
+        r->pbset->bdd_hit = bdd_apply(r->pbset->bdd_hit, rt->mf_in, bddop_diff);
+        bdd_addref(r->pbset->bdd_hit);
+        r->pbset->probes[0]->bdd_mf = r->pbset->bdd_hit;
+        bdd_addref(r->pbset->probes[0]->bdd_mf);
+        if (!(r->pbset->bdd_hit)){
+          free(r->pbset->probes[0]);
+          free(r->pbset);
+          r->pbset = NULL;
+        }     
+      }
+
+      if (sw->rules[r_i]->pbset) {
+        for (int pb_i = 0; pb_i < rt->pbset->nprobes; pb_i++) {
+          struct probe *pb = rt->pbset->probes[pb_i];
+          if (pb) {
+            if (pb->override) {
+              if (pb->override->idx < r->idx) {
+                pbs_tmp[pbs_tmp_count] = pb;
+                pbs_tmp_count++;
+              }
+              else {
+                BDD insc = bdd_apply(pb->bdd_mf, r->mf_in, bddop_and);
+                if (insc){
+                  bdd_delref(newpb->bdd_mf);
+                  newpb->bdd_mf = bdd_apply(newpb->bdd_mf, insc, bddop_or);
+                  bdd_addref(newpb->bdd_mf);
+                  changedsign = true;
+                  BDD diff = bdd_apply(pb->bdd_mf, insc, bddop_diff);
+                  if(diff) {
+                    bdd_delref(pb->bdd_mf);
+                    pb->bdd_mf = diff;
+                    bdd_addref(pb->bdd_mf);
+                    pbs_tmp[pbs_tmp_count] = pb;
+                    pbs_tmp_count++;
+                  }
+                  else {
+                    bdd_delref(pb->bdd_mf);
+                    free(pb);
+                  }
+                }
+                else {
+                  pbs_tmp[pbs_tmp_count] = pb;
+                  pbs_tmp_count++;
+                }
+              }
+            } 
+            else {
+              BDD insc = bdd_apply(pb->bdd_mf, r->mf_in, bddop_and);
+              if (insc){
+                bdd_delref(newpb->bdd_mf);
+                newpb->bdd_mf = bdd_apply(newpb->bdd_mf, insc, bddop_or);
+                bdd_addref(newpb->bdd_mf);
+                changedsign = true;
+                BDD diff = bdd_apply(pb->bdd_mf, insc, bddop_diff);
+                if(diff) {
+                  bdd_delref(pb->bdd_mf);
+                  pb->bdd_mf = diff;
+                  bdd_addref(pb->bdd_mf);
+                  pbs_tmp[pbs_tmp_count] = pb;
+                  pbs_tmp_count++;
+                }
+                else {
+                  bdd_delref(pb->bdd_mf);
+                  free(pb);
+                }
+              }
+              else {
+                pbs_tmp[pbs_tmp_count] = pb;
+                pbs_tmp_count++;
+              }
+            } 
+          }
+        }
+      }
+      // else{
+      //   printf("there has something wrong with the probe of rule %d - %d\n", rt->sw_idx, rt->idx);
+      // }
+      if (changedsign){
+        BDD hit_tmp = rt->pbset->bdd_hit;
+        free(rt->pbset);
+        rt->pbset = xmalloc(sizeof(uint32_t)+(pbs_tmp_count+1)*sizeof(struct probe *));
+        rt->pbset->nprobes = pbs_tmp_count + 1;
+        rt->pbset->bdd_hit = hit_tmp;
+        for (int pb_i = 0; pb_i < pbs_tmp_count; pb_i++)
+          rt->pbset->probes[pb_i] = pbs_tmp[pb_i];
+        rt->pbset->probes[pbs_tmp_count] = newpb;
+      }
+      else{
+        free(newpb);
+      }
+    }
+  }
+
+  for (int r_i = r->idx+1; r_i < sw->nrules; r_i++) {
+    if (sw->rules[r_i]){
+      struct bdd_rule *rt = sw->rules[r_i];
+      if ((r->pbset) && (rt->pbset)) {
+        BDD inschit = bdd_apply(rt->pbset->bdd_hit, r->pbset->bdd_hit, bddop_and);
+        if (inschit) {
+          bool changedsign = false;
+          struct probe *pbs_tmp[1000];
+          uint32_t pbs_tmp_count = 0;
+          for (int pb_i = 0; pb_i < r->pbset->nprobes; pb_i++){
+            struct probe *pb = r->pbset->probes[pb_i];
+            if (pb->override == NULL){
+              BDD insc = bdd_apply(pb->bdd_mf, rt->pbset->bdd_hit, bddop_and);
+              if(insc) {
+                changedsign = true;
+                pbs_tmp[pbs_tmp_count] = xmalloc(sizeof(struct probe));
+                pbs_tmp[pbs_tmp_count]->bdd_mf = insc;
+                bdd_addref(pbs_tmp[pbs_tmp_count]->bdd_mf);
+                pbs_tmp[pbs_tmp_count]->override = rt;
+                pbs_tmp_count++;
+                BDD diff = bdd_apply(pb->bdd_mf, rt->pbset->bdd_hit, bddop_diff);
+                if(diff) {
+                  bdd_delref(pb->bdd_mf);
+                  pb->bdd_mf = diff;
+                  bdd_addref(pb->bdd_mf);
+                  pbs_tmp[pbs_tmp_count] = pb;
+                  pbs_tmp_count++;
+                }
+                else {
+                  bdd_delref(pb->bdd_mf);
+                  free(pb);
+                }
+              }
+            }
+            else{
+              pbs_tmp[pbs_tmp_count] = pb;
+              pbs_tmp_count++;
+            }
+          }
+          if (changedsign) {
+            BDD hit_tmp = r->pbset->bdd_hit;
+            free(r->pbset);
+            r->pbset = xmalloc(sizeof(uint32_t)+pbs_tmp_count*sizeof(struct probe *));
+            r->pbset->nprobes = pbs_tmp_count;
+            r->pbset->bdd_hit = hit_tmp;
+            for (int pb_i = 0; pb_i < pbs_tmp_count; pb_i++)
+              r->pbset->probes[pb_i] = pbs_tmp[pb_i];
+          }
+          BDD diffhit = bdd_apply(rt->pbset->bdd_hit, inschit, bddop_diff);
+          if (diffhit) {
+            bdd_delref(rt->pbset->bdd_hit);
+            rt->pbset->bdd_hit = diffhit;
+            bdd_addref(rt->pbset->bdd_hit);
+            changedsign = false;
+            pbs_tmp_count = 0;
+            for (int pb_i = 0; pb_i < rt->pbset->nprobes; pb_i++) {
+              struct probe *pb = rt->pbset->probes[pb_i];
+              BDD diff = bdd_apply(pb->bdd_mf, r->mf_in, bddop_diff);
+              if(diff) {
+                bdd_delref(pb->bdd_mf);
+                pb->bdd_mf = diff;
+                bdd_addref(pb->bdd_mf);
+                pbs_tmp[pbs_tmp_count] = pb;
+                pbs_tmp_count++;
+              }
+              else{
+                changedsign = true;
+              }
+              if(changedsign) {
+                BDD hit_tmp = rt->pbset->bdd_hit;
+                free(rt->pbset);
+                rt->pbset = xmalloc(sizeof(uint32_t)+pbs_tmp_count*sizeof(struct probe *));
+                rt->pbset->nprobes = pbs_tmp_count;
+                rt->pbset->bdd_hit = hit_tmp;
+                for (int pb_i = 0; pb_i < pbs_tmp_count; pb_i++)
+                  rt->pbset->probes[pb_i] = pbs_tmp[pb_i];
+              }
+            }
+          }
+          else {
+            for (int pb_i = 0; pb_i < rt->pbset->nprobes; pb_i++){
+              bdd_delref(rt->pbset->probes[pb_i]->bdd_mf);
+              free(rt->pbset->probes[pb_i]);
+            }
+            free(rt->pbset);
+            rt->pbset = NULL;
+          }
+        }  
+      }
+    }
+  }
+  return net;
+}
+
+// struct probe {
+//   BDD bdd_mf;
+//   struct bdd_rule *override;
+// };
+
+// struct probeset {
+//   uint32_t nprobes;
+//   BDD bdd_hit;
+//   struct probe *probes[0];
+// };
+
+struct network_bdd *
+UpdateProbesRemove(struct network_bdd *net, struct bdd_rule *r) {
+  if (!net)
+    return NULL;
+  if((!r)||(!net->sws[r->sw_idx]->rules[r->idx]))
+    return net;
+  // if(!r->pbset){
+  //   net->sws[r->sw_idx]->rules[r->idx] = NULL;
+  //   free_pbset(r->pbset);
+  //   return net;
+  // }
+  struct switch_bdd_rs *sw = net->sws[r->sw_idx];
+
+  // sw->rules[r->idx] = r;
+  // printf("ridx %d\n", r->idx);
+  // r->pbset = xmalloc(sizeof(struct probeset));
+  // r->pbset->nprobes = 1;
+  // r->pbset->bdd_hit = r->mf_in;
+  // r->pbset->probes[0] = xmalloc(sizeof(struct probe));
+  // r->pbset->probes[0]->bdd_mf = r->mf_in;
+  // r->pbset->probes[0]->override = NULL;
+  // printf("there is wrong in 1\n");
+  for (int r_i = 0; r_i < r->idx; r_i++){
+    if (sw->rules[r_i]){
+      struct bdd_rule *rt = sw->rules[r_i];
+      // bool actionsame = is_action_same(rt, r);
+      // bool changedsign = false;
+      struct probe *pbs_tmp[1000];
+      uint32_t pbs_tmp_count = 0;
+
+      if (rt->pbset) {
+        BDD insc = bdd_apply(rt->pbset->bdd_hit, r->mf_in, bddop_and);
+        struct probe *pb_null = NULL;
+        BDD pb_bdd_null = 0;
+        if (insc) {
+          for (int pb_i = 0; pb_i < rt->pbset->nprobes; pb_i++) {
+            struct probe *pb = rt->pbset->probes[pb_i];
+            if (pb) {
+              if (pb->override) {
+                if (pb->override == r) {
+                  pb_bdd_null = bdd_apply(pb->bdd_mf, pb_bdd_null, bddop_or);
+                  bdd_delref(pb->bdd_mf);
+                  free(pb);
+                }
+                else {
+                  pbs_tmp[pbs_tmp_count] = pb;
+                  pbs_tmp_count++;
+                }
+              }
+              else 
+                pb_null = pb;
+            }
+          }
+          BDD hit_tmp = rt->pbset->bdd_hit;
+          free(rt->pbset);
+          if (pb_null) {
+            bdd_delref(pb_null->bdd_mf);
+            pb_null->bdd_mf = bdd_apply(pb_null->bdd_mf, pb_bdd_null, bddop_or);
+            bdd_addref(pb_null->bdd_mf);
+            rt->pbset = xmalloc(sizeof(uint32_t)+(pbs_tmp_count+1)*sizeof(struct probe *));
+            rt->pbset->nprobes = pbs_tmp_count + 1;
+            rt->pbset->bdd_hit = hit_tmp;
+            rt->pbset->probes[0] = pb_null;
+            for (int pb_i = 1; pb_i < pbs_tmp_count+1; pb_i++)
+              rt->pbset->probes[pb_i] = pbs_tmp[pb_i-1];
+          }
+          else {
+            if (pb_bdd_null) {
+              rt->pbset = xmalloc(sizeof(uint32_t)+(pbs_tmp_count+1)*sizeof(struct probe *));
+              rt->pbset->nprobes = pbs_tmp_count + 1;
+              rt->pbset->bdd_hit = hit_tmp;
+              rt->pbset->probes[0] = xmalloc(sizeof(struct probe));
+              rt->pbset->probes[0]->bdd_mf = pb_bdd_null;
+              bdd_addref(rt->pbset->probes[0]->bdd_mf);
+              rt->pbset->probes[0]->override = NULL;
+              for (int pb_i = 1; pb_i < pbs_tmp_count+1; pb_i++)
+                rt->pbset->probes[pb_i] = pbs_tmp[pb_i-1];
+            }
+            else {
+              rt->pbset = xmalloc(sizeof(uint32_t)+(pbs_tmp_count)*sizeof(struct probe *));
+              rt->pbset->nprobes = pbs_tmp_count;
+              rt->pbset->bdd_hit = hit_tmp;
+              for (int pb_i = 0; pb_i < pbs_tmp_count; pb_i++)
+                rt->pbset->probes[pb_i] = pbs_tmp[pb_i];
+            }
+          }
+        } 
+      }
+    }
+  }
+  // printf("there is wrong in 2\n");
+  if (r->pbset) {
+    bdd_delref(r->pbset->bdd_hit);
+    free_pbset(r->pbset);
+  }
+  sw->rules[r->idx] = NULL;
+  // if (!r->pbset->bdd_hit) {
+  //   sw->rules[r->idx] = NULL;
+  //   free_pbset(r->pbset);
+  //   r->pbset = NULL;
+  //   return net;
+  // }
+
+
+  // printf("there is wrong in 3\n");
+  for (int r_i = r->idx+1; r_i < sw->nrules; r_i++) {
+    // printf("there loop %d\n", r_i);
+    if (sw->rules[r_i]){
+      struct bdd_rule *rt = sw->rules[r_i];
+      // bool actionsame = is_action_same(rt, r);
+      // bool changedsign = false;
+      BDD insc = bdd_apply(r->mf_in, rt->mf_in, bddop_and);
+      // bdd_addref(insc);
+      if (insc) {
+        // printf("there loop3-1 %d\n", r_i);  
+        BDD rt_hit_diff = insc;
+        for (int rh_i = 0; rh_i < rt->idx; rh_i++) {
+          if(sw->rules[rh_i]) {
+            // printf("there loopin1 %d\n", rh_i);
+            struct bdd_rule *rh = sw->rules[rh_i];
+            if (rh->pbset) {
+              BDD rh_insc = bdd_apply(rh->pbset->bdd_hit, insc, bddop_and);
+              if (rh_insc) {
+                rt_hit_diff = bdd_apply(rt_hit_diff, rh->pbset->bdd_hit, bddop_diff);
+                struct probe *pbs_tmp[1000];
+                uint32_t pbs_tmp_count = 0;
+                struct probe *pb_rt = NULL;
+                BDD pb_bdd_rt = 0;
+                bool changedsign = false;
+                // is_pbset_NULL(rh->pbset);
+                // printf("there loopin2 %d\n", rh->pbset->nprobes);
+
+                for (int pb_i = 0; pb_i < rh->pbset->nprobes; pb_i++) {
+                  // printf("there loopin2 \n");
+                  struct probe *pb = rh->pbset->probes[pb_i];
+                  // printf("there loopin2 \n");
+                  if (pb) {
+                    // printf("the pb %d - %d\n", rh_i, pb_i);
+                    if (pb->override) {
+                      if (pb->override == rt) {
+                        pb_rt = pb;
+                        pbs_tmp[pbs_tmp_count] = pb;
+                        pbs_tmp_count++;
+                      }
+                      else {
+                        pbs_tmp[pbs_tmp_count] = pb;
+                        pbs_tmp_count++;
+                      }
+                    }
+                    else {
+                      // printf("the wrong 1 - %d - %d \n", rh_i, pb_i);
+                      // printf("the wrong 1 %d\n", pb->bdd_mf);
+                      pb_bdd_rt = bdd_apply(pb->bdd_mf, rh_insc, bddop_and);
+                      // printf("the wrong 3 \n");
+                      if (pb_bdd_rt) {
+                        bdd_delref(pb->bdd_mf);
+                        pb->bdd_mf = bdd_apply(pb->bdd_mf, rh_insc, bddop_diff);
+                        bdd_addref(pb->bdd_mf);
+                        // printf("the wrong 3 %d\n", pb->bdd_mf);
+                        // changedsign = true;
+                        if (pb->bdd_mf){
+                          pbs_tmp[pbs_tmp_count] = pb;
+                          pbs_tmp_count++;
+                        }
+                        else {
+                          bdd_delref(pb->bdd_mf);
+                          changedsign = true;
+                          free(pb);
+                        }
+                      }
+                    }
+                  }
+                }
+                // printf("there loop3-2 %d\n", r_i);   
+                // printf("there loopin3 \n");
+                if (pb_bdd_rt) {
+                  if (pb_rt) {
+                    bdd_delref(pb_rt->bdd_mf);
+                    pb_rt->bdd_mf = bdd_apply(pb_rt->bdd_mf, pb_bdd_rt, bddop_or);
+                    bdd_addref(pb_rt->bdd_mf);
+                    if (changedsign) {
+                      BDD hit_tmp = rh->pbset->bdd_hit;
+                      free(rh->pbset);
+                      rh->pbset = xmalloc(sizeof(uint32_t)+(pbs_tmp_count)*sizeof(struct probe *));
+                      rh->pbset->nprobes = pbs_tmp_count;
+                      rh->pbset->bdd_hit = hit_tmp;
+                      for (int pb_i = 0; pb_i < pbs_tmp_count; pb_i++)
+                        rh->pbset->probes[pb_i] = pbs_tmp[pb_i];
+                    }
+                  }
+                  else {
+                    BDD hit_tmp = rh->pbset->bdd_hit;
+                    free(rh->pbset);
+                    rh->pbset = xmalloc(sizeof(uint32_t)+(pbs_tmp_count+1)*sizeof(struct probe *));
+                    rh->pbset->nprobes = pbs_tmp_count + 1;
+                    rh->pbset->bdd_hit = hit_tmp;
+                    for (int pb_i = 0; pb_i < pbs_tmp_count; pb_i++)
+                      rh->pbset->probes[pb_i] = pbs_tmp[pb_i];
+                    rh->pbset->probes[pbs_tmp_count] = xmalloc(sizeof(struct probe));
+                    rh->pbset->probes[pbs_tmp_count]->bdd_mf = pb_bdd_rt;
+                    bdd_addref(rh->pbset->probes[pbs_tmp_count]->bdd_mf);
+                    rh->pbset->probes[pbs_tmp_count]->override = rt;        
+                  }
+                }
+              }
+            }
+          }
+        }
+        if (rt_hit_diff) {
+          if (rt->pbset) {
+            bdd_delref(rt->pbset->bdd_hit);
+            rt->pbset->bdd_hit = bdd_apply(rt->pbset->bdd_hit, rt_hit_diff, bddop_or);
+            bdd_addref(rt->pbset->bdd_hit);
+          } 
+          else {
+            rt->pbset= xmalloc(sizeof(uint32_t)+sizeof(struct probe *));
+            rt->pbset->nprobes = 1;
+            rt->pbset->bdd_hit = rt_hit_diff;
+            rt->pbset->probes[0] = xmalloc(sizeof(struct probe));
+            rt->pbset->probes[0]->bdd_mf = rt_hit_diff;
+            bdd_addref(rt->pbset->probes[0]->bdd_mf);
+            rt->pbset->probes[0]->override = NULL;   
+          }
+        } 
+        // printf("there loop3-3 %d\n", r_i);    
+      }
+      // bdd_delref(insc);
+    }
+  }
+  return net;
+}
+
+struct network_bdd *
+UpdateProbesInsert_forall(struct network_bdd *netempty, struct network_bdd *net){
+  if (!net)
+    return netempty;
+  struct timeval start,stop;
+  for (int i = 0; i < net->nsws; i++) {
+    for (int j = 0; j < net->sws[i]->nrules; j++){
+      gettimeofday(&start,NULL);
+      netempty = UpdateProbesInsert(netempty, net->sws[i]->rules[j]);
+      gettimeofday(&stop,NULL);
+      long long int rupdate = diff(&stop, &start);
+      printf("RuleChecker rupdate %d - %d for each table: %lld us\n", i, j, rupdate);
+    }
+  }
+  return netempty;
+}
+
+struct network_bdd *
+UpdateProbes_remove_then_readd(struct network_bdd *netmaitain, struct network_bdd *net){
+  if (!net)
+    return netmaitain;
+  struct timeval start,stop;
+
+  for (int i = 0; i < net->nsws; i++) {
+    for (int j = 0; j < net->sws[i]->nrules; j++){
+      gettimeofday(&start,NULL);
+      netmaitain = UpdateProbesRemove(netmaitain, net->sws[i]->rules[j]);
+      gettimeofday(&stop,NULL);
+      long long int rupdate = diff(&stop, &start);
+      printf("RuleChecker Remove %d - %d for each table: %lld us\n", i, j, rupdate);
+      gettimeofday(&start,NULL);
+      netmaitain = UpdateProbesInsert(netmaitain, net->sws[i]->rules[j]);
+      gettimeofday(&stop,NULL);
+     rupdate = diff(&stop, &start);
+      printf("RuleChecker Insert %d - %d for each table: %lld us\n", i, j, rupdate);
+      // count_RuleChecker_result(netmaitain);
+    }
+  }
+  return netmaitain;
+}
+ 
+uint32_t
+get_rc_probes_num(struct network_bdd *net){
+  if (!net)
+    return 0;
+  uint32_t sum_pbs_num = 0;
+  for (int i = 0; i < net->nsws; i++) {
+    for (int j = 0; j < net->sws[i]->nrules; j++){
+      if (net->sws[i]->rules[j]->pbset){
+        sum_pbs_num += net->sws[i]->rules[j]->pbset->nprobes;
+      }
+    }
+  }
+  printf("RuleChecker get %d probes for the network\n", sum_pbs_num);
+  return sum_pbs_num;
+}
+
+void
+count_RuleChecker_result(struct network_bdd *net){
+  uint32_t sum_all_pbs_num = 0;
+  uint32_t sum_untestable_pbs_num = 0;
+  uint32_t sum_testable_rs_num = 0;
+  uint32_t sum_untestable_rs_num = 0;
+  uint32_t sum_covered_rs_num = 0;
+
+  for (int i = 0; i < net->nsws; i++) {
+    for (int j = 0; j < net->sws[i]->nrules; j++){
+      bool rtestable_sign = false;
+      if (net->sws[i]->rules[j]->pbset){
+        sum_all_pbs_num += net->sws[i]->rules[j]->pbset->nprobes;
+        for (int pb_i = 0; pb_i < net->sws[i]->rules[j]->pbset->nprobes; pb_i++) {
+          struct probe *pb = net->sws[i]->rules[j]->pbset->probes[pb_i];
+          if (pb->override){
+            if(is_action_same(net->sws[i]->rules[j], pb->override))
+              sum_untestable_pbs_num++;
+            else
+              rtestable_sign = true;    
+          }
+          else
+            sum_untestable_pbs_num++;
+        }
+        if (rtestable_sign)
+          sum_testable_rs_num++;
+        else
+          sum_untestable_rs_num++;
+      }
+      else{
+        sum_covered_rs_num++;
+      }
+    }
+  }
+  printf("RuleChecker totally get %d probes for the network\n", sum_all_pbs_num);
+  printf("%d probes are untestable\n", sum_untestable_pbs_num);
+  printf("The testable rule number is %d \n", sum_testable_rs_num);
+  printf("The untestable rule number is %d \n", sum_untestable_rs_num);
+  printf("The covered rule number is %d \n", sum_covered_rs_num);
 }

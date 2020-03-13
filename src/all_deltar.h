@@ -16015,6 +16015,7 @@ BDD
 portin_mtbdd_r_remove(BDD bddbasic, BDD bddrm) {
   CHECKa(bddbasic, bddfalse);
   CHECKa(bddrm, bddfalse);
+  mtbddop_count++;
   // hit_cache_counter = 0;
   // calc_node_counter = 0;
   BDD res = portin_mtbdd_r_remove_rec(bddbasic, bddrm);

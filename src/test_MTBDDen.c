@@ -1,5 +1,5 @@
 #define _GNU_SOURCE 1
-
+//MTBDD checker for veriflow and for cgchecker
 // #include "all.h"
 #include "all_MTBDD.h"
 // #include "MTBDD_merging.h"

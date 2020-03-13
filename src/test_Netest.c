@@ -1,5 +1,5 @@
 #define _GNU_SOURCE 1
-
+//network test first vision,
 #include "all_Netest.h"
 #include <libgen.h>
 #include <linux/limits.h>
@@ -38,8 +38,8 @@ main (int argc, char **argv)
 
 
 /*================================初始化加载数据使用json数据======================================*/ 
-  // char *jsonet = "json_stanford_fwd";
-  char *jsonet = "json_stanford";
+  char *jsonet = "json_stanford_fwd";
+  // char *jsonet = "json_stanford";
   // char *jsonet = "json_i2";
   struct network_bdd *sws_json = get_network_bdd_jsondata("tfs", jsonet);
   // struct network_bdd *sws_json_noconf = get_network_bdd_jsondata_noconf("tfs", jsonet);
